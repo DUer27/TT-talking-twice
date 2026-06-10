@@ -1,4 +1,4 @@
-# 校园回声 Campus Voice
+# 现经管回声
 
 校园反馈论坛前端原型，参考 Linux.do / Discourse 风格，实现学生反馈社区首页界面。
 

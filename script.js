@@ -51,12 +51,23 @@ document.getElementById('sidebarToggle').addEventListener('click', () => {
   else sidebar.classList.toggle('collapsed');
 });
 
-document.getElementById('userMenuBtn').addEventListener('click', () => {
-  document.getElementById('userMenu').classList.toggle('open');
-});
 
-document.addEventListener('click', (event) => {
-  const menu = document.getElementById('userMenu');
-  const btn = document.getElementById('userMenuBtn');
-  if (!menu.contains(event.target) && !btn.contains(event.target)) menu.classList.remove('open');
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const themeLabel = document.getElementById('themeLabel');
+
+const applyTheme = (mode) => {
+  const isDark = mode === 'dark';
+  document.body.classList.toggle('dark-mode', isDark);
+  themeIcon.textContent = isDark ? '☀️' : '🌙';
+  themeLabel.textContent = isDark ? '白天' : '黑夜';
+};
+
+const savedTheme = localStorage.getItem('campusVoiceTheme') || 'light';
+applyTheme(savedTheme);
+
+themeToggle.addEventListener('click', () => {
+  const nextTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark';
+  localStorage.setItem('campusVoiceTheme', nextTheme);
+  applyTheme(nextTheme);
 });
