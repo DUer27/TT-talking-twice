@@ -11,14 +11,14 @@
     <header class="topbar">
       <div class="topbar-left">
         <button class="icon-btn" id="sidebarToggle" aria-label="展开或收起边栏">☰</button>
-        <a class="brand" href="#">
+        <a class="brand" href="#" id="brandHome">
           <span class="brand-mark">CV</span>
           <span class="brand-text">现经管回声</span>
         </a>
       </div>
       <div class="topbar-search">
         <span class="search-icon">⌕</span>
-        <input type="search" placeholder="搜索反馈、课程、宿舍、食堂..." />
+        <input type="search" id="searchInput" placeholder="搜索吐槽、课程、宿舍、食堂..." />
       </div>
       <div class="topbar-actions">
         <button class="theme-toggle" id="themeToggle" aria-label="切换黑夜或白天模式" title="切换黑夜/白天模式">
@@ -33,24 +33,22 @@
       <aside class="sidebar" id="sidebar">
         <section class="sidebar-section">
           <div class="sidebar-title">导航</div>
-          <a class="sidebar-link active" href="#"><span>⌁</span> 最新反馈</a>
-          <a class="sidebar-link" href="#"><span>🔥</span> 热门反馈</a>
-          <a class="sidebar-link" href="#"><span>✎</span> 我的反馈</a>
-          <a class="sidebar-link" href="#"><span>✓</span> 已处理</a>
+          <a class="sidebar-link active" href="#" data-filter="all" data-title="最新吐槽"><span>⌁</span> 最新吐槽</a>
+          <a class="sidebar-link" href="#" data-filter="hot" data-title="热门吐槽"><span>🔥</span> 热门吐槽</a>
+          <a class="sidebar-link" href="#" data-filter="mine" data-title="我的吐槽"><span>✎</span> 我的吐槽</a>
+          <a class="sidebar-link" href="#" data-filter="resolved" data-title="已处理"><span>✓</span> 已处理</a>
         </section>
         <section class="sidebar-section">
           <div class="sidebar-title">吐槽板块</div>
-          <a class="sidebar-link" href="#"><span class="dot blue"></span> 课程吐槽</a>
-          <a class="sidebar-link" href="#"><span class="dot orange"></span> 食堂吐槽</a>
-          <a class="sidebar-link" href="#"><span class="dot purple"></span> 宿舍生活</a>
-          <a class="sidebar-link" href="#"><span class="dot green"></span> 校园设施</a>
-          <a class="sidebar-link" href="#"><span class="dot red"></span> 行政服务</a>
-          <a class="sidebar-link" href="#"><span class="dot cyan"></span> 活动社团</a>
+          <a class="sidebar-link" href="#" data-filter="课程吐槽" data-title="课程吐槽"><span class="dot blue"></span> 课程吐槽</a>
+          <a class="sidebar-link" href="#" data-filter="食堂吐槽" data-title="食堂吐槽"><span class="dot orange"></span> 食堂吐槽</a>
+          <a class="sidebar-link" href="#" data-filter="宿舍生活" data-title="宿舍生活"><span class="dot purple"></span> 宿舍生活</a>
+          <a class="sidebar-link" href="#" data-filter="校园设施" data-title="校园设施"><span class="dot green"></span> 校园设施</a>
+          <a class="sidebar-link" href="#" data-filter="活动社团" data-title="活动社团"><span class="dot cyan"></span> 活动社团</a>
         </section>
         <section class="sidebar-section teacher-entry">
           <div class="sidebar-title">管理</div>
-          <a class="sidebar-link" href="#"><span>▣</span> 教师后台</a>
-          <a class="sidebar-link" href="#"><span>AI</span> 智能总结</a>
+          <a class="sidebar-link" href="#" data-filter="admin" data-title="管理员后台"><span>▣</span> 管理员后台</a>
         </section>
       </aside>
 
@@ -58,35 +56,55 @@
         <section class="hero-notice">
           <div>
             <strong>校园意见反馈社区</strong>
-            <span>文明表达真实体验，老师后台会定期汇总并生成改进报告。</span>
+            <span>文明表达真实体验，管理员后台会定期汇总并生成改进报告。</span>
           </div>
-          <button class="ghost-btn">查看规则</button>
+          <button class="ghost-btn" id="rulesBtn">查看规则</button>
         </section>
         <section class="navigation-container">
           <div class="filters-row">
-            <button class="select-chip">类别 ▸</button>
-            <button class="select-chip">标签 ▸</button>
-            <button class="select-chip muted">本周活跃 ▸</button>
+            <div class="filter-dropdown" id="categoryDropdown">
+              <button class="select-chip" id="categoryChip" aria-expanded="false">类别：全部 ▸</button>
+              <div class="dropdown-menu" id="categoryMenu" hidden>
+                <button data-category="全部">全部</button>
+                <button data-category="课程吐槽">课程吐槽</button>
+                <button data-category="食堂吐槽">食堂吐槽</button>
+                <button data-category="宿舍生活">宿舍生活</button>
+                <button data-category="校园设施">校园设施</button>
+                <button data-category="活动社团">活动社团</button>
+              </div>
+            </div>
+            <div class="filter-dropdown" id="tagDropdown">
+              <button class="select-chip" id="tagChip" aria-expanded="false">标签：全部 ▸</button>
+              <div class="dropdown-menu" id="tagMenu" hidden>
+                <button data-tag="全部">全部</button>
+                <button data-tag="匿名">匿名</button>
+                <button data-tag="高频问题">高频问题</button>
+                <button data-tag="建议类">建议类</button>
+                <button data-tag="急需处理">急需处理</button>
+                <button data-tag="已处理">已处理</button>
+              </div>
+            </div>
+            <button class="select-chip muted" id="weekActiveChip">本周活跃 ▸</button>
           </div>
           <div class="tabs-and-action">
             <nav class="nav-pills" aria-label="话题导航">
-              <a class="active" href="#">最新</a>
-              <a href="#">新反馈 <span>32</span></a>
-              <a href="#">未读</a>
-              <a href="#">热门</a>
-              <a href="#">我的帖子</a>
-              <a href="#">已处理</a>
-              <a href="#">收藏</a>
+              <a class="active" href="#" data-nav-filter="all" data-nav-title="最新吐槽">最新</a>
+              <a href="#" data-nav-filter="new" data-nav-title="新吐槽">新吐槽 <span>32</span></a>
+              <a href="#" data-nav-filter="unread" data-nav-title="未读吐槽">未读</a>
+              <a href="#" data-nav-filter="hot" data-nav-title="热门吐槽">热门</a>
+              <a href="#" data-nav-filter="mine" data-nav-title="我的帖子">我的帖子</a>
+              <a href="#" data-nav-filter="resolved" data-nav-title="已处理">已处理</a>
+              <a href="#" data-nav-filter="favorites" data-nav-title="我的收藏">收藏</a>
             </nav>
-            <button class="primary-btn">✎ 发布反馈</button>
+            <button class="primary-btn" id="createPostBtn">✎ 发布吐槽</button>
           </div>
         </section>
-        <section class="topic-panel">
-          <div class="show-more">查看 6 个新的或更新的反馈</div>
+        <section class="topic-panel" id="topicPanel">
+          <div class="show-more" id="listHint">查看 6 个新的或更新的吐槽</div>
           <table class="topic-list">
             <thead>
               <tr>
-                <th class="topic-col">反馈话题</th>
+                <th class="topic-col">吐槽话题</th>
                 <th class="posters-col">参与者</th>
                 <th>回复</th>
                 <th>浏览</th>
@@ -96,9 +114,115 @@
             <tbody id="topicBody"></tbody>
           </table>
         </section>
+
+        <section class="admin-panel" id="adminPanel" hidden>
+          <div class="admin-grid">
+            <article class="admin-card">
+              <strong>今日新增</strong>
+              <span>18</span>
+              <small>较昨日 +12%</small>
+            </article>
+            <article class="admin-card">
+              <strong>待处理吐槽</strong>
+              <span>42</span>
+              <small>建议优先处理 8 条</small>
+            </article>
+            <article class="admin-card">
+              <strong>高频板块</strong>
+              <span>食堂吐槽</span>
+              <small>本周占比 31%</small>
+            </article>
+          </div>
+          <div class="admin-report">
+            <h2>管理员后台</h2>
+            <p>这里后续放帖子管理、AI 智能总结、情绪分析和分析报告生成。</p>
+            <button class="primary-btn" id="generateReportBtn">生成本周吐槽分析报告</button>
+          </div>
+        </section>
       </main>
     </div>
   </div>
+
+  <div class="modal-overlay" id="rulesModal" hidden>
+    <div class="rules-modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <button class="modal-close" id="rulesClose" aria-label="关闭规则弹窗">×</button>
+      <h2 id="rulesTitle">现经管回声社区发言规则</h2>
+      <p class="rules-intro">这里是用于表达校园体验、提出改进建议的公共空间。为了让每一条吐槽都能被认真看见，请遵守以下规则：</p>
+      <ol class="rules-list">
+        <li><strong>真实表达，理性吐槽。</strong>可以指出问题、表达不满，但请尽量说明具体场景、时间、地点和影响，避免无依据的情绪宣泄。</li>
+        <li><strong>尊重他人，不做人身攻击。</strong>禁止辱骂、嘲讽、歧视、造谣、挂人、曝光他人隐私或针对个人进行攻击。</li>
+        <li><strong>保护隐私，谨慎发布信息。</strong>不要公开姓名、手机号、学号、寝室号、聊天记录截图等可能识别个人身份的信息。</li>
+        <li><strong>聚焦校园公共问题。</strong>鼓励围绕课程安排、食堂、宿舍、设施、活动、学习生活等公共议题发言。</li>
+        <li><strong>拒绝虚假与恶意内容。</strong>不得编造事实、恶意带节奏、重复刷屏、发布广告或与校园反馈无关的内容。</li>
+        <li><strong>欢迎提出建设性建议。</strong>如果可以，请在吐槽后附上你认为可行的改进方案，方便管理员汇总给相关部门。</li>
+        <li><strong>平台保留管理权。</strong>明显违规内容可能被隐藏、删除或提交管理员处理；严重违规账号可能被限制使用。</li>
+      </ol>
+      <div class="rules-footer">
+        <span>一句话原则：可以尖锐，但要真实；可以吐槽，但要尊重。</span>
+        <button class="primary-btn" id="rulesOk">我知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="createPostModal" hidden>
+    <div class="create-modal" role="dialog" aria-modal="true" aria-labelledby="createPostTitle">
+      <button class="modal-close" id="createPostClose" aria-label="关闭发布吐槽弹窗">×</button>
+      <h2 id="createPostTitle">发布吐槽</h2>
+      <p class="create-intro">把你遇到的问题说清楚一点，管理员后续会根据板块和热度进行汇总。</p>
+      <form class="create-form" id="createPostForm">
+        <label>
+          <span>标题</span>
+          <input id="postTitleInput" type="text" maxlength="60" placeholder="例如：食堂二楼晚饭排队太久" required />
+        </label>
+        <label>
+          <span>板块</span>
+          <select id="postCategoryInput" required>
+            <option value="课程吐槽">课程吐槽</option>
+            <option value="食堂吐槽">食堂吐槽</option>
+            <option value="宿舍生活">宿舍生活</option>
+            <option value="校园设施">校园设施</option>
+            <option value="活动社团">活动社团</option>
+          </select>
+        </label>
+        <label>
+          <span>具体内容</span>
+          <textarea id="postContentInput" rows="6" placeholder="请描述发生了什么、影响是什么、你希望如何改进..." required></textarea>
+        </label>
+        <label class="checkbox-line">
+          <input id="postAnonymousInput" type="checkbox" checked />
+          <span>匿名发布</span>
+        </label>
+        <div class="create-actions">
+          <button type="button" class="ghost-btn" id="createPostCancel">取消</button>
+          <button type="submit" class="primary-btn">发布</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="topicDetailModal" hidden>
+    <div class="topic-detail-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+      <button class="modal-close" id="topicDetailClose" aria-label="关闭帖子详情">×</button>
+      <div class="detail-tags" id="detailTags"></div>
+      <h2 id="detailTitle"></h2>
+      <div class="detail-meta" id="detailMeta"></div>
+      <article class="detail-content" id="detailContent"></article>
+      <div class="detail-actions">
+        <button class="ghost-btn" id="likeBtn">点赞</button>
+        <button class="ghost-btn" id="favoriteBtn">收藏</button>
+        <button class="ghost-btn" id="reportBtn">举报</button>
+        <button class="primary-btn" id="detailReplyBtn">回复</button>
+      </div>
+      <div class="reply-box" id="replyBox" hidden>
+        <textarea id="replyInput" rows="4" placeholder="写下你的回复，注意文明表达..."></textarea>
+        <div>
+          <button class="ghost-btn" id="replyCancelBtn">取消</button>
+          <button class="primary-btn" id="replySubmitBtn">提交回复</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
   <script src="./script.js"></script>
 </body>
 </html>
