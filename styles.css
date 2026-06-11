@@ -267,3 +267,22 @@ body.dark-mode .login-modal { box-shadow: 0 24px 70px rgba(0, 0, 0, .5); }
 
 .brand-mark img, .login-logo img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .brand-mark, .login-logo { overflow: hidden; background: transparent !important; box-shadow: none !important; }
+.login-modal.auth-error {
+  animation: authShake .28s ease-in-out;
+  border-color: rgba(239, 68, 68, .55);
+}
+@keyframes authShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-7px); }
+  50% { transform: translateX(7px); }
+  75% { transform: translateX(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-modal.auth-error { animation: none; }
+}
+
+.admin-empty { min-height: 260px; display: grid; place-items: center; align-content: center; gap: 12px; text-align: center; padding: 32px; border: 1px dashed var(--border-dark); border-radius: 14px; background: linear-gradient(135deg, var(--surface-soft), var(--surface)); }
+.admin-empty h2 { margin: 0; }
+.admin-empty p { max-width: 560px; margin: 0; color: var(--muted); line-height: 1.8; }
+.admin-empty .primary-btn { opacity: .72; cursor: not-allowed; }
+body.dark-mode .admin-empty { background: linear-gradient(135deg, #111827, #172033); }

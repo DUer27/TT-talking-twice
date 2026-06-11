@@ -518,12 +518,7 @@ replySubmitBtn.addEventListener('click', () => {
 });
 
 generateReportBtn.addEventListener('click', () => {
-  const hotCategory = topics.reduce((acc, topic) => {
-    acc[topic.category] = (acc[topic.category] || 0) + 1;
-    return acc;
-  }, {});
-  const topCategory = Object.entries(hotCategory).sort((a, b) => b[1] - a[1])[0]?.[0] || '暂无';
-  showToast(`已生成报告：本周重点关注 ${topCategory}`);
+  showToast('管理员账号配置后开启后台功能');
 });
 
 document.addEventListener('keydown', (event) => {
@@ -535,6 +530,7 @@ document.addEventListener('keydown', (event) => {
 
 const loginBtn = document.getElementById('loginBtn');
 const loginModal = document.getElementById('loginModal');
+const loginCard = loginModal.querySelector('.login-modal');
 const loginClose = document.getElementById('loginClose');
 const registerModal = document.getElementById('registerModal');
 const registerClose = document.getElementById('registerClose');
@@ -565,9 +561,25 @@ const openLogin = async () => {
   setTimeout(() => loginEmail.focus(), 60);
 };
 
+const markLoginError = (message) => {
+  loginEmail.classList.add('invalid');
+  loginPassword.classList.add('invalid');
+  loginCard.classList.remove('auth-error');
+  void loginCard.offsetWidth;
+  loginCard.classList.add('auth-error');
+  showToast(message);
+};
+
+const clearLoginError = () => {
+  loginEmail.classList.remove('invalid');
+  loginPassword.classList.remove('invalid');
+  loginCard.classList.remove('auth-error');
+};
+
 const closeLogin = () => {
   loginModal.hidden = true;
   loginForm.reset();
+  clearLoginError();
 };
 
 loginBtn.addEventListener('click', openLogin);
@@ -575,6 +587,8 @@ loginClose.addEventListener('click', closeLogin);
 loginModal.addEventListener('click', (event) => {
   if (event.target === loginModal) closeLogin();
 });
+loginEmail.addEventListener('input', clearLoginError);
+loginPassword.addEventListener('input', clearLoginError);
 
 const openRegister = () => {
   loginModal.hidden = true;
@@ -648,7 +662,7 @@ loginForm.addEventListener('submit', async (event) => {
   const email = loginEmail.value.trim();
   const password = loginPassword.value.trim();
   if (!email || !password) {
-    showToast('请填写邮箱和密码');
+    markLoginError('请填写邮箱和密码');
     return;
   }
 
@@ -661,7 +675,7 @@ loginForm.addEventListener('submit', async (event) => {
     updateAuthUI(user);
     showToast('登录成功，欢迎回来');
   } catch (error) {
-    showToast(error.message);
+    markLoginError(error.message);
   }
 });
 

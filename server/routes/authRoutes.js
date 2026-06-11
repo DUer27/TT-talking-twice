@@ -1,6 +1,7 @@
 const express = require('express');
 const { sessionCookieName, sessionMaxAgeMs } = require('../config/env');
 const { login, logout, register } = require('../services/authService');
+const { assertCanAttempt, recordFailure, recordSuccess } = require('../utils/loginRateLimiter');
 const { requireAuth } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -23,11 +24,18 @@ router.post('/register', async (req, res, next) => {
 });
 
 router.post('/login', async (req, res, next) => {
+  const attemptMeta = { email: req.body?.email, ip: req.ip };
   try {
+    assertCanAttempt(attemptMeta);
     const { user, session } = await login(req.body);
+    recordSuccess(attemptMeta);
     res.cookie(sessionCookieName, session.token, cookieOptions);
     res.json({ user });
   } catch (error) {
+    if (error.statusCode === 401) {
+      error.remainingAttempts = recordFailure(attemptMeta);
+      error.message = `${error.message}，还可尝试 ${error.remainingAttempts} 次`;
+    }
     next(error);
   }
 });
