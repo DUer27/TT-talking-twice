@@ -79,13 +79,18 @@ const categoryTrendMap = {
     points: [21, 19, 18, 16, 14, 13, 11, 10, 9, 8, 7, 6],
   },
 };
-const categoryStats = [
-  { label: '课程', value: 86 },
-  { label: '食堂', value: 142 },
-  { label: '宿舍', value: 108 },
-  { label: '设施', value: 74 },
-  { label: '活动', value: 52 },
+const categoryStatOrder = [
+  { category: '课程吐槽', label: '课程' },
+  { category: '食堂吐槽', label: '食堂' },
+  { category: '宿舍生活', label: '宿舍' },
+  { category: '校园设施', label: '设施' },
+  { category: '活动社团', label: '活动' },
 ];
+
+const getCategoryStats = () => categoryStatOrder.map((item) => ({
+  ...item,
+  value: topics.filter((topic) => topic.category === item.category).length,
+}));
 
 let currentFilter = 'all';
 let currentTitle = '最新吐槽';
@@ -95,6 +100,50 @@ let toastTimer = null;
 let activeTrendIndex = 0;
 let activeCategoryIndex = -1;
 let activeTrendCategory = '食堂吐槽';
+let trendAnimationFrame = null;
+let trendAnimation = {
+  from: null,
+  to: null,
+  progress: 1,
+};
+
+const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3);
+
+const getChartTheme = () => {
+  const isDark = document.body.classList.contains('dark-mode');
+  if (isDark) {
+    return {
+      background: '#17120f',
+      grid: 'rgba(101, 88, 78, .45)',
+      axis: 'rgba(169, 157, 147, .65)',
+      muted: '#a99d93',
+      text: '#e7ddd4',
+      line: '#f97316',
+      lineGlow: 'rgba(249, 115, 22, .34)',
+      point: '#fff7ed',
+      tooltipBg: '#07111f',
+      tooltipText: '#cbd5e1',
+      bar: '#18d3c3',
+      barActive: '#5eead4',
+      barHover: 'rgba(94, 234, 212, .12)',
+    };
+  }
+  return {
+    background: '#ffffff',
+    grid: 'rgba(148, 163, 184, .28)',
+    axis: 'rgba(100, 116, 139, .5)',
+    muted: '#64748b',
+    text: '#1f2a3d',
+    line: '#2563eb',
+    lineGlow: 'rgba(37, 99, 235, .2)',
+    point: '#eff6ff',
+    tooltipBg: '#ffffff',
+    tooltipText: '#1f2a3d',
+    bar: '#0891b2',
+    barActive: '#06b6d4',
+    barHover: 'rgba(8, 145, 178, .1)',
+  };
+};
 
 const showToast = (message) => {
   toast.textContent = message;
@@ -142,18 +191,18 @@ const setupCanvas = (canvas) => {
   const ratio = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(Math.floor(rect.width), 320);
-  const height = Number(canvas.getAttribute('height')) || 240;
+  const height = Math.max(Math.floor(rect.height), Number(canvas.getAttribute('height')) || 240);
   canvas.width = Math.floor(width * ratio);
   canvas.height = Math.floor(height * ratio);
-  canvas.style.height = `${height}px`;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   return { ctx, width, height };
 };
 
 const drawGrid = (ctx, area, ySteps, xSteps) => {
+  const theme = getChartTheme();
   ctx.save();
-  ctx.strokeStyle = 'rgba(101, 88, 78, .45)';
+  ctx.strokeStyle = theme.grid;
   ctx.lineWidth = 1;
   ctx.setLineDash([3, 3]);
   for (let i = 0; i <= ySteps; i += 1) {
@@ -177,20 +226,27 @@ const drawTrendChart = () => {
   const canvasState = setupCanvas(complaintTrendChart);
   if (!canvasState) return;
   const trendData = categoryTrendMap[activeTrendCategory] || categoryTrendMap.食堂吐槽;
-  const trendPoints = trendData.points;
+  const theme = getChartTheme();
+  const animationProgress = easeOutCubic(trendAnimation.progress);
+  const sourcePoints = trendAnimation.from || trendData.points;
+  const targetPoints = trendAnimation.to || trendData.points;
+  const trendPoints = targetPoints.map((value, index) => {
+    const startValue = sourcePoints[index] ?? value;
+    return startValue + (value - startValue) * animationProgress;
+  });
   const trendLabels = trendData.labels;
   const { ctx, width, height } = canvasState;
-  const area = { left: 48, top: 16, right: width - 18, bottom: height - 50 };
+  const area = { left: 48, top: 14, right: width - 18, bottom: height - 48 };
   area.width = area.right - area.left;
   area.height = area.bottom - area.top;
   const maxValue = 50;
 
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#17120f';
+  ctx.fillStyle = theme.background;
   ctx.fillRect(0, 0, width, height);
   drawGrid(ctx, area, 4, 12);
 
-  ctx.strokeStyle = 'rgba(169, 157, 147, .65)';
+  ctx.strokeStyle = theme.axis;
   ctx.lineWidth = 1;
   ctx.setLineDash([]);
   ctx.beginPath();
@@ -199,7 +255,7 @@ const drawTrendChart = () => {
   ctx.lineTo(area.right, area.bottom);
   ctx.stroke();
 
-  ctx.fillStyle = '#a99d93';
+  ctx.fillStyle = theme.muted;
   ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
@@ -211,11 +267,10 @@ const drawTrendChart = () => {
   ctx.textAlign = 'right';
   ctx.textBaseline = 'top';
   trendLabels.forEach((label, index) => {
-    if (index % 2 !== 0 && width < 720) return;
     const x = area.left + (area.width / (trendLabels.length - 1)) * index;
     ctx.save();
-    ctx.translate(x, area.bottom + 12);
-    ctx.rotate(-Math.PI / 4);
+    ctx.translate(x, area.bottom + 10);
+    ctx.rotate(width < 640 ? -Math.PI / 3 : -Math.PI / 4);
     ctx.fillText(label, 0, 0);
     ctx.restore();
   });
@@ -226,33 +281,49 @@ const drawTrendChart = () => {
     value,
   }));
 
-  ctx.strokeStyle = '#f97316';
+  const drawLimit = points.length <= 1 ? 1 : 1 + (points.length - 1) * animationProgress;
+  ctx.strokeStyle = theme.line;
   ctx.lineWidth = 2.25;
+  ctx.shadowColor = theme.lineGlow;
+  ctx.shadowBlur = 10;
   ctx.beginPath();
   points.forEach((point, index) => {
-    if (index === 0) ctx.moveTo(point.x, point.y);
+    if (index > drawLimit) return;
+    const visiblePoint = { ...point };
+    if (index > Math.floor(drawLimit) && index > 0) {
+      const previous = points[index - 1];
+      const localProgress = drawLimit - Math.floor(drawLimit);
+      visiblePoint.x = previous.x + (point.x - previous.x) * localProgress;
+      visiblePoint.y = previous.y + (point.y - previous.y) * localProgress;
+    }
+    if (index === 0) ctx.moveTo(visiblePoint.x, visiblePoint.y);
     else {
       const previous = points[index - 1];
-      const midpointX = (previous.x + point.x) / 2;
-      ctx.bezierCurveTo(midpointX, previous.y, midpointX, point.y, point.x, point.y);
+      const midpointX = (previous.x + visiblePoint.x) / 2;
+      ctx.bezierCurveTo(midpointX, previous.y, midpointX, visiblePoint.y, visiblePoint.x, visiblePoint.y);
     }
   });
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
   points.forEach((point, index) => {
     const isActive = index === activeTrendIndex;
-    ctx.fillStyle = '#fff7ed';
+    const isVisible = index <= drawLimit + .15;
+    if (!isVisible) return;
+    const pulse = trendAnimation.progress < 1 ? Math.sin(animationProgress * Math.PI) * 2 : 0;
+    ctx.fillStyle = theme.point;
     ctx.beginPath();
-    ctx.arc(point.x, point.y, isActive ? 5 : 3, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, (isActive ? 5 : 3) + pulse, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#f97316';
+    ctx.strokeStyle = theme.line;
     ctx.lineWidth = isActive ? 2.5 : 1.5;
     ctx.stroke();
   });
 
   const focusIndex = Math.max(0, Math.min(activeTrendIndex, points.length - 1));
   const focus = points[focusIndex];
-  ctx.strokeStyle = 'rgba(120, 113, 108, .5)';
+  const focusValue = trendData.points[focusIndex] ?? Math.round(focus.value);
+  ctx.strokeStyle = theme.axis;
   ctx.beginPath();
   ctx.moveTo(focus.x, area.top);
   ctx.lineTo(focus.x, area.bottom);
@@ -262,11 +333,11 @@ const drawTrendChart = () => {
   const tooltipHeight = 46;
   const tooltipX = Math.min(focus.x + 12, area.right - tooltipWidth);
   const tooltipY = Math.max(focus.y + 20, area.top + 8);
-  ctx.fillStyle = '#07111f';
+  ctx.fillStyle = theme.tooltipBg;
   ctx.beginPath();
   ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 7);
   ctx.fill();
-  ctx.fillStyle = '#cbd5e1';
+  ctx.fillStyle = theme.tooltipText;
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(trendLabels[focusIndex], tooltipX + 10, tooltipY + 15);
@@ -274,9 +345,9 @@ const drawTrendChart = () => {
   ctx.fillText('出现次数', tooltipX + 10, tooltipY + 32);
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText(focus.value, tooltipX + tooltipWidth - 10, tooltipY + 32);
+  ctx.fillText(focusValue, tooltipX + tooltipWidth - 10, tooltipY + 32);
 
-  ctx.fillStyle = '#f97316';
+  ctx.fillStyle = theme.line;
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
@@ -288,54 +359,58 @@ const drawTrendChart = () => {
 const drawCategoryBarChart = () => {
   const canvasState = setupCanvas(categoryBarChart);
   if (!canvasState) return;
+  const theme = getChartTheme();
+  const categoryStats = getCategoryStats();
   const { ctx, width, height } = canvasState;
-  const area = { left: 48, top: 14, right: width - 18, bottom: height - 42 };
+  const leftPadding = width < 420 ? 36 : 48;
+  const rightPadding = width < 420 ? 10 : 18;
+  const area = { left: leftPadding, top: 10, right: width - rightPadding, bottom: height - 30 };
   area.width = area.right - area.left;
   area.height = area.bottom - area.top;
-  const maxValue = 160;
+  const maxValue = Math.max(4, Math.ceil(Math.max(...categoryStats.map((item) => item.value), 1) / 2) * 2);
 
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#17120f';
+  ctx.fillStyle = theme.background;
   ctx.fillRect(0, 0, width, height);
   drawGrid(ctx, area, 4, categoryStats.length);
 
-  ctx.strokeStyle = 'rgba(169, 157, 147, .65)';
+  ctx.strokeStyle = theme.axis;
   ctx.beginPath();
   ctx.moveTo(area.left, area.top);
   ctx.lineTo(area.left, area.bottom);
   ctx.lineTo(area.right, area.bottom);
   ctx.stroke();
 
-  ctx.fillStyle = '#a99d93';
+  ctx.fillStyle = theme.muted;
   ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  [0, 40, 80, 120, 160].forEach((value) => {
+  [0, maxValue * .25, maxValue * .5, maxValue * .75, maxValue].forEach((value) => {
     const y = area.bottom - (value / maxValue) * area.height;
-    ctx.fillText(value, area.left - 8, y);
+    ctx.fillText(Math.round(value), area.left - 8, y);
   });
 
   const slotWidth = area.width / categoryStats.length;
-  const barWidth = Math.min(42, slotWidth * .52);
+  const barWidth = Math.max(18, Math.min(42, slotWidth * .46));
   categoryStats.forEach((item, index) => {
     const isActive = index === activeCategoryIndex;
-    const currentBarWidth = isActive ? Math.min(54, slotWidth * .68) : barWidth;
+    const currentBarWidth = isActive ? Math.min(50, slotWidth * .58) : barWidth;
     const x = area.left + slotWidth * index + (slotWidth - currentBarWidth) / 2;
     const barHeight = (item.value / maxValue) * area.height;
     const y = area.bottom - barHeight;
-    ctx.fillStyle = isActive ? '#5eead4' : '#18d3c3';
+    ctx.fillStyle = isActive ? theme.barActive : theme.bar;
     ctx.fillRect(x, y, currentBarWidth, barHeight);
     if (isActive) {
-      ctx.fillStyle = 'rgba(94, 234, 212, .12)';
+      ctx.fillStyle = theme.barHover;
       ctx.fillRect(x - 8, area.top, currentBarWidth + 16, area.height);
-      ctx.fillStyle = '#5eead4';
+      ctx.fillStyle = theme.barActive;
       ctx.fillRect(x, y, currentBarWidth, barHeight);
     }
-    ctx.fillStyle = '#a99d93';
+    ctx.fillStyle = theme.muted;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(item.label, x + currentBarWidth / 2, area.bottom + 12);
-    ctx.fillStyle = isActive ? '#ffffff' : '#e7ddd4';
+    ctx.fillText(item.label, x + currentBarWidth / 2, area.bottom + 8);
+    ctx.fillStyle = isActive ? theme.text : theme.text;
     ctx.font = isActive ? '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' : '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textBaseline = 'bottom';
     ctx.fillText(item.value, x + currentBarWidth / 2, y - 6);
@@ -344,16 +419,17 @@ const drawCategoryBarChart = () => {
 
   if (activeCategoryIndex >= 0) {
     const item = categoryStats[activeCategoryIndex];
+    if (!item) return;
     const tooltipWidth = 116;
     const tooltipHeight = 42;
     const slotCenter = area.left + slotWidth * activeCategoryIndex + slotWidth / 2;
     const tooltipX = Math.max(area.left, Math.min(slotCenter - tooltipWidth / 2, area.right - tooltipWidth));
     const tooltipY = area.top + 10;
-    ctx.fillStyle = '#07111f';
+    ctx.fillStyle = theme.tooltipBg;
     ctx.beginPath();
     ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 7);
     ctx.fill();
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = theme.tooltipText;
     ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -372,9 +448,33 @@ const renderAdminCharts = () => {
   });
 };
 
+const animateTrendTo = (previousPoints, nextPoints) => {
+  cancelAnimationFrame(trendAnimationFrame);
+  trendAnimation = {
+    from: previousPoints,
+    to: nextPoints,
+    progress: 0,
+  };
+  const startedAt = performance.now();
+  const duration = 520;
+  const tick = (now) => {
+    trendAnimation.progress = Math.min((now - startedAt) / duration, 1);
+    drawTrendChart();
+    if (trendAnimation.progress < 1) {
+      trendAnimationFrame = requestAnimationFrame(tick);
+    } else {
+      trendAnimation = { from: nextPoints, to: nextPoints, progress: 1 };
+      trendAnimationFrame = null;
+    }
+  };
+  trendAnimationFrame = requestAnimationFrame(tick);
+};
+
 const updateHotCategory = (category) => {
   const trendData = categoryTrendMap[category];
   if (!trendData) return;
+  const previousCategory = activeTrendCategory;
+  const previousPoints = (categoryTrendMap[previousCategory] || categoryTrendMap.食堂吐槽).points;
   activeTrendCategory = category;
   activeTrendIndex = 0;
   hotCategoryButtons.forEach((button) => {
@@ -384,7 +484,8 @@ const updateHotCategory = (category) => {
   if (hotCategorySummary) {
     hotCategorySummary.textContent = `${category}：本周提及最多的是“${trendData.keyword}”，共 ${trendData.mentions} 次。`;
   }
-  drawTrendChart();
+  if (previousCategory === category) drawTrendChart();
+  else animateTrendTo(previousPoints, trendData.points);
   showToast(`已切换到 ${category} 关键词统计`);
 };
 
@@ -417,7 +518,10 @@ const updateTrendHover = (event) => {
 
 const updateCategoryHover = (event) => {
   const pointer = getCanvasPointer(categoryBarChart, event);
-  const area = { left: 48, right: pointer.width - 18, top: 14, bottom: pointer.height - 42 };
+  const categoryStats = getCategoryStats();
+  const leftPadding = pointer.width < 420 ? 36 : 48;
+  const rightPadding = pointer.width < 420 ? 10 : 18;
+  const area = { left: leftPadding, right: pointer.width - rightPadding, top: 10, bottom: pointer.height - 30 };
   let nextIndex = -1;
   if (pointer.x >= area.left && pointer.x <= area.right && pointer.y >= area.top && pointer.y <= area.bottom) {
     const slotWidth = (area.right - area.left) / categoryStats.length;
@@ -706,6 +810,7 @@ const applyTheme = (mode) => {
   document.body.classList.toggle('dark-mode', isDark);
   themeIcon.textContent = isDark ? '☀️' : '🌙';
   themeLabel.textContent = isDark ? '白天' : '黑夜';
+  if (adminPanel && !adminPanel.hidden) renderAdminCharts();
 };
 
 const savedTheme = localStorage.getItem('campusVoiceTheme') || 'light';
