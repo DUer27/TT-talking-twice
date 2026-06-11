@@ -61,6 +61,38 @@ const showToast = (message) => {
   }, 1800);
 };
 
+let currentUser = null;
+
+const apiRequest = async (url, options = {}) => {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || '请求失败，请稍后重试');
+  }
+  return data;
+};
+
+const updateAuthUI = (user) => {
+  currentUser = user;
+  if (user) {
+    loginBtn.textContent = user.nickname || user.email.split('@')[0];
+    loginBtn.classList.add('logged-in');
+    loginBtn.title = '点击退出登录';
+  } else {
+    loginBtn.textContent = '登录';
+    loginBtn.classList.remove('logged-in');
+    loginBtn.title = '';
+  }
+};
+
 const getFilteredTopics = (filter) => {
   if (filter === 'all') return topics;
   if (filter === 'hot') return topics.filter((topic) => topic.hot);
@@ -517,7 +549,18 @@ const registerEmail = document.getElementById('registerEmail');
 const registerPassword = document.getElementById('registerPassword');
 const registerConfirmPassword = document.getElementById('registerConfirmPassword');
 
-const openLogin = () => {
+const openLogin = async () => {
+  if (currentUser) {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' });
+      updateAuthUI(null);
+      showToast('已退出登录');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
+
   loginModal.hidden = false;
   setTimeout(() => loginEmail.focus(), 60);
 };
@@ -560,7 +603,7 @@ registerModal.addEventListener('click', (event) => {
   if (event.target === registerModal) closeRegister();
 });
 backToLoginBtn.addEventListener('click', backToLogin);
-registerForm.addEventListener('submit', (event) => {
+registerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
   const email = registerEmail.value.trim();
@@ -582,27 +625,56 @@ registerForm.addEventListener('submit', (event) => {
     showToast('两次输入的密码不一致');
     return;
   }
-  closeRegister();
-  loginModal.hidden = false;
-  loginEmail.value = email;
-  setTimeout(() => loginPassword.focus(), 60);
-  showToast('注册成功，请登录');
+
+  try {
+    await apiRequest('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    closeRegister();
+    loginModal.hidden = false;
+    loginEmail.value = email;
+    setTimeout(() => loginPassword.focus(), 60);
+    showToast('注册成功，请登录');
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 forgotPasswordBtn.addEventListener('click', () => {
   showToast('找回密码功能后续接入邮箱验证');
 });
-loginForm.addEventListener('submit', (event) => {
+loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = loginEmail.value.trim();
-  if (!email || !loginPassword.value.trim()) {
+  const password = loginPassword.value.trim();
+  if (!email || !password) {
     showToast('请填写邮箱和密码');
     return;
   }
-  closeLogin();
-  loginBtn.textContent = email.split('@')[0] || '已登录';
-  loginBtn.classList.add('logged-in');
-  showToast('登录成功，欢迎回来');
+
+  try {
+    const { user } = await apiRequest('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    closeLogin();
+    updateAuthUI(user);
+    showToast('登录成功，欢迎回来');
+  } catch (error) {
+    showToast(error.message);
+  }
 });
+
+const restoreAuthState = async () => {
+  try {
+    const { user } = await apiRequest('/api/auth/me');
+    updateAuthUI(user);
+  } catch (_error) {
+    updateAuthUI(null);
+  }
+};
+
+restoreAuthState();
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!loginModal.hidden) closeLogin();
