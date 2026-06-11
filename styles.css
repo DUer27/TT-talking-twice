@@ -219,3 +219,22 @@ body.dark-mode .topic-detail-modal { box-shadow: 0 24px 70px rgba(0, 0, 0, .5); 
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 body.dark-mode .toast { background: #1f2a44; border-color: #3a4764; }
+.create-form select {
+  height: 43px;
+  padding: 11px 12px;
+  font-size: inherit;
+  line-height: normal;
+}
+.create-form input[type="text"],
+.create-form select {
+  height: 48px;
+  min-height: 48px;
+}
+.create-form select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 20px, calc(100% - 12px) 20px;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 38px;
+}
