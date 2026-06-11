@@ -1,4 +1,4 @@
-const { readDatabase, updateDatabase } = require('../database/connection');
+const { getPool } = require('../database/connection');
 
 const publicUserFields = (user) => {
   if (!user) return null;
@@ -12,38 +12,32 @@ const publicUserFields = (user) => {
 };
 
 const findUserByEmail = async (email) => {
-  const database = await readDatabase();
-  return database.users.find((user) => user.email === email.toLowerCase()) || null;
+  const [rows] = await getPool().execute('SELECT * FROM users WHERE email = ? LIMIT 1', [email.toLowerCase()]);
+  return rows[0] || null;
 };
 
 const findUserById = async (id) => {
-  const database = await readDatabase();
-  return database.users.find((user) => user.id === Number(id)) || null;
+  const [rows] = await getPool().execute('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
+  return rows[0] || null;
 };
 
 const createUser = async ({ email, passwordHash, role = 'student', nickname }) => {
   const normalizedEmail = email.toLowerCase();
-  return updateDatabase((database) => {
-    if (database.users.some((user) => user.email === normalizedEmail)) {
-      const error = new Error('该邮箱已注册');
-      error.statusCode = 409;
-      throw error;
+  try {
+    const [result] = await getPool().execute(
+      `INSERT INTO users (email, password_hash, role, nickname)
+       VALUES (?, ?, ?, ?)`,
+      [normalizedEmail, passwordHash, role, nickname || normalizedEmail.split('@')[0]]
+    );
+    return findUserById(result.insertId);
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      const duplicateError = new Error('该邮箱已注册');
+      duplicateError.statusCode = 409;
+      throw duplicateError;
     }
-
-    const now = new Date().toISOString();
-    const user = {
-      id: database.meta.nextUserId++,
-      email: normalizedEmail,
-      password_hash: passwordHash,
-      role,
-      nickname: nickname || normalizedEmail.split('@')[0],
-      created_at: now,
-      updated_at: now,
-    };
-
-    database.users.push(user);
-    return user;
-  });
+    throw error;
+  }
 };
 
 module.exports = {
