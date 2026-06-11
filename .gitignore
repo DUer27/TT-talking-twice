@@ -6,3 +6,4 @@ build/
 .env.*
 *.log
 server/data/
+!.env.example

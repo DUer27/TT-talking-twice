@@ -1,6 +1,6 @@
 # 现经管回声
 
-校园吐槽/反馈社区原型，参考 Linux.do / Discourse 风格。当前版本已包含前端交互、登录/注册弹窗，以及可真实运行的本地后端认证系统。
+校园吐槽/反馈社区原型，参考 Linux.do / Discourse 风格。当前版本已包含前端交互、登录/注册弹窗，以及基于本机 MySQL 的真实后端认证系统。
 
 ## 本地运行
 
@@ -8,6 +8,30 @@
 
 ```sh
 npm install
+```
+
+复制环境变量配置：
+
+```sh
+cp .env.example .env
+```
+
+根据本机 MySQL 修改 `.env`：
+
+```env
+PORT=5173
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_NAME=tt_talking_twice
+DB_USER=root
+DB_PASSWORD=
+DB_CONNECTION_LIMIT=10
+```
+
+初始化数据库和表：
+
+```sh
+npm run migrate
 ```
 
 启动前端与后端：
@@ -22,11 +46,23 @@ npm start
 http://127.0.0.1:5173/
 ```
 
-如果只想初始化数据库：
+## MySQL 数据库
 
-```sh
-npm run migrate
+后端启动/迁移时会自动创建数据库：
+
+```text
+tt_talking_twice
 ```
+
+当前认证相关表：
+
+```text
+users
+sessions
+login_attempts
+```
+
+登录失败限频写入 `login_attempts` 表，服务重启后不会丢失。
 
 ## 登录注册
 
@@ -37,13 +73,7 @@ npm run migrate
 - 当前用户：`GET /api/auth/me`
 - 退出登录：`POST /api/auth/logout`
 
-账号数据保存在本地文件数据库：
-
-```text
-server/data/database.json
-```
-
-该目录已加入 `.gitignore`，不会提交真实用户数据。
+密码使用 `bcryptjs` 加密存储，登录状态使用 httpOnly Cookie 会话。
 
 ## 后端结构
 
@@ -58,6 +88,7 @@ server/
 ├── middleware/
 │   └── authMiddleware.js
 ├── repositories/
+│   ├── loginAttemptRepository.js
 │   ├── sessionRepository.js
 │   └── userRepository.js
 ├── routes/
@@ -68,8 +99,6 @@ server/
     ├── password.js
     └── sessionToken.js
 ```
-
-后端已按职责拆分，后续如果要替换成 MySQL / PostgreSQL / SQLite，只需要重点替换 `server/database/` 和 `server/repositories/`。
 
 ## 当前功能
 

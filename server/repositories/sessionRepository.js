@@ -1,36 +1,35 @@
-const { readDatabase, updateDatabase } = require('../database/connection');
+const { getPool } = require('../database/connection');
 
 const createSession = async ({ userId, tokenHash, expiresAt }) => {
-  await updateDatabase((database) => {
-    database.sessions.push({
-      id: database.meta.nextSessionId++,
-      user_id: userId,
-      token_hash: tokenHash,
-      expires_at: expiresAt,
-      created_at: new Date().toISOString(),
-    });
-  });
+  await getPool().execute(
+    `INSERT INTO sessions (user_id, token_hash, expires_at)
+     VALUES (?, ?, ?)`,
+    [userId, tokenHash, expiresAt.slice(0, 19).replace('T', ' ')]
+  );
 };
 
 const findSessionWithUser = async (tokenHash) => {
-  const database = await readDatabase();
-  const session = database.sessions.find(
-    (item) => item.token_hash === tokenHash && new Date(item.expires_at).getTime() > Date.now()
+  const [rows] = await getPool().execute(
+    `SELECT
+       sessions.id AS session_id,
+       sessions.expires_at,
+       users.id,
+       users.email,
+       users.role,
+       users.nickname,
+       users.created_at
+     FROM sessions
+     JOIN users ON users.id = sessions.user_id
+     WHERE sessions.token_hash = ?
+       AND sessions.expires_at > UTC_TIMESTAMP()
+     LIMIT 1`,
+    [tokenHash]
   );
-  if (!session) return null;
-  const user = database.users.find((item) => item.id === session.user_id);
-  if (!user) return null;
-  return {
-    session_id: session.id,
-    expires_at: session.expires_at,
-    ...user,
-  };
+  return rows[0] || null;
 };
 
 const deleteSession = async (tokenHash) => {
-  await updateDatabase((database) => {
-    database.sessions = database.sessions.filter((session) => session.token_hash !== tokenHash);
-  });
+  await getPool().execute('DELETE FROM sessions WHERE token_hash = ?', [tokenHash]);
 };
 
 module.exports = {
