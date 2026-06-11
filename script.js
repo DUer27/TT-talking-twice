@@ -45,12 +45,55 @@ const categoryMenu = document.getElementById('categoryMenu');
 const tagMenu = document.getElementById('tagMenu');
 const brandHome = document.getElementById('brandHome');
 const generateReportBtn = document.getElementById('generateReportBtn');
+const createPostBtn = document.getElementById('createPostBtn');
+const complaintTrendChart = document.getElementById('complaintTrendChart');
+const categoryBarChart = document.getElementById('categoryBarChart');
+const hotCategoryName = document.getElementById('hotCategoryName');
+const hotCategorySummary = document.getElementById('hotCategorySummary');
+const hotCategoryButtons = document.querySelectorAll('.hot-breakdown [data-category-key]');
+
+const categoryTrendMap = {
+  食堂吐槽: {
+    keyword: '排队',
+    mentions: 42,
+    labels: ['排队', '价格', '窗口', '菜品', '晚饭', '早餐', '拥挤', '卫生', '支付', '座位', '口味', '份量'],
+    points: [42, 36, 31, 27, 24, 18, 16, 14, 12, 11, 9, 8],
+  },
+  宿舍生活: {
+    keyword: '热水',
+    mentions: 34,
+    labels: ['热水', '空调', '网络', '门禁', '噪音', '洗衣机', '维修', '卫生', '插座', '电费', '楼管', '晾晒'],
+    points: [34, 29, 25, 21, 19, 16, 15, 13, 12, 10, 8, 7],
+  },
+  课程吐槽: {
+    keyword: '调课',
+    mentions: 27,
+    labels: ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'],
+    points: [27, 25, 22, 20, 17, 15, 14, 12, 11, 9, 8, 7],
+  },
+  校园设施: {
+    keyword: '插座',
+    mentions: 21,
+    labels: ['插座', '照明', '空调', '自习室', '电梯', '快递点', '座椅', '网络', '维修', '饮水机', '路灯', '门禁'],
+    points: [21, 19, 18, 16, 14, 13, 11, 10, 9, 8, 7, 6],
+  },
+};
+const categoryStats = [
+  { label: '课程', value: 86 },
+  { label: '食堂', value: 142 },
+  { label: '宿舍', value: 108 },
+  { label: '设施', value: 74 },
+  { label: '活动', value: 52 },
+];
 
 let currentFilter = 'all';
 let currentTitle = '最新吐槽';
 let currentTopicId = null;
 let currentTagKeyword = '';
 let toastTimer = null;
+let activeTrendIndex = 0;
+let activeCategoryIndex = -1;
+let activeTrendCategory = '食堂吐槽';
 
 const showToast = (message) => {
   toast.textContent = message;
@@ -59,6 +102,352 @@ const showToast = (message) => {
   toastTimer = setTimeout(() => {
     toast.hidden = true;
   }, 1800);
+};
+
+const setupCanvas = (canvas) => {
+  if (!canvas) return null;
+  const ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(Math.floor(rect.width), 320);
+  const height = Number(canvas.getAttribute('height')) || 240;
+  canvas.width = Math.floor(width * ratio);
+  canvas.height = Math.floor(height * ratio);
+  canvas.style.height = `${height}px`;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  return { ctx, width, height };
+};
+
+const drawGrid = (ctx, area, ySteps, xSteps) => {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(101, 88, 78, .45)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  for (let i = 0; i <= ySteps; i += 1) {
+    const y = area.top + (area.height / ySteps) * i;
+    ctx.beginPath();
+    ctx.moveTo(area.left, y);
+    ctx.lineTo(area.right, y);
+    ctx.stroke();
+  }
+  for (let i = 0; i <= xSteps; i += 1) {
+    const x = area.left + (area.width / xSteps) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, area.top);
+    ctx.lineTo(x, area.bottom);
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
+const drawTrendChart = () => {
+  const canvasState = setupCanvas(complaintTrendChart);
+  if (!canvasState) return;
+  const trendData = categoryTrendMap[activeTrendCategory] || categoryTrendMap.食堂吐槽;
+  const trendPoints = trendData.points;
+  const trendLabels = trendData.labels;
+  const { ctx, width, height } = canvasState;
+  const area = { left: 48, top: 16, right: width - 18, bottom: height - 50 };
+  area.width = area.right - area.left;
+  area.height = area.bottom - area.top;
+  const maxValue = 50;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#17120f';
+  ctx.fillRect(0, 0, width, height);
+  drawGrid(ctx, area, 4, 12);
+
+  ctx.strokeStyle = 'rgba(169, 157, 147, .65)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(area.left, area.top);
+  ctx.lineTo(area.left, area.bottom);
+  ctx.lineTo(area.right, area.bottom);
+  ctx.stroke();
+
+  ctx.fillStyle = '#a99d93';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [0, 10, 20, 30, 40, 50].forEach((value) => {
+    const y = area.bottom - (value / maxValue) * area.height;
+    ctx.fillText(value, area.left - 8, y);
+  });
+
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  trendLabels.forEach((label, index) => {
+    if (index % 2 !== 0 && width < 720) return;
+    const x = area.left + (area.width / (trendLabels.length - 1)) * index;
+    ctx.save();
+    ctx.translate(x, area.bottom + 12);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  });
+
+  const points = trendPoints.map((value, index) => ({
+    x: area.left + (area.width / (trendPoints.length - 1)) * index,
+    y: area.bottom - (value / maxValue) * area.height,
+    value,
+  }));
+
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 2.25;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else {
+      const previous = points[index - 1];
+      const midpointX = (previous.x + point.x) / 2;
+      ctx.bezierCurveTo(midpointX, previous.y, midpointX, point.y, point.x, point.y);
+    }
+  });
+  ctx.stroke();
+
+  points.forEach((point, index) => {
+    const isActive = index === activeTrendIndex;
+    ctx.fillStyle = '#fff7ed';
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, isActive ? 5 : 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = isActive ? 2.5 : 1.5;
+    ctx.stroke();
+  });
+
+  const focusIndex = Math.max(0, Math.min(activeTrendIndex, points.length - 1));
+  const focus = points[focusIndex];
+  ctx.strokeStyle = 'rgba(120, 113, 108, .5)';
+  ctx.beginPath();
+  ctx.moveTo(focus.x, area.top);
+  ctx.lineTo(focus.x, area.bottom);
+  ctx.stroke();
+
+  const tooltipWidth = 118;
+  const tooltipHeight = 46;
+  const tooltipX = Math.min(focus.x + 12, area.right - tooltipWidth);
+  const tooltipY = Math.max(focus.y + 20, area.top + 8);
+  ctx.fillStyle = '#07111f';
+  ctx.beginPath();
+  ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 7);
+  ctx.fill();
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(trendLabels[focusIndex], tooltipX + 10, tooltipY + 15);
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText('出现次数', tooltipX + 10, tooltipY + 32);
+  ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(focus.value, tooltipX + tooltipWidth - 10, tooltipY + 32);
+
+  ctx.fillStyle = '#f97316';
+  ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`${activeTrendCategory} · ${trendData.keyword} ${trendData.mentions}次`, area.left, area.top + 6);
+
+  complaintTrendChart.style.cursor = 'crosshair';
+};
+
+const drawCategoryBarChart = () => {
+  const canvasState = setupCanvas(categoryBarChart);
+  if (!canvasState) return;
+  const { ctx, width, height } = canvasState;
+  const area = { left: 48, top: 14, right: width - 18, bottom: height - 42 };
+  area.width = area.right - area.left;
+  area.height = area.bottom - area.top;
+  const maxValue = 160;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#17120f';
+  ctx.fillRect(0, 0, width, height);
+  drawGrid(ctx, area, 4, categoryStats.length);
+
+  ctx.strokeStyle = 'rgba(169, 157, 147, .65)';
+  ctx.beginPath();
+  ctx.moveTo(area.left, area.top);
+  ctx.lineTo(area.left, area.bottom);
+  ctx.lineTo(area.right, area.bottom);
+  ctx.stroke();
+
+  ctx.fillStyle = '#a99d93';
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  [0, 40, 80, 120, 160].forEach((value) => {
+    const y = area.bottom - (value / maxValue) * area.height;
+    ctx.fillText(value, area.left - 8, y);
+  });
+
+  const slotWidth = area.width / categoryStats.length;
+  const barWidth = Math.min(42, slotWidth * .52);
+  categoryStats.forEach((item, index) => {
+    const isActive = index === activeCategoryIndex;
+    const currentBarWidth = isActive ? Math.min(54, slotWidth * .68) : barWidth;
+    const x = area.left + slotWidth * index + (slotWidth - currentBarWidth) / 2;
+    const barHeight = (item.value / maxValue) * area.height;
+    const y = area.bottom - barHeight;
+    ctx.fillStyle = isActive ? '#5eead4' : '#18d3c3';
+    ctx.fillRect(x, y, currentBarWidth, barHeight);
+    if (isActive) {
+      ctx.fillStyle = 'rgba(94, 234, 212, .12)';
+      ctx.fillRect(x - 8, area.top, currentBarWidth + 16, area.height);
+      ctx.fillStyle = '#5eead4';
+      ctx.fillRect(x, y, currentBarWidth, barHeight);
+    }
+    ctx.fillStyle = '#a99d93';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(item.label, x + currentBarWidth / 2, area.bottom + 12);
+    ctx.fillStyle = isActive ? '#ffffff' : '#e7ddd4';
+    ctx.font = isActive ? '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' : '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(item.value, x + currentBarWidth / 2, y - 6);
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  });
+
+  if (activeCategoryIndex >= 0) {
+    const item = categoryStats[activeCategoryIndex];
+    const tooltipWidth = 116;
+    const tooltipHeight = 42;
+    const slotCenter = area.left + slotWidth * activeCategoryIndex + slotWidth / 2;
+    const tooltipX = Math.max(area.left, Math.min(slotCenter - tooltipWidth / 2, area.right - tooltipWidth));
+    const tooltipY = area.top + 10;
+    ctx.fillStyle = '#07111f';
+    ctx.beginPath();
+    ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 7);
+    ctx.fill();
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(item.label, tooltipX + 10, tooltipY + 15);
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(`板块吐槽 ${item.value}`, tooltipX + 10, tooltipY + 30);
+  }
+
+  categoryBarChart.style.cursor = activeCategoryIndex >= 0 ? 'pointer' : 'default';
+};
+
+const renderAdminCharts = () => {
+  requestAnimationFrame(() => {
+    drawTrendChart();
+    drawCategoryBarChart();
+  });
+};
+
+const updateHotCategory = (category) => {
+  const trendData = categoryTrendMap[category];
+  if (!trendData) return;
+  activeTrendCategory = category;
+  activeTrendIndex = 0;
+  hotCategoryButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.categoryKey === category);
+  });
+  if (hotCategoryName) hotCategoryName.textContent = category;
+  if (hotCategorySummary) {
+    hotCategorySummary.textContent = `${category}：本周提及最多的是“${trendData.keyword}”，共 ${trendData.mentions} 次。`;
+  }
+  drawTrendChart();
+  showToast(`已切换到 ${category} 关键词统计`);
+};
+
+const getCanvasPointer = (canvas, event) => {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+};
+
+const updateTrendHover = (event) => {
+  const pointer = getCanvasPointer(complaintTrendChart, event);
+  const trendPoints = (categoryTrendMap[activeTrendCategory] || categoryTrendMap.食堂吐槽).points;
+  const area = { left: 48, right: pointer.width - 18, top: 16, bottom: pointer.height - 50 };
+  if (pointer.x < area.left || pointer.x > area.right || pointer.y < area.top || pointer.y > area.bottom) {
+    activeTrendIndex = 0;
+    drawTrendChart();
+    return;
+  }
+  const step = (area.right - area.left) / (trendPoints.length - 1);
+  const nextIndex = Math.max(0, Math.min(trendPoints.length - 1, Math.round((pointer.x - area.left) / step)));
+  if (nextIndex !== activeTrendIndex) {
+    activeTrendIndex = nextIndex;
+    drawTrendChart();
+  }
+};
+
+const updateCategoryHover = (event) => {
+  const pointer = getCanvasPointer(categoryBarChart, event);
+  const area = { left: 48, right: pointer.width - 18, top: 14, bottom: pointer.height - 42 };
+  let nextIndex = -1;
+  if (pointer.x >= area.left && pointer.x <= area.right && pointer.y >= area.top && pointer.y <= area.bottom) {
+    const slotWidth = (area.right - area.left) / categoryStats.length;
+    nextIndex = Math.max(0, Math.min(categoryStats.length - 1, Math.floor((pointer.x - area.left) / slotWidth)));
+  }
+  if (nextIndex !== activeCategoryIndex) {
+    activeCategoryIndex = nextIndex;
+    drawCategoryBarChart();
+  }
+};
+
+if (complaintTrendChart) {
+  complaintTrendChart.addEventListener('mousemove', updateTrendHover);
+  complaintTrendChart.addEventListener('mouseleave', () => {
+    activeTrendIndex = 0;
+    drawTrendChart();
+  });
+}
+
+if (categoryBarChart) {
+  categoryBarChart.addEventListener('mousemove', updateCategoryHover);
+  categoryBarChart.addEventListener('mouseleave', () => {
+    activeCategoryIndex = -1;
+    drawCategoryBarChart();
+  });
+}
+
+hotCategoryButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    updateHotCategory(button.dataset.categoryKey);
+  });
+});
+
+let currentUser = null;
+
+const apiRequest = async (url, options = {}) => {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || '请求失败，请稍后重试');
+  }
+  return data;
+};
+
+const updateAuthUI = (user) => {
+  currentUser = user;
+  if (user) {
+    loginBtn.textContent = user.nickname || user.email.split('@')[0];
+    loginBtn.classList.add('logged-in');
+    loginBtn.title = '点击退出登录';
+  } else {
+    loginBtn.textContent = '登录';
+    loginBtn.classList.remove('logged-in');
+    loginBtn.title = '';
+  }
 };
 
 const getFilteredTopics = (filter) => {
@@ -90,11 +479,16 @@ const resetChips = () => {
   }
 };
 
+const setAdminMode = (enabled) => {
+  if (createPostBtn) createPostBtn.hidden = enabled;
+};
+
 const switchFilter = (filter, title, options = {}) => {
   currentFilter = filter;
   currentTitle = title;
   topicPanel.hidden = false;
   adminPanel.hidden = true;
+  setAdminMode(false);
   if (!options.keepSearch) searchInput.value = '';
   if (!options.keepTag) currentTagKeyword = '';
   setActiveSidebar(filter);
@@ -116,6 +510,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
 
   topicPanel.hidden = false;
   adminPanel.hidden = true;
+  setAdminMode(false);
   const searchText = query ? `，搜索“${searchInput.value.trim()}”` : '';
   const tagText = currentTagKeyword ? `，标签“${currentTagKeyword}”` : '';
   listHint.textContent = `${title}${searchText}${tagText}：共 ${data.length} 条吐槽`;
@@ -162,9 +557,11 @@ sidebarLinks.forEach((link) => {
       currentTitle = title;
       topicPanel.hidden = true;
       adminPanel.hidden = false;
+      setAdminMode(true);
       sidebarLinks.forEach((item) => item.classList.remove('active'));
       link.classList.add('active');
       navLinks.forEach((item) => item.classList.remove('active'));
+      renderAdminCharts();
       showToast('已进入管理员后台');
       return;
     }
@@ -331,7 +728,6 @@ rulesClose.addEventListener('click', closeRules);
 rulesOk.addEventListener('click', closeRules);
 rulesModal.addEventListener('click', (event) => { if (event.target === rulesModal) closeRules(); });
 
-const createPostBtn = document.getElementById('createPostBtn');
 const createPostModal = document.getElementById('createPostModal');
 const createPostClose = document.getElementById('createPostClose');
 const createPostCancel = document.getElementById('createPostCancel');
@@ -485,13 +881,14 @@ replySubmitBtn.addEventListener('click', () => {
   showToast('回复已提交');
 });
 
-generateReportBtn.addEventListener('click', () => {
-  const hotCategory = topics.reduce((acc, topic) => {
-    acc[topic.category] = (acc[topic.category] || 0) + 1;
-    return acc;
-  }, {});
-  const topCategory = Object.entries(hotCategory).sort((a, b) => b[1] - a[1])[0]?.[0] || '暂无';
-  showToast(`已生成报告：本周重点关注 ${topCategory}`);
+if (generateReportBtn) {
+  generateReportBtn.addEventListener('click', () => {
+    showToast('管理员账号配置后开启后台功能');
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (!adminPanel.hidden) renderAdminCharts();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -499,4 +896,167 @@ document.addEventListener('keydown', (event) => {
   if (!rulesModal.hidden) closeRules();
   if (!createPostModal.hidden) closeCreatePost();
   if (!topicDetailModal.hidden) closeTopicDetail();
+});
+
+const loginBtn = document.getElementById('loginBtn');
+const loginModal = document.getElementById('loginModal');
+const loginCard = loginModal.querySelector('.login-modal');
+const loginClose = document.getElementById('loginClose');
+const registerModal = document.getElementById('registerModal');
+const registerClose = document.getElementById('registerClose');
+const loginForm = document.getElementById('loginForm');
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const showRegisterBtn = document.getElementById('showRegisterBtn');
+const backToLoginBtn = document.getElementById('backToLoginBtn');
+const registerForm = document.getElementById('registerForm');
+const registerEmail = document.getElementById('registerEmail');
+const registerPassword = document.getElementById('registerPassword');
+const registerConfirmPassword = document.getElementById('registerConfirmPassword');
+
+const openLogin = async () => {
+  if (currentUser) {
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' });
+      updateAuthUI(null);
+      showToast('已退出登录');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
+
+  loginModal.hidden = false;
+  setTimeout(() => loginEmail.focus(), 60);
+};
+
+const markLoginError = (message) => {
+  loginEmail.classList.add('invalid');
+  loginPassword.classList.add('invalid');
+  loginCard.classList.remove('auth-error');
+  void loginCard.offsetWidth;
+  loginCard.classList.add('auth-error');
+  showToast(message);
+};
+
+const clearLoginError = () => {
+  loginEmail.classList.remove('invalid');
+  loginPassword.classList.remove('invalid');
+  loginCard.classList.remove('auth-error');
+};
+
+const closeLogin = () => {
+  loginModal.hidden = true;
+  loginForm.reset();
+  clearLoginError();
+};
+
+loginBtn.addEventListener('click', openLogin);
+loginClose.addEventListener('click', closeLogin);
+loginModal.addEventListener('click', (event) => {
+  if (event.target === loginModal) closeLogin();
+});
+loginEmail.addEventListener('input', clearLoginError);
+loginPassword.addEventListener('input', clearLoginError);
+
+const openRegister = () => {
+  loginModal.hidden = true;
+  loginForm.reset();
+  registerForm.reset();
+  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  registerModal.hidden = false;
+  setTimeout(() => registerEmail.focus(), 60);
+};
+
+const closeRegister = () => {
+  registerModal.hidden = true;
+  registerForm.reset();
+  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+};
+
+const backToLogin = () => {
+  closeRegister();
+  loginModal.hidden = false;
+  setTimeout(() => loginEmail.focus(), 60);
+};
+
+showRegisterBtn.addEventListener('click', openRegister);
+registerClose.addEventListener('click', closeRegister);
+registerModal.addEventListener('click', (event) => {
+  if (event.target === registerModal) closeRegister();
+});
+backToLoginBtn.addEventListener('click', backToLogin);
+registerForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  const email = registerEmail.value.trim();
+  const password = registerPassword.value.trim();
+  const confirmPassword = registerConfirmPassword.value.trim();
+  if (!email) {
+    registerEmail.classList.add('invalid');
+    showToast('请输入注册邮箱');
+    return;
+  }
+  if (password.length < 6) {
+    registerPassword.classList.add('invalid');
+    showToast('密码至少需要 6 位');
+    return;
+  }
+  if (password !== confirmPassword) {
+    registerPassword.classList.add('invalid');
+    registerConfirmPassword.classList.add('invalid');
+    showToast('两次输入的密码不一致');
+    return;
+  }
+
+  try {
+    await apiRequest('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    closeRegister();
+    loginModal.hidden = false;
+    loginEmail.value = email;
+    setTimeout(() => loginPassword.focus(), 60);
+    showToast('注册成功，请登录');
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value.trim();
+  if (!email || !password) {
+    markLoginError('请填写邮箱和密码');
+    return;
+  }
+
+  try {
+    const { user } = await apiRequest('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    closeLogin();
+    updateAuthUI(user);
+    showToast('登录成功，欢迎回来');
+  } catch (error) {
+    markLoginError(error.message);
+  }
+});
+
+const restoreAuthState = async () => {
+  try {
+    const { user } = await apiRequest('/api/auth/me');
+    updateAuthUI(user);
+  } catch (_error) {
+    updateAuthUI(null);
+  }
+};
+
+restoreAuthState();
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (!loginModal.hidden) closeLogin();
+  if (!registerModal.hidden) closeRegister();
 });

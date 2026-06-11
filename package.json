@@ -1,0 +1,16 @@
+{
+  "name": "tt-talking-twice",
+  "version": "1.0.0",
+  "description": "现经管回声校园反馈社区前后端原型",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "node server/app.js",
+    "migrate": "node server/database/migrate.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.19.2"
+  }
+}

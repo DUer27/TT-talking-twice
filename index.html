@@ -12,7 +12,7 @@
       <div class="topbar-left">
         <button class="icon-btn" id="sidebarToggle" aria-label="展开或收起边栏">☰</button>
         <a class="brand" href="#" id="brandHome">
-          <span class="brand-mark">CV</span>
+          <span class="brand-mark"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
           <span class="brand-text">现经管回声</span>
         </a>
       </div>
@@ -25,7 +25,7 @@
           <span class="theme-icon" id="themeIcon">🌙</span>
           <span class="theme-label" id="themeLabel">黑夜</span>
         </button>
-        <button class="login-btn">登录</button>
+        <button class="login-btn" id="loginBtn">登录</button>
       </div>
     </header>
 
@@ -122,21 +122,43 @@
               <span>18</span>
               <small>较昨日 +12%</small>
             </article>
-            <article class="admin-card">
-              <strong>待处理吐槽</strong>
-              <span>42</span>
-              <small>建议优先处理 8 条</small>
-            </article>
-            <article class="admin-card">
+            <article class="admin-card admin-card-hot">
               <strong>高频板块</strong>
-              <span>食堂吐槽</span>
-              <small>本周占比 31%</small>
+              <span id="hotCategoryName">食堂吐槽</span>
+              <small id="hotCategorySummary">食堂吐槽：本周提及最多的是“排队”，共 42 次。</small>
+              <div class="hot-breakdown" aria-label="高频板块占比">
+                <button type="button" class="active" data-category-key="食堂吐槽"><b>排队 42</b><em>食堂吐槽</em></button>
+                <button type="button" data-category-key="宿舍生活"><b>热水 34</b><em>宿舍生活</em></button>
+                <button type="button" data-category-key="课程吐槽"><b>调课 27</b><em>课程吐槽</em></button>
+                <button type="button" data-category-key="校园设施"><b>插座 21</b><em>校园设施</em></button>
+              </div>
+            </article>
+          </div>
+          <div class="admin-charts">
+            <article class="chart-card chart-card-wide">
+              <div class="chart-heading">
+                <div>
+                  <h3>关键词统计</h3>
+                  <p>论坛高频关键词出现次数</p>
+                </div>
+                <span>按当前板块切换</span>
+              </div>
+              <canvas id="complaintTrendChart" height="260" aria-label="当前板块高频关键词出现次数折线图"></canvas>
+            </article>
+            <article class="chart-card">
+              <div class="chart-heading">
+                <div>
+                  <h3>板块统计</h3>
+                  <p>本周各板块吐槽数量</p>
+                </div>
+              </div>
+              <canvas id="categoryBarChart" height="230" aria-label="本周各板块吐槽数量柱状图"></canvas>
             </article>
           </div>
           <div class="admin-report">
+          <div class="admin-empty">
             <h2>管理员后台</h2>
-            <p>这里后续放帖子管理、AI 智能总结、情绪分析和分析报告生成。</p>
-            <button class="primary-btn" id="generateReportBtn">生成本周吐槽分析报告</button>
+            <p>后台入口已预留。管理员账号确认后，这里会接入帖子管理、AI 智能总结、情绪分析和报告生成。</p>
           </div>
         </section>
       </main>
@@ -223,6 +245,74 @@
     </div>
   </div>
   <div class="toast" id="toast" hidden></div>
+
+  <div class="modal-overlay" id="loginModal" hidden>
+    <div class="login-modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <button class="modal-close" id="loginClose" aria-label="关闭登录弹窗">×</button>
+      <div class="login-head">
+        <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
+        <div>
+          <h2 id="loginTitle">登录现经管回声</h2>
+          <p>使用邮箱登录后即可发布吐槽、回复、收藏和参与校园讨论。</p>
+        </div>
+      </div>
+      <form class="login-form" id="loginForm">
+        <label>
+          <span>邮箱</span>
+          <input id="loginEmail" type="email" placeholder="请输入邮箱，例如 name@example.com" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="loginPassword" type="password" placeholder="请输入密码" required />
+        </label>
+        <div class="login-options">
+          <label class="checkbox-line">
+            <input id="rememberLogin" type="checkbox" checked />
+            <span>记住我</span>
+          </label>
+        </div>
+        <button type="submit" class="primary-btn login-submit">邮箱登录</button>
+        <div class="auth-switch-line">
+          <span>还没有账号？</span>
+          <button type="button" class="link-btn" id="showRegisterBtn">立即注册</button>
+        </div>
+        <p class="login-tip">请使用已注册邮箱和密码登录。</p>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="registerModal" hidden>
+    <div class="login-modal register-modal" role="dialog" aria-modal="true" aria-labelledby="registerTitle">
+      <button class="modal-close" id="registerClose" aria-label="关闭注册弹窗">×</button>
+      <div class="login-head">
+        <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
+        <div>
+          <h2 id="registerTitle">注册现经管回声账号</h2>
+          <p>使用邮箱创建账号，后续可用于发布吐槽、回复和收藏。</p>
+        </div>
+      </div>
+      <form class="login-form register-form" id="registerForm">
+        <label>
+          <span>邮箱账号</span>
+          <input id="registerEmail" type="email" placeholder="请输入注册邮箱" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="registerPassword" type="password" placeholder="请设置密码，至少 6 位" required />
+        </label>
+        <label>
+          <span>确认密码</span>
+          <input id="registerConfirmPassword" type="password" placeholder="请再次输入密码" required />
+        </label>
+        <button type="submit" class="primary-btn login-submit">完成注册</button>
+        <div class="auth-switch-line">
+          <span>已有账号？</span>
+          <button type="button" class="link-btn" id="backToLoginBtn">返回登录</button>
+        </div>
+        <p class="login-tip">注册成功后会自动返回登录弹窗。</p>
+      </form>
+    </div>
+  </div>
   <script src="./script.js"></script>
 </body>
 </html>
