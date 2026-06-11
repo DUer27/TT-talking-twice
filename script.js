@@ -45,6 +45,7 @@ const categoryMenu = document.getElementById('categoryMenu');
 const tagMenu = document.getElementById('tagMenu');
 const brandHome = document.getElementById('brandHome');
 const generateReportBtn = document.getElementById('generateReportBtn');
+const loginBtn = document.getElementById('loginBtn');
 const createPostBtn = document.getElementById('createPostBtn');
 const complaintTrendChart = document.getElementById('complaintTrendChart');
 const categoryBarChart = document.getElementById('categoryBarChart');
@@ -449,38 +450,6 @@ hotCategoryButtons.forEach((button) => {
     updateHotCategory(button.dataset.categoryKey);
   });
 });
-
-let currentUser = null;
-
-const apiRequest = async (url, options = {}) => {
-  const response = await fetch(url, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.message || '请求失败，请稍后重试');
-  }
-  return data;
-};
-
-const updateAuthUI = (user) => {
-  currentUser = user;
-  if (user) {
-    loginBtn.textContent = user.nickname || user.email.split('@')[0];
-    loginBtn.classList.add('logged-in');
-    loginBtn.title = '点击退出登录';
-  } else {
-    loginBtn.textContent = '登录';
-    loginBtn.classList.remove('logged-in');
-    loginBtn.title = '';
-  }
-};
 
 const getFilteredTopics = (filter) => {
   if (filter === 'all') return topics;
@@ -930,7 +899,6 @@ document.addEventListener('keydown', (event) => {
   if (!topicDetailModal.hidden) closeTopicDetail();
 });
 
-const loginBtn = document.getElementById('loginBtn');
 const loginModal = document.getElementById('loginModal');
 const loginCard = loginModal.querySelector('.login-modal');
 const loginClose = document.getElementById('loginClose');
