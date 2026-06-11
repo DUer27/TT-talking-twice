@@ -12,7 +12,7 @@
       <div class="topbar-left">
         <button class="icon-btn" id="sidebarToggle" aria-label="展开或收起边栏">☰</button>
         <a class="brand" href="#" id="brandHome">
-          <span class="brand-mark">CV</span>
+          <span class="brand-mark"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
           <span class="brand-text">现经管回声</span>
         </a>
       </div>
@@ -25,7 +25,7 @@
           <span class="theme-icon" id="themeIcon">🌙</span>
           <span class="theme-label" id="themeLabel">黑夜</span>
         </button>
-        <button class="login-btn">登录</button>
+        <button class="login-btn" id="loginBtn">登录</button>
       </div>
     </header>
 
@@ -223,6 +223,75 @@
     </div>
   </div>
   <div class="toast" id="toast" hidden></div>
+
+  <div class="modal-overlay" id="loginModal" hidden>
+    <div class="login-modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <button class="modal-close" id="loginClose" aria-label="关闭登录弹窗">×</button>
+      <div class="login-head">
+        <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
+        <div>
+          <h2 id="loginTitle">登录现经管回声</h2>
+          <p>使用邮箱登录后即可发布吐槽、回复、收藏和参与校园讨论。</p>
+        </div>
+      </div>
+      <form class="login-form" id="loginForm">
+        <label>
+          <span>邮箱</span>
+          <input id="loginEmail" type="email" placeholder="请输入邮箱，例如 name@example.com" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="loginPassword" type="password" placeholder="请输入密码" required />
+        </label>
+        <div class="login-options">
+          <label class="checkbox-line">
+            <input id="rememberLogin" type="checkbox" checked />
+            <span>记住我</span>
+          </label>
+          <button type="button" class="link-btn" id="forgotPasswordBtn">忘记密码？</button>
+        </div>
+        <button type="submit" class="primary-btn login-submit">邮箱登录</button>
+        <div class="auth-switch-line">
+          <span>还没有账号？</span>
+          <button type="button" class="link-btn" id="showRegisterBtn">立即注册</button>
+        </div>
+        <p class="login-tip">演示阶段可输入任意邮箱和密码；后续再接入真实账号系统。</p>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="registerModal" hidden>
+    <div class="login-modal register-modal" role="dialog" aria-modal="true" aria-labelledby="registerTitle">
+      <button class="modal-close" id="registerClose" aria-label="关闭注册弹窗">×</button>
+      <div class="login-head">
+        <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
+        <div>
+          <h2 id="registerTitle">注册现经管回声账号</h2>
+          <p>使用邮箱创建账号，后续可用于发布吐槽、回复和收藏。</p>
+        </div>
+      </div>
+      <form class="login-form register-form" id="registerForm">
+        <label>
+          <span>邮箱账号</span>
+          <input id="registerEmail" type="email" placeholder="请输入注册邮箱" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="registerPassword" type="password" placeholder="请设置密码，至少 6 位" required />
+        </label>
+        <label>
+          <span>确认密码</span>
+          <input id="registerConfirmPassword" type="password" placeholder="请再次输入密码" required />
+        </label>
+        <button type="submit" class="primary-btn login-submit">完成注册</button>
+        <div class="auth-switch-line">
+          <span>已有账号？</span>
+          <button type="button" class="link-btn" id="backToLoginBtn">返回登录</button>
+        </div>
+        <p class="login-tip">注册成功后会自动返回登录弹窗，后续可接入邮箱验证码。</p>
+      </form>
+    </div>
+  </div>
   <script src="./script.js"></script>
 </body>
 </html>

@@ -500,3 +500,111 @@ document.addEventListener('keydown', (event) => {
   if (!createPostModal.hidden) closeCreatePost();
   if (!topicDetailModal.hidden) closeTopicDetail();
 });
+
+const loginBtn = document.getElementById('loginBtn');
+const loginModal = document.getElementById('loginModal');
+const loginClose = document.getElementById('loginClose');
+const registerModal = document.getElementById('registerModal');
+const registerClose = document.getElementById('registerClose');
+const loginForm = document.getElementById('loginForm');
+const loginEmail = document.getElementById('loginEmail');
+const loginPassword = document.getElementById('loginPassword');
+const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
+const showRegisterBtn = document.getElementById('showRegisterBtn');
+const backToLoginBtn = document.getElementById('backToLoginBtn');
+const registerForm = document.getElementById('registerForm');
+const registerEmail = document.getElementById('registerEmail');
+const registerPassword = document.getElementById('registerPassword');
+const registerConfirmPassword = document.getElementById('registerConfirmPassword');
+
+const openLogin = () => {
+  loginModal.hidden = false;
+  setTimeout(() => loginEmail.focus(), 60);
+};
+
+const closeLogin = () => {
+  loginModal.hidden = true;
+  loginForm.reset();
+};
+
+loginBtn.addEventListener('click', openLogin);
+loginClose.addEventListener('click', closeLogin);
+loginModal.addEventListener('click', (event) => {
+  if (event.target === loginModal) closeLogin();
+});
+
+const openRegister = () => {
+  loginModal.hidden = true;
+  loginForm.reset();
+  registerForm.reset();
+  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  registerModal.hidden = false;
+  setTimeout(() => registerEmail.focus(), 60);
+};
+
+const closeRegister = () => {
+  registerModal.hidden = true;
+  registerForm.reset();
+  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+};
+
+const backToLogin = () => {
+  closeRegister();
+  loginModal.hidden = false;
+  setTimeout(() => loginEmail.focus(), 60);
+};
+
+showRegisterBtn.addEventListener('click', openRegister);
+registerClose.addEventListener('click', closeRegister);
+registerModal.addEventListener('click', (event) => {
+  if (event.target === registerModal) closeRegister();
+});
+backToLoginBtn.addEventListener('click', backToLogin);
+registerForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  const email = registerEmail.value.trim();
+  const password = registerPassword.value.trim();
+  const confirmPassword = registerConfirmPassword.value.trim();
+  if (!email) {
+    registerEmail.classList.add('invalid');
+    showToast('请输入注册邮箱');
+    return;
+  }
+  if (password.length < 6) {
+    registerPassword.classList.add('invalid');
+    showToast('密码至少需要 6 位');
+    return;
+  }
+  if (password !== confirmPassword) {
+    registerPassword.classList.add('invalid');
+    registerConfirmPassword.classList.add('invalid');
+    showToast('两次输入的密码不一致');
+    return;
+  }
+  closeRegister();
+  loginModal.hidden = false;
+  loginEmail.value = email;
+  setTimeout(() => loginPassword.focus(), 60);
+  showToast('注册成功，请登录');
+});
+forgotPasswordBtn.addEventListener('click', () => {
+  showToast('找回密码功能后续接入邮箱验证');
+});
+loginForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const email = loginEmail.value.trim();
+  if (!email || !loginPassword.value.trim()) {
+    showToast('请填写邮箱和密码');
+    return;
+  }
+  closeLogin();
+  loginBtn.textContent = email.split('@')[0] || '已登录';
+  loginBtn.classList.add('logged-in');
+  showToast('登录成功，欢迎回来');
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (!loginModal.hidden) closeLogin();
+  if (!registerModal.hidden) closeRegister();
+});
