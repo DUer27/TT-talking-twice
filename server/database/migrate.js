@@ -52,6 +52,28 @@ const migrate = async () => {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS posts (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      title VARCHAR(120) NOT NULL,
+      content TEXT NOT NULL,
+      category VARCHAR(64) NOT NULL,
+      is_anonymous TINYINT(1) NOT NULL DEFAULT 1,
+      status VARCHAR(32) NOT NULL DEFAULT 'open',
+      view_count INT UNSIGNED NOT NULL DEFAULT 0,
+      reply_count INT UNSIGNED NOT NULL DEFAULT 0,
+      like_count INT UNSIGNED NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_posts_user_id (user_id),
+      KEY idx_posts_category_created_at (category, created_at),
+      KEY idx_posts_created_at (created_at),
+      CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');
 };

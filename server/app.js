@@ -5,6 +5,7 @@ const { port, rootDir } = require('./config/env');
 const { migrate } = require('./database/migrate');
 const { attachCurrentUser } = require('./middleware/authMiddleware');
 const authRoutes = require('./routes/authRoutes');
+const postRoutes = require('./routes/postRoutes');
 
 const app = express();
 
@@ -14,6 +15,7 @@ app.set('trust proxy', 1);
 app.use(attachCurrentUser);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/posts', postRoutes);
 
 app.use(express.static(rootDir));
 
@@ -22,7 +24,7 @@ app.get('*', (_req, res) => {
 });
 
 app.use((error, _req, res, _next) => {
-  const statusCode = error.statusCode || 500;
+  const statusCode = error.statusCode || error.status || 500;
   res.status(statusCode).json({
     message: statusCode === 500 ? '服务器内部错误' : error.message,
   });

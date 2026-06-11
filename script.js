@@ -180,6 +180,124 @@ const apiRequest = async (url, options = {}) => {
   return data;
 };
 
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  "'": '&#39;',
+  '"': '&quot;',
+}[char]));
+
+const getRelativeActivity = (dateValue) => {
+  const date = dateValue ? new Date(dateValue) : null;
+  if (!date || Number.isNaN(date.getTime())) return '刚刚';
+
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (diffSeconds < 60) return '刚刚';
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}分钟前`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}小时前`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return '昨天';
+  if (diffDays < 7) return `${diffDays}天前`;
+  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+};
+
+const isRecentPost = (dateValue) => {
+  const date = dateValue ? new Date(dateValue) : null;
+  if (!date || Number.isNaN(date.getTime())) return false;
+  return Date.now() - date.getTime() < 1000 * 60 * 60 * 24;
+};
+
+const normalizePostTopic = (post) => {
+  if (!post) return null;
+  const authorInitial = post.author?.initial || (post.isAnonymous ? '匿' : '同');
+  const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
+  const tags = [post.category, post.isAnonymous ? '匿名' : '实名'];
+  if (post.resolved || post.status === 'resolved') tags.push('已处理');
+  else if (isRecentPost(post.createdAt)) tags.push('新发布');
+  else tags.push('待回应');
+
+  return {
+    id: String(post.id),
+    persisted: true,
+    title: post.title,
+    content: post.content,
+    tags,
+    category: post.category,
+    replies: Number(post.replies || 0),
+    views: Number(post.views || 0),
+    activity: getRelativeActivity(post.updatedAt || post.createdAt),
+    posters: [authorInitial],
+    authorName,
+    hot: Number(post.likeCount || 0) + Number(post.replies || 0) * 2 + Number(post.views || 0) >= 50,
+    mine: Boolean(post.mine),
+    resolved: Boolean(post.resolved || post.status === 'resolved'),
+    unread: false,
+    favorite: false,
+    liked: false,
+    likeCount: Number(post.likeCount || 0),
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+  };
+};
+
+const updateTopicFromPost = (post, { preserveState = true, prepend = true } = {}) => {
+  const nextTopic = normalizePostTopic(post);
+  if (!nextTopic) return null;
+  const existingIndex = topics.findIndex((topic) => topic.persisted && String(topic.id) === String(nextTopic.id));
+
+  if (existingIndex >= 0) {
+    const existingTopic = topics[existingIndex];
+    if (preserveState) {
+      nextTopic.favorite = existingTopic.favorite;
+      nextTopic.liked = existingTopic.liked;
+      nextTopic.unread = existingTopic.unread;
+    }
+    topics.splice(existingIndex, 1, nextTopic);
+  } else if (prepend) {
+    topics.unshift(nextTopic);
+  } else {
+    topics.push(nextTopic);
+  }
+
+  return nextTopic;
+};
+
+const loadPersistedTopics = async ({ silent = true } = {}) => {
+  try {
+    const { posts = [] } = await apiRequest('/api/posts');
+    const localState = new Map(topics.map((topic) => [String(topic.id), {
+      favorite: topic.favorite,
+      liked: topic.liked,
+      unread: topic.unread,
+    }]));
+
+    for (let index = topics.length - 1; index >= 0; index -= 1) {
+      if (topics[index].persisted) topics.splice(index, 1);
+    }
+
+    const persistedTopics = posts
+      .map(normalizePostTopic)
+      .filter(Boolean)
+      .map((topic) => ({
+        ...topic,
+        favorite: localState.get(String(topic.id))?.favorite || false,
+        liked: localState.get(String(topic.id))?.liked || false,
+        unread: localState.get(String(topic.id))?.unread || false,
+      }));
+
+    topics.unshift(...persistedTopics);
+    ensureTopicIds();
+    if (currentFilter === 'admin') renderAdminCharts();
+    else renderTopics(currentFilter, currentTitle);
+    if (!silent) showToast('已刷新数据库帖子');
+  } catch (error) {
+    if (!silent) showToast(error.message || '帖子加载失败，请稍后重试');
+  }
+};
+
 const getAvatarStorageKey = (user = currentUser) => {
   if (!user) return '';
   return `campusVoiceAvatar:${user.id || user.email}`;
@@ -684,12 +802,12 @@ hotCategoryButtons.forEach((button) => {
 const getFilteredTopics = (filter) => {
   if (filter === 'all') return topics;
   if (filter === 'hot') return topics.filter((topic) => topic.hot);
-  if (filter === 'mine') return topics.filter((topic) => topic.mine);
+  if (filter === 'mine') return currentUser ? topics.filter((topic) => topic.mine) : [];
   if (filter === 'resolved') return topics.filter((topic) => topic.resolved);
   if (filter === 'new') return topics.filter((topic) => topic.tags.includes('新发布') || topic.activity === '刚刚');
   if (filter === 'unread') return topics.filter((topic) => topic.unread);
-  if (filter === 'liked') return topics.filter((topic) => topic.liked);
-  if (filter === 'favorites') return topics.filter((topic) => topic.favorite);
+  if (filter === 'liked') return currentUser ? topics.filter((topic) => topic.liked) : [];
+  if (filter === 'favorites') return currentUser ? topics.filter((topic) => topic.favorite) : [];
   return topics.filter((topic) => topic.category === filter);
 };
 
@@ -716,6 +834,12 @@ const setAdminMode = (enabled) => {
 };
 
 const switchFilter = (filter, title, options = {}) => {
+  if (!currentUser && ['mine', 'liked', 'favorites'].includes(filter)) {
+    showToast('请先登录后查看个人内容');
+    openLogin();
+    return;
+  }
+
   currentFilter = filter;
   currentTitle = title;
   topicPanel.hidden = false;
@@ -734,7 +858,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   const query = searchInput.value.trim().toLowerCase();
   const baseData = getFilteredTopics(filter);
   const data = baseData.filter((topic) => {
-    const text = [topic.title, topic.category, topic.activity, ...topic.tags, ...topic.posters].join(' ').toLowerCase();
+    const text = [topic.title, topic.content, topic.category, topic.activity, topic.authorName, ...topic.tags, ...topic.posters].join(' ').toLowerCase();
     const matchedSearch = query ? text.includes(query) : true;
     const matchedTag = currentTagKeyword ? text.includes(currentTagKeyword.toLowerCase()) : true;
     return matchedSearch && matchedTag;
@@ -752,35 +876,45 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
     return;
   }
 
-  topicBody.innerHTML = data.map((topic, index) => `
-    <tr class="topic-row">
-      <td class="topic-main">
-        <div class="topic-title-line">
-          ${topic.pinned ? '<span class="pin">📌</span>' : ''}
-          <a class="topic-title" href="#" data-topic-id="${topic.id}">${topic.title}</a>
-        </div>
-        <div class="topic-meta">
-          ${topic.tags.map(tag => `<span class="tag ${tagClass(tag)}">${tag}</span>`).join('')}
-          ${topic.favorite ? '<span class="tag purple">已收藏</span>' : ''}
-          ${topic.liked ? '<span class="tag blue">已点赞</span>' : ''}
-        </div>
-      </td>
-      <td class="posters-cell">
-        <div class="posters author-posters" title="发帖人：${topic.posters[0] || '匿'}">
-          <span class="mini-avatar" style="background:${colors[index % colors.length]}">${topic.posters[0] || '匿'}</span>
-        </div>
-      </td>
-      <td class="like-cell">
-        <button class="quick-like-btn ${topic.liked ? 'liked' : ''}" data-like-topic-id="${topic.id}" aria-label="${topic.liked ? '取消点赞' : '点赞'}：${topic.title}">
-          <span class="quick-like-thumb" aria-hidden="true">👍</span>
-          <span class="quick-like-count">${topic.likeCount}</span>
-        </button>
-      </td>
-      <td class="num">${topic.replies}<small>评论</small></td>
-      <td class="num">${topic.views}<small>浏览</small></td>
-      <td class="num activity">${topic.activity}<small>活动</small></td>
-    </tr>
-  `).join('');
+  topicBody.innerHTML = data.map((topic, index) => {
+    const safeId = escapeHtml(topic.id);
+    const safeTitle = escapeHtml(topic.title);
+    const safeAuthor = escapeHtml(topic.authorName || topic.posters[0] || '匿');
+    const safePoster = escapeHtml(topic.posters[0] || '匿');
+    const safeActivity = escapeHtml(topic.activity);
+    const safeColor = colors[index % colors.length];
+    const safeLikeLabel = escapeHtml(`${topic.liked ? '取消点赞' : '点赞'}：${topic.title}`);
+
+    return `
+      <tr class="topic-row">
+        <td class="topic-main">
+          <div class="topic-title-line">
+            ${topic.pinned ? '<span class="pin">📌</span>' : ''}
+            <a class="topic-title" href="#" data-topic-id="${safeId}">${safeTitle}</a>
+          </div>
+          <div class="topic-meta">
+            ${topic.tags.map(tag => `<span class="tag ${tagClass(tag)}">${escapeHtml(tag)}</span>`).join('')}
+            ${topic.favorite ? '<span class="tag purple">已收藏</span>' : ''}
+            ${topic.liked ? '<span class="tag blue">已点赞</span>' : ''}
+          </div>
+        </td>
+        <td class="posters-cell">
+          <div class="posters author-posters" title="发帖人：${safeAuthor}">
+            <span class="mini-avatar" style="background:${safeColor}" title="${safeAuthor}">${safePoster}</span>
+          </div>
+        </td>
+        <td class="like-cell">
+          <button class="quick-like-btn ${topic.liked ? 'liked' : ''}" data-like-topic-id="${safeId}" aria-label="${safeLikeLabel}">
+            <span class="quick-like-thumb" aria-hidden="true">👍</span>
+            <span class="quick-like-count">${Number(topic.likeCount || 0)}</span>
+          </button>
+        </td>
+        <td class="num">${Number(topic.replies || 0)}<small>评论</small></td>
+        <td class="num">${Number(topic.views || 0)}<small>浏览</small></td>
+        <td class="num activity">${safeActivity}<small>活动</small></td>
+      </tr>
+    `;
+  }).join('');
 };
 
 sidebarLinks.forEach((link) => {
@@ -910,29 +1044,8 @@ weekActiveChip.addEventListener('click', () => {
   showToast('已切换到本周活跃吐槽');
 });
 
-listHint.addEventListener('click', () => {
-  const newTopic = {
-    id: `topic-${Date.now()}`,
-    title: '刚刚有同学补充：晚自习教室空调温度不稳定',
-    content: '这是模拟的新更新内容，用来展示“查看新的或更新的吐槽”的交互效果。',
-    tags: ['校园设施', '新发布'],
-    category: '校园设施',
-    replies: 0,
-    views: 1,
-    activity: '刚刚',
-    posters: ['匿'],
-    hot: false,
-    mine: false,
-    resolved: false,
-    unread: true,
-    favorite: false,
-    liked: false,
-    likeCount: 0,
-  };
-  topics.unshift(newTopic);
-  resetChips();
-  switchFilter('all', '最新吐槽');
-  showToast('已加载 1 条新的吐槽');
+listHint.addEventListener('click', async () => {
+  await loadPersistedTopics({ silent: false });
 });
 
 const themeToggle = document.getElementById('themeToggle');
@@ -978,6 +1091,11 @@ const postContentInput = document.getElementById('postContentInput');
 const postAnonymousInput = document.getElementById('postAnonymousInput');
 
 const openCreatePost = () => {
+  if (!currentUser) {
+    showToast('请先登录后再发布吐槽');
+    openLogin();
+    return;
+  }
   createPostModal.hidden = false;
   setTimeout(() => postTitleInput.focus(), 60);
 };
@@ -992,32 +1110,47 @@ createPostClose.addEventListener('click', closeCreatePost);
 createPostCancel.addEventListener('click', closeCreatePost);
 createPostModal.addEventListener('click', (event) => { if (event.target === createPostModal) closeCreatePost(); });
 
-createPostForm.addEventListener('submit', (event) => {
+createPostForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const newTopic = {
-    id: `topic-${Date.now()}`,
-    title: postTitleInput.value.trim(),
-    content: postContentInput.value.trim(),
-    tags: [postCategoryInput.value, postAnonymousInput.checked ? '匿名' : '实名', '新发布'],
-    category: postCategoryInput.value,
-    replies: 0,
-    views: 1,
-    activity: '刚刚',
-    posters: [postAnonymousInput.checked ? '匿' : '我'],
-    hot: false,
-    mine: true,
-    resolved: false,
-    unread: true,
-    favorite: false,
-    liked: false,
-    likeCount: 0,
-  };
-  if (!newTopic.title || !newTopic.content) return;
-  topics.unshift(newTopic);
-  closeCreatePost();
-  resetChips();
-  switchFilter('all', '最新吐槽');
-  showToast('发布成功，已加入最新吐槽');
+  const title = postTitleInput.value.trim();
+  const content = postContentInput.value.trim();
+  const category = postCategoryInput.value;
+  const isAnonymous = postAnonymousInput.checked;
+
+  if (!title) {
+    postTitleInput.focus();
+    showToast('请输入标题');
+    return;
+  }
+
+  if (!content) {
+    postContentInput.focus();
+    showToast('请输入具体内容');
+    return;
+  }
+
+  const submitBtn = createPostForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '发布中...';
+
+  try {
+    const { post } = await apiRequest('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify({ title, content, category, isAnonymous }),
+    });
+    const topic = updateTopicFromPost(post, { preserveState: false, prepend: true });
+    if (topic) topic.unread = true;
+    closeCreatePost();
+    resetChips();
+    switchFilter('all', '最新吐槽');
+    showToast('发布成功，已保存到数据库');
+  } catch (error) {
+    showToast(error.message || '发布失败，请稍后重试');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
 });
 
 const topicDetailModal = document.getElementById('topicDetailModal');
@@ -1052,25 +1185,37 @@ const toggleTopicLike = (topic, sourceButton = null) => {
   }
 };
 
-const openTopicDetail = (topicId) => {
+const openTopicDetail = async (topicId) => {
   const topic = topics.find((item) => item.id === topicId);
   if (!topic) return;
   currentTopicId = topicId;
-  topic.views += 1;
-  topic.unread = false;
-  detailTitle.textContent = topic.title;
-  detailTags.innerHTML = topic.tags.map((tag) => `<span class="tag ${tagClass(tag)}">${tag}</span>`).join('');
+
+  if (topic.persisted) {
+    try {
+      const { post } = await apiRequest(`/api/posts/${encodeURIComponent(topicId)}`);
+      updateTopicFromPost(post, { preserveState: true, prepend: false });
+    } catch (error) {
+      showToast(error.message || '帖子详情加载失败');
+    }
+  } else {
+    topic.views += 1;
+  }
+
+  const latestTopic = topics.find((item) => item.id === topicId) || topic;
+  latestTopic.unread = false;
+  detailTitle.textContent = latestTopic.title;
+  detailTags.innerHTML = latestTopic.tags.map((tag) => `<span class="tag ${tagClass(tag)}">${escapeHtml(tag)}</span>`).join('');
   detailMeta.innerHTML = `
-    <span>板块：${topic.category}</span>
-    <span>评论：${topic.replies}</span>
-    <span>浏览：${topic.views}</span>
-    <span>活动：${topic.activity}</span>
-    <span>发帖人：${topic.posters[0] || '匿'}</span>
+    <span>板块：${escapeHtml(latestTopic.category)}</span>
+    <span>评论：${Number(latestTopic.replies || 0)}</span>
+    <span>浏览：${Number(latestTopic.views || 0)}</span>
+    <span>活动：${escapeHtml(latestTopic.activity)}</span>
+    <span>发帖人：${escapeHtml(latestTopic.authorName || latestTopic.posters[0] || '匿')}</span>
   `;
-  detailContent.textContent = topic.content;
+  detailContent.textContent = latestTopic.content;
   replyBox.hidden = true;
   replyInput.value = '';
-  refreshDetailButtons(topic);
+  refreshDetailButtons(latestTopic);
   topicDetailModal.hidden = false;
   renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
 };
@@ -1250,6 +1395,7 @@ const logoutCurrentUser = async () => {
     closeProfile();
     closeSecurity();
     updateAuthUI(null);
+    await loadPersistedTopics();
     if (['liked', 'favorites', 'mine'].includes(currentFilter)) {
       resetChips();
       switchFilter('all', '最新吐槽');
@@ -1438,6 +1584,7 @@ profileForm.addEventListener('submit', async (event) => {
       body: JSON.stringify({ nickname }),
     });
     updateAuthUI(user);
+    await loadPersistedTopics();
     closeProfile();
     showToast('用户名已更新');
   } catch (error) {
@@ -1513,6 +1660,7 @@ loginForm.addEventListener('submit', async (event) => {
     });
     closeLogin();
     updateAuthUI(user);
+    await loadPersistedTopics();
     showToast('登录成功，欢迎回来');
   } catch (error) {
     markLoginError(error.message);
@@ -1523,8 +1671,10 @@ const restoreAuthState = async () => {
   try {
     const { user } = await apiRequest('/api/auth/me');
     updateAuthUI(user);
+    await loadPersistedTopics();
   } catch (_error) {
     updateAuthUI(null);
+    await loadPersistedTopics();
   }
 };
 
