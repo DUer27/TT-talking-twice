@@ -104,6 +104,38 @@ const showToast = (message) => {
   }, 1800);
 };
 
+let currentUser = null;
+
+const apiRequest = async (url, options = {}) => {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || '请求失败，请稍后重试');
+  }
+  return data;
+};
+
+const updateAuthUI = (user) => {
+  currentUser = user;
+  if (user) {
+    loginBtn.textContent = user.nickname || user.email.split('@')[0];
+    loginBtn.classList.add('logged-in');
+    loginBtn.title = '点击退出登录';
+  } else {
+    loginBtn.textContent = '登录';
+    loginBtn.classList.remove('logged-in');
+    loginBtn.title = '';
+  }
+};
+
 const setupCanvas = (canvas) => {
   if (!canvas) return null;
   const ratio = window.devicePixelRatio || 1;
