@@ -13,8 +13,9 @@ const topics = [
 const ensureTopicIds = () => {
   topics.forEach((topic, index) => {
     if (!topic.id) topic.id = `topic-${Date.now()}-${index}`;
+    if (typeof topic.likeCount !== 'number') topic.likeCount = Math.max(3, Math.round(topic.views / 18) + topic.replies);
     if (!topic.content) {
-      topic.content = `这是关于“${topic.title}”的详细吐槽内容。\n\n目前这个帖子详情为前端演示数据，后续接入后端后会展示学生发布的完整正文、评论、处理状态和管理员回复。`;
+      topic.content = `这是关于“${topic.title}”的详细吐槽内容。\n\n目前这个帖子详情为前端演示数据，后续接入后端后会展示学生发布的完整正文、评论、处理状态和管理员处理意见。`;
     }
   });
 };
@@ -46,6 +47,12 @@ const tagMenu = document.getElementById('tagMenu');
 const brandHome = document.getElementById('brandHome');
 const generateReportBtn = document.getElementById('generateReportBtn');
 const loginBtn = document.getElementById('loginBtn');
+const userMenuWrap = document.getElementById('userMenuWrap');
+const userMenu = document.getElementById('userMenu');
+const userMenuAvatar = document.getElementById('userMenuAvatar');
+const avatarFileInput = document.getElementById('avatarFileInput');
+const userMenuName = document.getElementById('userMenuName');
+const userMenuEmail = document.getElementById('userMenuEmail');
 const createPostBtn = document.getElementById('createPostBtn');
 const complaintTrendChart = document.getElementById('complaintTrendChart');
 const categoryBarChart = document.getElementById('categoryBarChart');
@@ -173,16 +180,135 @@ const apiRequest = async (url, options = {}) => {
   return data;
 };
 
+const getAvatarStorageKey = (user = currentUser) => {
+  if (!user) return '';
+  return `campusVoiceAvatar:${user.id || user.email}`;
+};
+
+const getStoredAvatar = (user = currentUser) => {
+  try {
+    const storageKey = getAvatarStorageKey(user);
+    return storageKey ? localStorage.getItem(storageKey) : '';
+  } catch (_error) {
+    return '';
+  }
+};
+
+const setAvatarPreview = (imageDataUrl, displayName = '我') => {
+  const initial = (displayName || '我').trim().slice(0, 1).toUpperCase() || '我';
+  if (imageDataUrl) {
+    userMenuAvatar.textContent = '';
+    userMenuAvatar.style.backgroundImage = `url(${JSON.stringify(imageDataUrl)})`;
+    userMenuAvatar.classList.add('has-image');
+    userMenuAvatar.setAttribute('aria-label', '当前头像，点击更换头像');
+    return;
+  }
+
+  userMenuAvatar.style.backgroundImage = '';
+  userMenuAvatar.classList.remove('has-image');
+  userMenuAvatar.textContent = initial;
+  userMenuAvatar.setAttribute('aria-label', '点击更换头像');
+};
+
+const resizeAvatarFile = (file) => new Promise((resolve, reject) => {
+  const image = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  image.onload = () => {
+    URL.revokeObjectURL(objectUrl);
+    const canvasSize = 320;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
+    const sourceX = ((image.naturalWidth || image.width) - sourceSize) / 2;
+    const sourceY = ((image.naturalHeight || image.height) - sourceSize) / 2;
+
+    canvas.width = canvasSize;
+    canvas.height = canvasSize;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvasSize, canvasSize);
+    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvasSize, canvasSize);
+    resolve(canvas.toDataURL('image/jpeg', 0.88));
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    reject(new Error('图片读取失败，请换一张图片试试'));
+  };
+  image.src = objectUrl;
+});
+
+const openAvatarPicker = () => {
+  if (!currentUser) {
+    showToast('请先登录后再更换头像');
+    openLogin();
+    return;
+  }
+  avatarFileInput.value = '';
+  avatarFileInput.click();
+};
+
+const handleAvatarFileChange = async () => {
+  const file = avatarFileInput.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    avatarFileInput.value = '';
+    showToast('请选择图片文件');
+    return;
+  }
+
+  if (file.size > 12 * 1024 * 1024) {
+    avatarFileInput.value = '';
+    showToast('头像图片不能超过 12MB');
+    return;
+  }
+
+  try {
+    const avatarDataUrl = await resizeAvatarFile(file);
+    const storageKey = getAvatarStorageKey();
+    if (!storageKey) {
+      showToast('请先登录后再更换头像');
+      return;
+    }
+
+    localStorage.setItem(storageKey, avatarDataUrl);
+    const displayName = currentUser.nickname || currentUser.email.split('@')[0];
+    setAvatarPreview(avatarDataUrl, displayName);
+    showToast('头像已更新');
+  } catch (error) {
+    showToast(error.message || '头像更新失败，请稍后重试');
+  } finally {
+    avatarFileInput.value = '';
+  }
+};
+
 const updateAuthUI = (user) => {
   currentUser = user;
   if (user) {
-    loginBtn.textContent = user.nickname || user.email.split('@')[0];
+    const displayName = user.nickname || user.email.split('@')[0];
+    loginBtn.textContent = `${displayName} ▾`;
     loginBtn.classList.add('logged-in');
-    loginBtn.title = '点击退出登录';
+    loginBtn.setAttribute('aria-expanded', 'false');
+    loginBtn.title = '用户中心';
+    userMenu.hidden = false;
+    userMenuWrap.classList.add('is-logged-in');
+    userMenuAvatar.disabled = false;
+    userMenuAvatar.title = '点击更换头像';
+    setAvatarPreview(getStoredAvatar(user), displayName);
+    userMenuName.textContent = displayName;
+    userMenuEmail.textContent = user.email;
   } else {
     loginBtn.textContent = '登录';
     loginBtn.classList.remove('logged-in');
+    loginBtn.setAttribute('aria-expanded', 'false');
     loginBtn.title = '';
+    userMenu.hidden = true;
+    userMenu.classList.remove('open');
+    userMenuWrap.classList.remove('is-logged-in');
+    userMenuAvatar.disabled = true;
+    userMenuAvatar.title = '请先登录';
+    setAvatarPreview('', '我');
+    userMenuName.textContent = '未登录';
+    userMenuEmail.textContent = '请先登录';
   }
 };
 
@@ -562,6 +688,7 @@ const getFilteredTopics = (filter) => {
   if (filter === 'resolved') return topics.filter((topic) => topic.resolved);
   if (filter === 'new') return topics.filter((topic) => topic.tags.includes('新发布') || topic.activity === '刚刚');
   if (filter === 'unread') return topics.filter((topic) => topic.unread);
+  if (filter === 'liked') return topics.filter((topic) => topic.liked);
   if (filter === 'favorites') return topics.filter((topic) => topic.favorite);
   return topics.filter((topic) => topic.category === filter);
 };
@@ -621,7 +748,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   listHint.textContent = `${title}${searchText}${tagText}：共 ${data.length} 条吐槽`;
 
   if (!data.length) {
-    topicBody.innerHTML = `<tr><td colspan="5" class="empty-state">没有找到相关吐槽，换个栏目或关键词试试。</td></tr>`;
+    topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">没有找到相关吐槽，换个栏目或关键词试试。</td></tr>`;
     return;
   }
 
@@ -639,11 +766,17 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
         </div>
       </td>
       <td class="posters-cell">
-        <div class="posters">
-          ${topic.posters.map((p, i) => `<span class="mini-avatar" style="background:${colors[(index + i) % colors.length]}">${p}</span>`).join('')}
+        <div class="posters author-posters" title="发帖人：${topic.posters[0] || '匿'}">
+          <span class="mini-avatar" style="background:${colors[index % colors.length]}">${topic.posters[0] || '匿'}</span>
         </div>
       </td>
-      <td class="num">${topic.replies}<small>回复</small></td>
+      <td class="like-cell">
+        <button class="quick-like-btn ${topic.liked ? 'liked' : ''}" data-like-topic-id="${topic.id}" aria-label="${topic.liked ? '取消点赞' : '点赞'}：${topic.title}">
+          <span class="quick-like-thumb" aria-hidden="true">👍</span>
+          <span class="quick-like-count">${topic.likeCount}</span>
+        </button>
+      </td>
+      <td class="num">${topic.replies}<small>评论</small></td>
       <td class="num">${topic.views}<small>浏览</small></td>
       <td class="num activity">${topic.activity}<small>活动</small></td>
     </tr>
@@ -794,6 +927,7 @@ listHint.addEventListener('click', () => {
     unread: true,
     favorite: false,
     liked: false,
+    likeCount: 0,
   };
   topics.unshift(newTopic);
   resetChips();
@@ -876,6 +1010,7 @@ createPostForm.addEventListener('submit', (event) => {
     unread: true,
     favorite: false,
     liked: false,
+    likeCount: 0,
   };
   if (!newTopic.title || !newTopic.content) return;
   topics.unshift(newTopic);
@@ -897,12 +1032,24 @@ const replyCancelBtn = document.getElementById('replyCancelBtn');
 const replyInput = document.getElementById('replyInput');
 const replySubmitBtn = document.getElementById('replySubmitBtn');
 const likeBtn = document.getElementById('likeBtn');
+const likeText = likeBtn.querySelector('.like-text');
 const favoriteBtn = document.getElementById('favoriteBtn');
 const reportBtn = document.getElementById('reportBtn');
 
 const refreshDetailButtons = (topic) => {
-  likeBtn.textContent = topic.liked ? '已点赞' : '点赞';
+  likeText.textContent = topic.liked ? `已点赞 ${topic.likeCount}` : `点赞 ${topic.likeCount}`;
+  likeBtn.classList.toggle('liked', topic.liked);
   favoriteBtn.textContent = topic.favorite ? '已收藏' : '收藏';
+};
+
+const toggleTopicLike = (topic, sourceButton = null) => {
+  topic.liked = !topic.liked;
+  topic.likeCount = Math.max(0, (topic.likeCount || 0) + (topic.liked ? 1 : -1));
+  if (sourceButton && topic.liked) {
+    sourceButton.classList.remove('like-pop');
+    void sourceButton.offsetWidth;
+    sourceButton.classList.add('like-pop');
+  }
 };
 
 const openTopicDetail = (topicId) => {
@@ -915,10 +1062,10 @@ const openTopicDetail = (topicId) => {
   detailTags.innerHTML = topic.tags.map((tag) => `<span class="tag ${tagClass(tag)}">${tag}</span>`).join('');
   detailMeta.innerHTML = `
     <span>板块：${topic.category}</span>
-    <span>回复：${topic.replies}</span>
+    <span>评论：${topic.replies}</span>
     <span>浏览：${topic.views}</span>
     <span>活动：${topic.activity}</span>
-    <span>参与者：${topic.posters.join('、')}</span>
+    <span>发帖人：${topic.posters[0] || '匿'}</span>
   `;
   detailContent.textContent = topic.content;
   replyBox.hidden = true;
@@ -937,6 +1084,27 @@ const closeTopicDetail = () => {
 const getCurrentTopic = () => topics.find((item) => item.id === currentTopicId);
 
 topicBody.addEventListener('click', (event) => {
+  const quickLikeBtn = event.target.closest('.quick-like-btn[data-like-topic-id]');
+  if (quickLikeBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const topic = topics.find((item) => item.id === quickLikeBtn.dataset.likeTopicId);
+    if (!topic) return;
+    toggleTopicLike(topic, quickLikeBtn);
+    renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
+    if (topic.liked) {
+      const refreshedLikeBtn = topicBody.querySelector(`[data-like-topic-id="${topic.id}"]`);
+      if (refreshedLikeBtn) {
+        refreshedLikeBtn.classList.remove('like-pop');
+        void refreshedLikeBtn.offsetWidth;
+        refreshedLikeBtn.classList.add('like-pop');
+      }
+    }
+    if (currentTopicId === topic.id) refreshDetailButtons(topic);
+    showToast(topic.liked ? '已快捷点赞' : '已取消点赞');
+    return;
+  }
+
   const link = event.target.closest('.topic-title[data-topic-id]');
   if (!link) return;
   event.preventDefault();
@@ -956,7 +1124,7 @@ replyCancelBtn.addEventListener('click', () => {
 likeBtn.addEventListener('click', () => {
   const topic = getCurrentTopic();
   if (!topic) return;
-  topic.liked = !topic.liked;
+  toggleTopicLike(topic, likeBtn);
   refreshDetailButtons(topic);
   renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
   showToast(topic.liked ? '已点赞' : '已取消点赞');
@@ -975,7 +1143,7 @@ reportBtn.addEventListener('click', () => {
 replySubmitBtn.addEventListener('click', () => {
   const topic = getCurrentTopic();
   if (!topic || !replyInput.value.trim()) {
-    showToast('请先输入回复内容');
+    showToast('请先输入评论内容');
     return;
   }
   topic.replies += 1;
@@ -984,7 +1152,7 @@ replySubmitBtn.addEventListener('click', () => {
   replyInput.value = '';
   replyBox.hidden = true;
   openTopicDetail(topic.id);
-  showToast('回复已提交');
+  showToast('评论已提交');
 });
 
 if (generateReportBtn) {
@@ -1018,21 +1186,78 @@ const registerForm = document.getElementById('registerForm');
 const registerEmail = document.getElementById('registerEmail');
 const registerPassword = document.getElementById('registerPassword');
 const registerConfirmPassword = document.getElementById('registerConfirmPassword');
+const profileModal = document.getElementById('profileModal');
+const profileClose = document.getElementById('profileClose');
+const profileCancel = document.getElementById('profileCancel');
+const profileForm = document.getElementById('profileForm');
+const profileNickname = document.getElementById('profileNickname');
+const securityModal = document.getElementById('securityModal');
+const securityClose = document.getElementById('securityClose');
+const securityCancel = document.getElementById('securityCancel');
+const securityForm = document.getElementById('securityForm');
+const currentPassword = document.getElementById('currentPassword');
+const newPassword = document.getElementById('newPassword');
+const confirmNewPassword = document.getElementById('confirmNewPassword');
 
-const openLogin = async () => {
+const closeProfile = () => {
+  profileModal.hidden = true;
+  profileForm.reset();
+  profileNickname.classList.remove('invalid');
+};
+
+const openProfile = () => {
+  if (!currentUser) {
+    openLogin();
+    return;
+  }
+  profileNickname.value = currentUser.nickname || currentUser.email.split('@')[0];
+  profileNickname.classList.remove('invalid');
+  profileModal.hidden = false;
+  setTimeout(() => profileNickname.focus(), 60);
+};
+
+const closeSecurity = () => {
+  securityModal.hidden = true;
+  securityForm.reset();
+  [currentPassword, newPassword, confirmNewPassword].forEach((input) => input.classList.remove('invalid'));
+};
+
+const openSecurity = () => {
+  if (!currentUser) {
+    openLogin();
+    return;
+  }
+  securityForm.reset();
+  [currentPassword, newPassword, confirmNewPassword].forEach((input) => input.classList.remove('invalid'));
+  securityModal.hidden = false;
+  setTimeout(() => currentPassword.focus(), 60);
+};
+
+const openLogin = () => {
   if (currentUser) {
-    try {
-      await apiRequest('/api/auth/logout', { method: 'POST' });
-      updateAuthUI(null);
-      showToast('已退出登录');
-    } catch (error) {
-      showToast(error.message);
-    }
+    userMenu.classList.toggle('open');
+    loginBtn.setAttribute('aria-expanded', String(userMenu.classList.contains('open')));
     return;
   }
 
   loginModal.hidden = false;
   setTimeout(() => loginEmail.focus(), 60);
+};
+
+const logoutCurrentUser = async () => {
+  try {
+    await apiRequest('/api/auth/logout', { method: 'POST' });
+    closeProfile();
+    closeSecurity();
+    updateAuthUI(null);
+    if (['liked', 'favorites', 'mine'].includes(currentFilter)) {
+      resetChips();
+      switchFilter('all', '最新吐槽');
+    }
+    showToast('已退出登录');
+  } catch (error) {
+    showToast(error.message);
+  }
 };
 
 const markLoginError = (message) => {
@@ -1057,12 +1282,71 @@ const closeLogin = () => {
 };
 
 loginBtn.addEventListener('click', openLogin);
+userMenuWrap.addEventListener('mouseenter', () => {
+  if (!currentUser) return;
+  userMenu.classList.add('open');
+  loginBtn.setAttribute('aria-expanded', 'true');
+});
+userMenuWrap.addEventListener('mouseleave', () => {
+  userMenu.classList.remove('open');
+  loginBtn.setAttribute('aria-expanded', 'false');
+});
+userMenuAvatar.addEventListener('click', (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  openAvatarPicker();
+});
+avatarFileInput.addEventListener('change', handleAvatarFileChange);
+userMenu.addEventListener('click', async (event) => {
+  const menuItem = event.target.closest('button');
+  if (!menuItem) return;
+  const userFilter = menuItem.dataset.userFilter;
+  const userAction = menuItem.dataset.userAction;
+  userMenu.classList.remove('open');
+  loginBtn.setAttribute('aria-expanded', 'false');
+
+  if (userFilter) {
+    const titles = { liked: '我的点赞', favorites: '我的收藏', mine: '我的帖子' };
+    resetChips();
+    switchFilter(userFilter, titles[userFilter] || '个人中心');
+    showToast(`已打开${titles[userFilter] || '个人中心'}`);
+    return;
+  }
+
+  if (userAction === 'logout') {
+    await logoutCurrentUser();
+    return;
+  }
+
+  if (userAction === 'profile') {
+    openProfile();
+    return;
+  }
+
+  if (userAction === 'security') {
+    openSecurity();
+  }
+});
 loginClose.addEventListener('click', closeLogin);
 loginModal.addEventListener('click', (event) => {
   if (event.target === loginModal) closeLogin();
 });
 loginEmail.addEventListener('input', clearLoginError);
 loginPassword.addEventListener('input', clearLoginError);
+profileClose.addEventListener('click', closeProfile);
+profileCancel.addEventListener('click', closeProfile);
+profileModal.addEventListener('click', (event) => {
+  if (event.target === profileModal) closeProfile();
+});
+profileNickname.addEventListener('input', () => profileNickname.classList.remove('invalid'));
+securityClose.addEventListener('click', closeSecurity);
+securityCancel.addEventListener('click', closeSecurity);
+securityModal.addEventListener('click', (event) => {
+  if (event.target === securityModal) closeSecurity();
+});
+[currentPassword, newPassword, confirmNewPassword].forEach((input) => {
+  input.addEventListener('input', () => input.classList.remove('invalid'));
+});
 
 const openRegister = () => {
   loginModal.hidden = true;
@@ -1128,6 +1412,91 @@ registerForm.addEventListener('submit', async (event) => {
     showToast(error.message);
   }
 });
+profileForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const nickname = profileNickname.value.trim();
+  profileNickname.classList.remove('invalid');
+
+  if (!nickname) {
+    profileNickname.classList.add('invalid');
+    showToast('请输入用户名');
+    return;
+  }
+  if (nickname.length > 24) {
+    profileNickname.classList.add('invalid');
+    showToast('用户名不能超过 24 个字符');
+    return;
+  }
+
+  const submitBtn = profileForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '保存中...';
+  try {
+    const { user } = await apiRequest('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ nickname }),
+    });
+    updateAuthUI(user);
+    closeProfile();
+    showToast('用户名已更新');
+  } catch (error) {
+    profileNickname.classList.add('invalid');
+    showToast(error.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
+securityForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  [currentPassword, newPassword, confirmNewPassword].forEach((input) => input.classList.remove('invalid'));
+  const currentPasswordValue = currentPassword.value;
+  const newPasswordValue = newPassword.value;
+  const confirmNewPasswordValue = confirmNewPassword.value;
+
+  if (!currentPasswordValue) {
+    currentPassword.classList.add('invalid');
+    showToast('请输入当前密码');
+    return;
+  }
+  if (newPasswordValue.length < 6) {
+    newPassword.classList.add('invalid');
+    showToast('新密码至少需要 6 位');
+    return;
+  }
+  if (newPasswordValue !== confirmNewPasswordValue) {
+    newPassword.classList.add('invalid');
+    confirmNewPassword.classList.add('invalid');
+    showToast('两次输入的新密码不一致');
+    return;
+  }
+  if (currentPasswordValue === newPasswordValue) {
+    newPassword.classList.add('invalid');
+    showToast('新密码不能与当前密码相同');
+    return;
+  }
+
+  const submitBtn = securityForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '更新中...';
+  try {
+    const { user } = await apiRequest('/api/auth/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentPassword: currentPasswordValue, newPassword: newPasswordValue }),
+    });
+    updateAuthUI(user);
+    closeSecurity();
+    showToast('密码已更新');
+  } catch (error) {
+    currentPassword.classList.add('invalid');
+    showToast(error.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = loginEmail.value.trim();
@@ -1159,9 +1528,17 @@ const restoreAuthState = async () => {
   }
 };
 
+document.addEventListener('click', (event) => {
+  if (!userMenuWrap.contains(event.target)) {
+    userMenu.classList.remove('open');
+    loginBtn.setAttribute('aria-expanded', 'false');
+  }
+});
 restoreAuthState();
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!loginModal.hidden) closeLogin();
   if (!registerModal.hidden) closeRegister();
+  if (!profileModal.hidden) closeProfile();
+  if (!securityModal.hidden) closeSecurity();
 });

@@ -40,9 +40,21 @@ const createUser = async ({ email, passwordHash, role = 'student', nickname }) =
   }
 };
 
+const updateUserProfile = async (id, { nickname }) => {
+  await getPool().execute('UPDATE users SET nickname = ? WHERE id = ?', [nickname, id]);
+  return findUserById(id);
+};
+
+const updateUserPassword = async (id, passwordHash) => {
+  await getPool().execute('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+  return findUserById(id);
+};
+
 module.exports = {
   createUser,
   findUserByEmail,
   findUserById,
   publicUserFields,
+  updateUserPassword,
+  updateUserProfile,
 };

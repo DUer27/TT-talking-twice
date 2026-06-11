@@ -1,5 +1,12 @@
 const { sessionMaxAgeMs } = require('../config/env');
-const { createUser, findUserByEmail, publicUserFields } = require('../repositories/userRepository');
+const {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  publicUserFields,
+  updateUserPassword,
+  updateUserProfile,
+} = require('../repositories/userRepository');
 const { createSession, deleteSession, findSessionWithUser } = require('../repositories/sessionRepository');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { createSessionToken, hashSessionToken } = require('../utils/sessionToken');
@@ -77,9 +84,59 @@ const logout = async (token) => {
   await deleteSession(hashSessionToken(token));
 };
 
+const updateProfile = async (userId, { nickname }) => {
+  const normalizedNickname = String(nickname || '').trim();
+  if (!normalizedNickname) {
+    const error = new Error('用户名不能为空');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (normalizedNickname.length > 24) {
+    const error = new Error('用户名不能超过 24 个字符');
+    error.statusCode = 400;
+    throw error;
+  }
+  const user = await updateUserProfile(userId, { nickname: normalizedNickname });
+  return publicUserFields(user);
+};
+
+const changePassword = async (userId, { currentPassword, newPassword }) => {
+  const user = await findUserById(userId);
+  if (!user) {
+    const error = new Error('用户不存在');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const matched = await verifyPassword(currentPassword || '', user.password_hash);
+  if (!matched) {
+    const error = new Error('当前密码不正确');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!newPassword || newPassword.length < 6) {
+    const error = new Error('新密码至少需要 6 位');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (currentPassword === newPassword) {
+    const error = new Error('新密码不能与当前密码相同');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  const updatedUser = await updateUserPassword(userId, passwordHash);
+  return publicUserFields(updatedUser);
+};
+
 module.exports = {
+  changePassword,
   getCurrentUser,
   login,
   logout,
   register,
+  updateProfile,
 };

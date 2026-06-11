@@ -1,6 +1,6 @@
 const express = require('express');
 const { sessionCookieName, sessionMaxAgeMs } = require('../config/env');
-const { login, logout, register } = require('../services/authService');
+const { changePassword, login, logout, register, updateProfile } = require('../services/authService');
 const { assertCanAttempt, recordFailure, recordSuccess } = require('../utils/loginRateLimiter');
 const { requireAuth } = require('../middleware/authMiddleware');
 
@@ -52,6 +52,26 @@ router.post('/logout', async (req, res, next) => {
 
 router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.currentUser });
+});
+
+router.patch('/me', requireAuth, async (req, res, next) => {
+  try {
+    const user = await updateProfile(req.currentUser.id, req.body);
+    req.currentUser = user;
+    res.json({ user });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/password', requireAuth, async (req, res, next) => {
+  try {
+    const user = await changePassword(req.currentUser.id, req.body);
+    req.currentUser = user;
+    res.json({ user });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

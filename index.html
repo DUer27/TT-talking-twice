@@ -25,7 +25,25 @@
           <span class="theme-icon" id="themeIcon">🌙</span>
           <span class="theme-label" id="themeLabel">黑夜</span>
         </button>
-        <button class="login-btn" id="loginBtn">登录</button>
+        <div class="user-menu-wrap" id="userMenuWrap">
+          <button class="login-btn" id="loginBtn" aria-haspopup="true" aria-expanded="false">登录</button>
+          <div class="user-menu" id="userMenu" hidden>
+            <div class="user-menu-head">
+              <button type="button" class="user-menu-avatar" id="userMenuAvatar" aria-label="点击更换头像" title="点击更换头像">我</button>
+              <div>
+                <strong id="userMenuName">未登录</strong>
+                <small id="userMenuEmail">请先登录</small>
+              </div>
+            </div>
+            <button type="button" data-user-filter="liked">👍 我的点赞</button>
+            <button type="button" data-user-filter="favorites">★ 我的收藏</button>
+            <button type="button" data-user-filter="mine">✎ 我的帖子</button>
+            <button type="button" data-user-action="profile">⚙ 修改信息</button>
+            <button type="button" data-user-action="security">🔒 账号安全</button>
+            <button type="button" class="logout-menu-btn" data-user-action="logout">退出登录</button>
+          </div>
+          <input id="avatarFileInput" class="avatar-file-input" type="file" accept="image/*" hidden />
+        </div>
       </div>
     </header>
 
@@ -105,8 +123,9 @@
             <thead>
               <tr>
                 <th class="topic-col">吐槽话题</th>
-                <th class="posters-col">参与者</th>
-                <th>回复</th>
+                <th class="posters-col">发帖人</th>
+                <th class="likes-col">点赞</th>
+                <th>评论</th>
                 <th>浏览</th>
                 <th>活动</th>
               </tr>
@@ -230,16 +249,19 @@
       <div class="detail-meta" id="detailMeta"></div>
       <article class="detail-content" id="detailContent"></article>
       <div class="detail-actions">
-        <button class="ghost-btn" id="likeBtn">点赞</button>
+        <button class="ghost-btn like-action-btn" id="likeBtn">
+          <span class="like-thumb" aria-hidden="true">👍</span>
+          <span class="like-text">点赞</span>
+        </button>
         <button class="ghost-btn" id="favoriteBtn">收藏</button>
         <button class="ghost-btn" id="reportBtn">举报</button>
-        <button class="primary-btn" id="detailReplyBtn">回复</button>
+        <button class="primary-btn" id="detailReplyBtn">评论</button>
       </div>
       <div class="reply-box" id="replyBox" hidden>
-        <textarea id="replyInput" rows="4" placeholder="写下你的回复，注意文明表达..."></textarea>
+        <textarea id="replyInput" rows="4" placeholder="写下你的评论，注意文明表达..."></textarea>
         <div>
           <button class="ghost-btn" id="replyCancelBtn">取消</button>
-          <button class="primary-btn" id="replySubmitBtn">提交回复</button>
+          <button class="primary-btn" id="replySubmitBtn">发表评论</button>
         </div>
       </div>
     </div>
@@ -253,7 +275,7 @@
         <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
         <div>
           <h2 id="loginTitle">登录现经管回声</h2>
-          <p>使用邮箱登录后即可发布吐槽、回复、收藏和参与校园讨论。</p>
+          <p>使用邮箱登录后即可发布吐槽、评论、收藏和参与校园讨论。</p>
         </div>
       </div>
       <form class="login-form" id="loginForm">
@@ -288,7 +310,7 @@
         <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
         <div>
           <h2 id="registerTitle">注册现经管回声账号</h2>
-          <p>使用邮箱创建账号，后续可用于发布吐槽、回复和收藏。</p>
+          <p>使用邮箱创建账号，后续可用于发布吐槽、评论和收藏。</p>
         </div>
       </div>
       <form class="login-form register-form" id="registerForm">
@@ -310,6 +332,62 @@
           <button type="button" class="link-btn" id="backToLoginBtn">返回登录</button>
         </div>
         <p class="login-tip">注册成功后会自动返回登录弹窗。</p>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="profileModal" hidden>
+    <div class="login-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+      <button class="modal-close" id="profileClose" aria-label="关闭修改信息弹窗">×</button>
+      <div class="login-head">
+        <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
+        <div>
+          <h2 id="profileTitle">修改个人信息</h2>
+          <p>这里只能修改用户名，用户名不能为空。</p>
+        </div>
+      </div>
+      <form class="login-form account-form" id="profileForm">
+        <label>
+          <span>用户名</span>
+          <input id="profileNickname" type="text" maxlength="24" placeholder="请输入 1-24 个字符的用户名" required />
+        </label>
+        <div class="account-actions">
+          <button type="button" class="ghost-btn" id="profileCancel">取消</button>
+          <button type="submit" class="primary-btn">保存修改</button>
+        </div>
+        <p class="login-tip">保存后，右上角用户入口会立即同步新用户名。</p>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="securityModal" hidden>
+    <div class="login-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="securityTitle">
+      <button class="modal-close" id="securityClose" aria-label="关闭账号安全弹窗">×</button>
+      <div class="login-head">
+        <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
+        <div>
+          <h2 id="securityTitle">账号安全</h2>
+          <p>修改密码前需要验证当前密码，新密码至少 6 位。</p>
+        </div>
+      </div>
+      <form class="login-form account-form" id="securityForm">
+        <label>
+          <span>当前密码</span>
+          <input id="currentPassword" type="password" placeholder="请输入当前密码" required />
+        </label>
+        <label>
+          <span>新密码</span>
+          <input id="newPassword" type="password" placeholder="请输入新密码，至少 6 位" required />
+        </label>
+        <label>
+          <span>确认新密码</span>
+          <input id="confirmNewPassword" type="password" placeholder="请再次输入新密码" required />
+        </label>
+        <div class="account-actions">
+          <button type="button" class="ghost-btn" id="securityCancel">取消</button>
+          <button type="submit" class="primary-btn">更新密码</button>
+        </div>
+        <p class="login-tip">密码修改成功后，当前登录状态会继续保留。</p>
       </form>
     </div>
   </div>
