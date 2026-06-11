@@ -9,6 +9,7 @@ const defaultDatabase = () => ({
   },
   users: [],
   sessions: [],
+  loginAttempts: [],
 });
 
 const ensureDatabase = async () => {

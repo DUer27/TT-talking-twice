@@ -517,9 +517,11 @@ replySubmitBtn.addEventListener('click', () => {
   showToast('回复已提交');
 });
 
-generateReportBtn.addEventListener('click', () => {
-  showToast('管理员账号配置后开启后台功能');
-});
+if (generateReportBtn) {
+  generateReportBtn.addEventListener('click', () => {
+    showToast('管理员账号配置后开启后台功能');
+  });
+}
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
@@ -537,7 +539,6 @@ const registerClose = document.getElementById('registerClose');
 const loginForm = document.getElementById('loginForm');
 const loginEmail = document.getElementById('loginEmail');
 const loginPassword = document.getElementById('loginPassword');
-const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
 const backToLoginBtn = document.getElementById('backToLoginBtn');
 const registerForm = document.getElementById('registerForm');
@@ -653,9 +654,6 @@ registerForm.addEventListener('submit', async (event) => {
   } catch (error) {
     showToast(error.message);
   }
-});
-forgotPasswordBtn.addEventListener('click', () => {
-  showToast('找回密码功能后续接入邮箱验证');
 });
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
