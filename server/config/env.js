@@ -14,6 +14,12 @@ module.exports = {
     password: process.env.DB_PASSWORD || '',
     connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
   },
+  ai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    timeoutMs: Number(process.env.AI_TIMEOUT_MS || 20000),
+  },
   sessionCookieName: 'campus_voice_session',
   sessionMaxAgeMs: 1000 * 60 * 60 * 24 * 7,
 };

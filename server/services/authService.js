@@ -13,6 +13,8 @@ const { createSessionToken, hashSessionToken } = require('../utils/sessionToken'
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
+const normalizeLoginIdentifier = (value) => String(value || '').trim().toLowerCase();
+
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
 const createAuthSession = async (user) => {
@@ -53,8 +55,8 @@ const register = async ({ email, password }) => {
 };
 
 const login = async ({ email, password }) => {
-  const normalizedEmail = normalizeEmail(email);
-  const user = await findUserByEmail(normalizedEmail);
+  const loginIdentifier = normalizeLoginIdentifier(email);
+  const user = await findUserByEmail(loginIdentifier);
 
   if (!user) {
     const error = new Error('邮箱或密码错误');
@@ -84,8 +86,14 @@ const logout = async (token) => {
   await deleteSession(hashSessionToken(token));
 };
 
-const updateProfile = async (userId, { nickname }) => {
+const updateProfile = async (userId, { email, nickname }) => {
+  const normalizedEmail = normalizeEmail(email);
   const normalizedNickname = String(nickname || '').trim();
+  if (!validateEmail(normalizedEmail)) {
+    const error = new Error('Email format is invalid');
+    error.statusCode = 400;
+    throw error;
+  }
   if (!normalizedNickname) {
     const error = new Error('用户名不能为空');
     error.statusCode = 400;
@@ -96,7 +104,7 @@ const updateProfile = async (userId, { nickname }) => {
     error.statusCode = 400;
     throw error;
   }
-  const user = await updateUserProfile(userId, { nickname: normalizedNickname });
+  const user = await updateUserProfile(userId, { email: normalizedEmail, nickname: normalizedNickname });
   return publicUserFields(user);
 };
 

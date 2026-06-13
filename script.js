@@ -35,7 +35,9 @@ const topicBody = document.getElementById('topicBody');
 const listHint = document.getElementById('listHint');
 const topicPanel = document.getElementById('topicPanel');
 const adminPanel = document.getElementById('adminPanel');
-const sidebarLinks = document.querySelectorAll('.sidebar-link[data-filter]');
+let sidebarLinks = document.querySelectorAll('.sidebar-link[data-filter]');
+const categorySidebarSection = document.getElementById('categorySidebarSection');
+const teacherEntry = document.querySelector('.teacher-entry');
 const navLinks = document.querySelectorAll('.nav-pills [data-nav-filter]');
 const searchInput = document.getElementById('searchInput');
 const toast = document.getElementById('toast');
@@ -61,11 +63,24 @@ const hotCategorySummary = document.getElementById('hotCategorySummary');
 const todayPostCount = document.getElementById('todayPostCount');
 const todayPostChange = document.getElementById('todayPostChange');
 const hotBreakdown = document.querySelector('.hot-breakdown');
+const adminSearchInput = document.getElementById('adminSearchInput');
+const adminStatusFilter = document.getElementById('adminStatusFilter');
+const adminPostBody = document.getElementById('adminPostBody');
+const adminPostEmpty = document.getElementById('adminPostEmpty');
+const adminAiSummary = document.getElementById('adminAiSummary');
+const adminSuggestionList = document.getElementById('adminSuggestionList');
+const adminReportList = document.getElementById('adminReportList');
+const adminActionList = document.getElementById('adminActionList');
+const adminCategoryForm = document.getElementById('adminCategoryForm');
+const adminCategoryName = document.getElementById('adminCategoryName');
+const adminCategoryLabel = document.getElementById('adminCategoryLabel');
+const adminArchivedList = document.getElementById('adminArchivedList');
 let hotCategoryButtons = [];
 
 const defaultTrendLabels = ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'];
 let categoryTrendMap = {};
-const categoryStatOrder = [
+let appCategories = [];
+let categoryStatOrder = [
   { category: '课程吐槽', label: '课程' },
   { category: '食堂吐槽', label: '食堂' },
   { category: '宿舍生活', label: '宿舍' },
@@ -89,6 +104,74 @@ let adminStats = {
   trends: categoryTrendMap,
 };
 
+const applyCategories = (categories = []) => {
+  appCategories = categories.length ? categories : appCategories;
+  const visibleCategories = appCategories.filter((category) => category.name !== '公告');
+  if (visibleCategories.length) {
+    categoryStatOrder = visibleCategories.map((category) => ({ category: category.name, label: category.label || category.name.slice(0, 4) }));
+    categoryTrendMap = { ...createEmptyTrendMap(), ...(adminStats.trends || {}) };
+  }
+
+  if (categoryMenu) {
+    categoryMenu.innerHTML = ['<button data-category="全部">全部</button>', ...visibleCategories.map((category) => (
+      `<button data-category="${escapeHtml(category.name)}">${escapeHtml(category.name)}</button>`
+    ))].join('');
+  }
+
+  if (categorySidebarSection) {
+    categorySidebarSection.innerHTML = [
+      '<div class="sidebar-title">板块</div>',
+      '<a class="sidebar-link active" href="#" data-filter="all" data-title="最新吐槽"><span class="dot blue"></span> 全部吐槽</a>',
+      ...visibleCategories.map((category, index) => (
+        `<a class="sidebar-link" href="#" data-filter="${escapeHtml(category.name)}" data-title="${escapeHtml(category.name)}"><span class="dot ${['orange', 'purple', 'green', 'cyan', 'blue'][index % 5]}"></span> ${escapeHtml(category.name)}</a>`
+      )),
+    ].join('');
+    categorySidebarSection.querySelectorAll('.sidebar-link[data-filter]').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        resetChips();
+        switchFilter(link.dataset.filter, link.dataset.title);
+      });
+    });
+    sidebarLinks = document.querySelectorAll('.sidebar-link[data-filter]');
+  }
+
+  const postCategorySelect = document.getElementById('postCategoryInput');
+  if (postCategorySelect) {
+    postCategorySelect.innerHTML = visibleCategories.map((category) => (
+      `<option value="${escapeHtml(category.name)}">${escapeHtml(category.name)}</option>`
+    )).join('');
+  }
+  renderPostTagOptions();
+};
+
+const loadCategories = async () => {
+  try {
+    const { categories = [] } = await apiRequest('/api/categories');
+    applyCategories(categories);
+  } catch (_error) {
+    applyCategories([]);
+  }
+};
+
+const renderPostTagOptions = () => {
+  const postCategorySelect = document.getElementById('postCategoryInput');
+  const postTagOptions = document.getElementById('postTagOptions');
+  if (!postCategorySelect || !postTagOptions) return;
+  const category = appCategories.find((item) => item.name === postCategorySelect.value);
+  const tags = category?.tags || [];
+  if (!tags.length) {
+    postTagOptions.innerHTML = '<span class="empty">该板块暂无可选标签</span>';
+    return;
+  }
+  postTagOptions.innerHTML = tags.map((tag) => `
+    <label>
+      <input type="checkbox" name="postTags" value="${escapeHtml(tag)}">
+      <span>${escapeHtml(tag)}</span>
+    </label>
+  `).join('');
+};
+
 const getCategoryStats = () => categoryStatOrder.map((item) => {
   const matched = adminStats.categories.find((stat) => stat.category === item.category);
   return { ...item, value: Number(matched?.value || 0) };
@@ -98,6 +181,10 @@ let currentFilter = 'all';
 let currentTitle = '最新吐槽';
 let currentTopicId = null;
 let currentTagKeyword = '';
+let adminPosts = [];
+let adminPostLoading = false;
+let adminReports = [];
+const archivedActionItems = new Set();
 let toastTimer = null;
 let activeTrendIndex = 0;
 let activeCategoryIndex = -1;
@@ -209,7 +296,7 @@ const normalizePostTopic = (post) => {
   if (!post) return null;
   const authorInitial = post.author?.initial || (post.isAnonymous ? '匿' : '同');
   const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
-  const tags = [post.category, post.isAnonymous ? '匿名' : '实名'];
+  const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : []), post.isAnonymous ? '匿名' : '实名'];
   if (post.resolved || post.status === 'resolved') tags.push('已处理');
   else if (isRecentPost(post.createdAt)) tags.push('新发布');
   else tags.push('待回应');
@@ -231,8 +318,9 @@ const normalizePostTopic = (post) => {
     resolved: Boolean(post.resolved || post.status === 'resolved'),
     unread: false,
     favorite: false,
-    liked: false,
+    liked: Boolean(post.liked),
     likeCount: Number(post.likeCount || 0),
+    comments: Array.isArray(post.comments) ? post.comments : [],
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
   };
@@ -247,8 +335,10 @@ const updateTopicFromPost = (post, { preserveState = true, prepend = true } = {}
     const existingTopic = topics[existingIndex];
     if (preserveState) {
       nextTopic.favorite = existingTopic.favorite;
-      nextTopic.liked = existingTopic.liked;
       nextTopic.unread = existingTopic.unread;
+      if (!Array.isArray(post.comments) && Array.isArray(existingTopic.comments)) {
+        nextTopic.comments = existingTopic.comments;
+      }
     }
     topics.splice(existingIndex, 1, nextTopic);
   } else if (prepend) {
@@ -265,7 +355,6 @@ const loadPersistedTopics = async ({ silent = true } = {}) => {
     const { posts = [] } = await apiRequest('/api/posts');
     const localState = new Map(topics.map((topic) => [String(topic.id), {
       favorite: topic.favorite,
-      liked: topic.liked,
       unread: topic.unread,
     }]));
 
@@ -279,7 +368,6 @@ const loadPersistedTopics = async ({ silent = true } = {}) => {
       .map((topic) => ({
         ...topic,
         favorite: localState.get(String(topic.id))?.favorite || false,
-        liked: localState.get(String(topic.id))?.liked || false,
         unread: localState.get(String(topic.id))?.unread || false,
       }));
 
@@ -344,6 +432,215 @@ const loadAdminStats = async ({ silent = true } = {}) => {
     renderAdminSummary();
     renderAdminCharts();
     if (!silent) showToast(error.message || '管理员统计加载失败');
+  }
+};
+
+const adminStatusLabels = {
+  open: '待处理',
+  resolved: '已处理',
+  hidden: '已隐藏',
+};
+
+const getAdminFilteredPosts = () => {
+  const query = (adminSearchInput?.value || '').trim().toLowerCase();
+  if (!query) return adminPosts;
+  return adminPosts.filter((post) => [
+    post.title,
+    post.content,
+    post.category,
+    post.status,
+    post.author?.name,
+  ].join(' ').toLowerCase().includes(query));
+};
+
+const renderAdminPosts = () => {
+  if (!adminPostBody) return;
+  const posts = getAdminFilteredPosts();
+  adminPostBody.innerHTML = posts.map((post) => {
+    const status = post.status || 'open';
+    const statusLabel = adminStatusLabels[status] || status;
+    const safeId = escapeHtml(post.id);
+    return `
+      <tr>
+        <td>
+          <div class="admin-post-title">
+            <strong>${escapeHtml(post.title)}</strong>
+            <span>${escapeHtml(post.content || '')}</span>
+          </div>
+        </td>
+        <td>${escapeHtml(post.category || '-')}</td>
+        <td><span class="admin-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span></td>
+        <td>${Number(post.replies || 0)} 评 / ${Number(post.likeCount || 0)} 赞 / ${Number(post.views || 0)} 浏览</td>
+        <td>${escapeHtml(getRelativeActivity(post.updatedAt || post.createdAt))}</td>
+        <td>
+          <div class="admin-action-group">
+            <button type="button" data-admin-open-id="${safeId}" title="打开帖子详情">查看</button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="open" ${status === 'open' ? 'disabled' : ''}>待处理</button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="resolved" ${status === 'resolved' ? 'disabled' : ''}>已处理</button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="hidden" ${status === 'hidden' ? 'disabled' : ''}>隐藏</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (adminPostEmpty) adminPostEmpty.hidden = Boolean(posts.length) || adminPostLoading;
+};
+
+const loadAdminPosts = async ({ silent = true } = {}) => {
+  if (!adminPostBody) return;
+  if (!currentUser) {
+    adminPosts = [];
+    renderAdminPosts();
+    if (!silent) showToast('请先登录后再进入后台');
+    openLogin();
+    return;
+  }
+  if (currentUser.role !== 'admin') {
+    adminPosts = [];
+    renderAdminPosts();
+    if (!silent) showToast('当前账号没有管理员权限');
+    return;
+  }
+
+  adminPostLoading = true;
+  adminPostBody.innerHTML = '<tr><td colspan="6" class="empty-state">正在读取帖子...</td></tr>';
+  if (adminPostEmpty) adminPostEmpty.hidden = true;
+  try {
+    const status = adminStatusFilter?.value || 'all';
+    const { posts = [] } = await apiRequest(`/api/posts/admin/list?status=${encodeURIComponent(status)}`);
+    adminPosts = posts;
+    renderAdminPosts();
+    if (!silent) showToast('后台帖子已刷新');
+  } catch (error) {
+    adminPosts = [];
+    renderAdminPosts();
+    showToast(error.message || '后台帖子加载失败');
+  } finally {
+    adminPostLoading = false;
+    renderAdminPosts();
+  }
+};
+
+const renderAdminReport = (report = adminReports[0]) => {
+  if (!adminAiSummary || !adminSuggestionList) return;
+  if (!report) {
+    adminAiSummary.textContent = '生成报告后会展示本次反馈摘要。';
+    adminSuggestionList.innerHTML = '';
+    renderAdminActionItems(null);
+    renderArchivedActionItems();
+    return;
+  }
+  const payload = report.payload || {};
+  const sourceText = payload.source === 'ai' ? 'AI 生成' : '本地生成';
+  const postCountText = Array.isArray(payload.postIds) ? `，纳入 ${payload.postIds.length} 条新帖` : '';
+  adminAiSummary.textContent = `${sourceText}${postCountText}：${report.summary || payload.summary || '暂无摘要。'}`;
+  adminSuggestionList.innerHTML = (payload.suggestions || [])
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join('');
+  renderAdminActionItems(report);
+  renderArchivedActionItems();
+};
+
+const renderAdminActionItems = (report = adminReports[0]) => {
+  if (!adminActionList) return;
+  if (!report) {
+    adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项。</div>';
+    return;
+  }
+  const actionItems = (report?.payload?.actionItems || []).filter((item) => !archivedActionItems.has(`${report.id}:${item.id}`));
+  if (!actionItems.length) {
+    adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项。</div>';
+    return;
+  }
+  adminActionList.innerHTML = actionItems.map((item) => {
+    const isResolved = item.status === 'resolved';
+    return `
+      <div class="admin-action-item ${isResolved ? 'is-resolved' : ''}" data-action-id="${escapeHtml(item.id)}" data-report-id="${escapeHtml(report.id)}">
+        <div class="admin-action-title">
+          <strong>${escapeHtml(item.title || '建议处理')}</strong>
+          <span>${Number(item.postCount || item.postIds?.length || 0)} 个帖子吐槽</span>
+        </div>
+        <div class="admin-action-buttons">
+          <button type="button" data-action-status="${isResolved ? 'open' : 'resolved'}">${isResolved ? '标为未处理' : '已处理'}</button>
+          <button type="button" data-action-archive="true">归档</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+};
+
+const renderArchivedActionItems = () => {
+  if (!adminArchivedList) return;
+  const archivedItems = [];
+  adminReports.forEach((report) => {
+    (report.payload?.actionItems || []).forEach((item) => {
+      const key = `${report.id}:${item.id}`;
+      if (archivedActionItems.has(key)) archivedItems.push({ ...item, reportId: report.id, key });
+    });
+  });
+  if (!archivedItems.length) {
+    adminArchivedList.innerHTML = '<div class="admin-empty">暂无已归档处理。</div>';
+    return;
+  }
+  adminArchivedList.innerHTML = archivedItems.map((item) => `
+    <div class="admin-archived-item" data-archived-key="${escapeHtml(item.key)}" data-report-id="${escapeHtml(item.reportId)}">
+      <strong>${escapeHtml(item.title || '建议处理')}</strong>
+      <button type="button" data-restore-archived="true">恢复显示</button>
+    </div>
+  `).join('');
+};
+
+const renderAdminReportList = () => {
+  if (!adminReportList) return;
+  if (!adminReports.length) {
+    adminReportList.innerHTML = '<div class="admin-empty">暂无历史报告。</div>';
+    renderAdminReport(null);
+    return;
+  }
+  adminReportList.innerHTML = adminReports.map((report) => `
+    <div class="admin-report-item">
+      <div>
+        <strong>${escapeHtml(report.title)}</strong>
+        <span>${escapeHtml(new Date(report.createdAt).toLocaleString('zh-CN'))}</span>
+      </div>
+      <div class="admin-report-actions">
+        <a href="/api/posts/admin/reports/${encodeURIComponent(report.id)}/export?format=markdown">Markdown</a>
+        <a href="/api/posts/admin/reports/${encodeURIComponent(report.id)}/export?format=word">Word</a>
+        <a href="/api/posts/admin/reports/${encodeURIComponent(report.id)}/export?format=pdf">PDF</a>
+        <a href="/api/posts/admin/reports/${encodeURIComponent(report.id)}/export?format=html">HTML</a>
+      </div>
+    </div>
+  `).join('');
+  renderAdminReport(adminReports[0]);
+};
+
+const loadAdminReports = async ({ silent = true } = {}) => {
+  if (!adminReportList || currentUser?.role !== 'admin') return;
+  try {
+    const { reports = [] } = await apiRequest('/api/posts/admin/reports');
+    adminReports = reports;
+    renderAdminReportList();
+  } catch (error) {
+    if (!silent) showToast(error.message || '报告历史加载失败');
+  }
+};
+
+const generateAdminReport = async () => {
+  if (!generateReportBtn || currentUser?.role !== 'admin') return;
+  const originalText = generateReportBtn.textContent;
+  generateReportBtn.disabled = true;
+  generateReportBtn.textContent = '生成中...';
+  try {
+    const { report } = await apiRequest('/api/posts/admin/reports', { method: 'POST' });
+    adminReports = [report, ...adminReports.filter((item) => String(item.id) !== String(report.id))];
+    renderAdminReportList();
+    showToast('报告已生成');
+  } catch (error) {
+    showToast(error.message || '报告生成失败');
+  } finally {
+    generateReportBtn.disabled = false;
+    generateReportBtn.textContent = originalText;
   }
 };
 
@@ -450,6 +747,10 @@ const handleAvatarFileChange = async () => {
 
 const updateAuthUI = (user) => {
   currentUser = user;
+  if (teacherEntry) teacherEntry.hidden = user?.role !== 'admin';
+  if (user?.role !== 'admin' && currentFilter === 'admin') {
+    switchFilter('all', '最新吐槽');
+  }
   if (user) {
     const displayName = user.nickname || user.email.split('@')[0];
     loginBtn.textContent = `${displayName} ▾`;
@@ -978,6 +1279,15 @@ sidebarLinks.forEach((link) => {
     const title = link.dataset.title;
 
     if (filter === 'admin') {
+      if (!currentUser) {
+        showToast('请先登录后再进入后台');
+        openLogin();
+        return;
+      }
+      if (currentUser.role !== 'admin') {
+        showToast('当前账号没有管理员权限');
+        return;
+      }
       currentFilter = filter;
       currentTitle = title;
       topicPanel.hidden = true;
@@ -987,6 +1297,8 @@ sidebarLinks.forEach((link) => {
       link.classList.add('active');
       navLinks.forEach((item) => item.classList.remove('active'));
       loadAdminStats({ silent: true });
+      loadAdminPosts({ silent: true });
+      loadAdminReports({ silent: true });
       showToast('已进入管理员后台');
       return;
     }
@@ -1050,6 +1362,138 @@ const openDropdown = (menu, chip) => {
     chip.setAttribute('aria-expanded', 'true');
   }
 };
+
+if (adminSearchInput) {
+  adminSearchInput.addEventListener('input', renderAdminPosts);
+  adminSearchInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    adminSearchInput.value = '';
+    renderAdminPosts();
+    adminSearchInput.blur();
+  });
+}
+
+if (adminStatusFilter) {
+  adminStatusFilter.addEventListener('change', () => loadAdminPosts({ silent: false }));
+}
+
+if (adminCategoryForm) {
+  adminCategoryForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const name = adminCategoryName.value.trim();
+    const label = adminCategoryLabel.value.trim();
+    if (!name) {
+      showToast('请输入板块名称');
+      return;
+    }
+    const submitBtn = adminCategoryForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await apiRequest('/api/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name, label }),
+      });
+      adminCategoryForm.reset();
+      await loadCategories();
+      await loadAdminStats({ silent: true });
+      showToast('板块已添加');
+    } catch (error) {
+      showToast(error.message || '板块添加失败');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
+if (adminPostBody) {
+  adminPostBody.addEventListener('click', async (event) => {
+    const openButton = event.target.closest('[data-admin-open-id]');
+    if (openButton) {
+      const adminPost = adminPosts.find((post) => String(post.id) === String(openButton.dataset.adminOpenId));
+      if (adminPost) updateTopicFromPost(adminPost, { preserveState: true, prepend: false });
+      openTopicDetail(openButton.dataset.adminOpenId);
+      return;
+    }
+
+    const statusButton = event.target.closest('[data-admin-status-id]');
+    if (!statusButton) return;
+    statusButton.disabled = true;
+    try {
+      const { post } = await apiRequest(`/api/posts/${encodeURIComponent(statusButton.dataset.adminStatusId)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: statusButton.dataset.status }),
+      });
+      const index = adminPosts.findIndex((item) => String(item.id) === String(post.id));
+      if (index >= 0) adminPosts.splice(index, 1, post);
+      else adminPosts.unshift(post);
+      updateTopicFromPost(post, { preserveState: true, prepend: false });
+      renderAdminPosts();
+      await loadPersistedTopics({ silent: true });
+      await loadAdminStats({ silent: true });
+      await loadAdminPosts({ silent: true });
+      showToast('帖子状态已更新');
+    } catch (error) {
+      showToast(error.message || '状态更新失败');
+    } finally {
+      statusButton.disabled = false;
+    }
+  });
+}
+
+if (adminActionList) {
+  adminActionList.addEventListener('click', async (event) => {
+    const actionCard = event.target.closest('[data-action-id][data-report-id]');
+    if (!actionCard) return;
+    const report = adminReports.find((item) => String(item.id) === String(actionCard.dataset.reportId));
+    const actionItem = report?.payload?.actionItems?.find((item) => String(item.id) === String(actionCard.dataset.actionId));
+    if (!report || !actionItem) return;
+
+    const archiveButton = event.target.closest('[data-action-archive]');
+    if (archiveButton) {
+      archivedActionItems.add(`${report.id}:${actionItem.id}`);
+      renderAdminActionItems(report);
+      renderArchivedActionItems();
+      showToast('处理项已归档');
+      return;
+    }
+
+    const statusButton = event.target.closest('[data-action-status]');
+    if (!statusButton) return;
+    const nextStatus = statusButton.dataset.actionStatus;
+    statusButton.disabled = true;
+    try {
+      const { posts = [] } = await apiRequest('/api/posts/admin/status', {
+        method: 'PATCH',
+        body: JSON.stringify({ postIds: actionItem.postIds || [], status: nextStatus }),
+      });
+      actionItem.status = nextStatus;
+      posts.forEach((post) => updateTopicFromPost(post, { preserveState: true, prepend: false }));
+      renderAdminActionItems(report);
+      await loadPersistedTopics({ silent: true });
+      await loadAdminPosts({ silent: true });
+      await loadAdminStats({ silent: true });
+      showToast(nextStatus === 'resolved' ? '相关帖子已标为已处理' : '相关帖子已恢复未处理');
+    } catch (error) {
+      showToast(error.message || '处理项更新失败');
+    } finally {
+      statusButton.disabled = false;
+    }
+  });
+}
+
+if (adminArchivedList) {
+  adminArchivedList.addEventListener('click', (event) => {
+    const restoreButton = event.target.closest('[data-restore-archived]');
+    if (!restoreButton) return;
+    const item = event.target.closest('[data-archived-key][data-report-id]');
+    if (!item) return;
+    archivedActionItems.delete(item.dataset.archivedKey);
+    const report = adminReports.find((reportItem) => String(reportItem.id) === String(item.dataset.reportId)) || adminReports[0];
+    renderAdminActionItems(report);
+    renderArchivedActionItems();
+    showToast('已恢复建议处理项');
+  });
+}
 
 categoryChip.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -1149,6 +1593,7 @@ const openCreatePost = () => {
     openLogin();
     return;
   }
+  renderPostTagOptions();
   createPostModal.hidden = false;
   setTimeout(() => postTitleInput.focus(), 60);
 };
@@ -1156,18 +1601,21 @@ const closeCreatePost = () => {
   createPostModal.hidden = true;
   createPostForm.reset();
   postAnonymousInput.checked = true;
+  renderPostTagOptions();
 };
 
 createPostBtn.addEventListener('click', openCreatePost);
 createPostClose.addEventListener('click', closeCreatePost);
 createPostCancel.addEventListener('click', closeCreatePost);
 createPostModal.addEventListener('click', (event) => { if (event.target === createPostModal) closeCreatePost(); });
+postCategoryInput.addEventListener('change', renderPostTagOptions);
 
 createPostForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const title = postTitleInput.value.trim();
   const content = postContentInput.value.trim();
   const category = postCategoryInput.value;
+  const tags = [...createPostForm.querySelectorAll('input[name="postTags"]:checked')].map((input) => input.value);
   const isAnonymous = postAnonymousInput.checked;
 
   if (!title) {
@@ -1190,7 +1638,7 @@ createPostForm.addEventListener('submit', async (event) => {
   try {
     const { post } = await apiRequest('/api/posts', {
       method: 'POST',
-      body: JSON.stringify({ title, content, category, isAnonymous }),
+      body: JSON.stringify({ title, content, category, tags, isAnonymous }),
     });
     const topic = updateTopicFromPost(post, { preserveState: false, prepend: true });
     if (topic) topic.unread = true;
@@ -1213,6 +1661,7 @@ const detailTitle = document.getElementById('detailTitle');
 const detailTags = document.getElementById('detailTags');
 const detailMeta = document.getElementById('detailMeta');
 const detailContent = document.getElementById('detailContent');
+const commentList = document.getElementById('commentList');
 const detailReplyBtn = document.getElementById('detailReplyBtn');
 const replyBox = document.getElementById('replyBox');
 const replyCancelBtn = document.getElementById('replyCancelBtn');
@@ -1229,6 +1678,23 @@ const refreshDetailButtons = (topic) => {
   favoriteBtn.textContent = topic.favorite ? '已收藏' : '收藏';
 };
 
+const renderComments = (comments = []) => {
+  if (!commentList) return;
+  if (!comments.length) {
+    commentList.innerHTML = '<div class="comment-empty">还没有评论，来写下第一条吧。</div>';
+    return;
+  }
+  commentList.innerHTML = comments.map((comment) => `
+    <article class="comment-item">
+      <div class="comment-meta">
+        <strong>${escapeHtml(comment.author?.name || '同学')}</strong>
+        <span>${escapeHtml(getRelativeActivity(comment.createdAt))}</span>
+      </div>
+      <p class="comment-body">${escapeHtml(comment.content || '')}</p>
+    </article>
+  `).join('');
+};
+
 const toggleTopicLike = (topic, sourceButton = null) => {
   topic.liked = !topic.liked;
   topic.likeCount = Math.max(0, (topic.likeCount || 0) + (topic.liked ? 1 : -1));
@@ -1236,6 +1702,49 @@ const toggleTopicLike = (topic, sourceButton = null) => {
     sourceButton.classList.remove('like-pop');
     void sourceButton.offsetWidth;
     sourceButton.classList.add('like-pop');
+  }
+};
+
+const renderCurrentTopicList = () => {
+  renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
+};
+
+const toggleLikeForTopic = async (topic, sourceButton = null) => {
+  if (!topic) return null;
+  if (!currentUser) {
+    showToast('请先登录后再点赞');
+    openLogin();
+    return null;
+  }
+
+  if (!topic.persisted) {
+    toggleTopicLike(topic, sourceButton);
+    renderCurrentTopicList();
+    if (currentTopicId === topic.id) refreshDetailButtons(topic);
+    showToast(topic.liked ? '已点赞' : '已取消点赞');
+    return topic;
+  }
+
+  if (sourceButton) sourceButton.disabled = true;
+  try {
+    const { post } = await apiRequest(`/api/posts/${encodeURIComponent(topic.id)}/like`, { method: 'POST' });
+    const updatedTopic = updateTopicFromPost(post, { preserveState: true, prepend: false }) || topic;
+    renderCurrentTopicList();
+    if (currentTopicId === updatedTopic.id) refreshDetailButtons(updatedTopic);
+    if (sourceButton && updatedTopic.liked) {
+      const refreshedLikeBtn = topicBody.querySelector(`[data-like-topic-id="${updatedTopic.id}"]`);
+      const popTarget = refreshedLikeBtn || sourceButton;
+      popTarget.classList.remove('like-pop');
+      void popTarget.offsetWidth;
+      popTarget.classList.add('like-pop');
+    }
+    showToast(updatedTopic.liked ? '已点赞' : '已取消点赞');
+    return updatedTopic;
+  } catch (error) {
+    showToast(error.message || '点赞失败，请稍后重试');
+    return null;
+  } finally {
+    if (sourceButton) sourceButton.disabled = false;
   }
 };
 
@@ -1267,6 +1776,7 @@ const openTopicDetail = async (topicId) => {
     <span>发帖人：${escapeHtml(latestTopic.authorName || latestTopic.posters[0] || '匿')}</span>
   `;
   detailContent.textContent = latestTopic.content;
+  renderComments(latestTopic.comments || []);
   replyBox.hidden = true;
   replyInput.value = '';
   refreshDetailButtons(latestTopic);
@@ -1289,18 +1799,7 @@ topicBody.addEventListener('click', (event) => {
     event.stopPropagation();
     const topic = topics.find((item) => item.id === quickLikeBtn.dataset.likeTopicId);
     if (!topic) return;
-    toggleTopicLike(topic, quickLikeBtn);
-    renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
-    if (topic.liked) {
-      const refreshedLikeBtn = topicBody.querySelector(`[data-like-topic-id="${topic.id}"]`);
-      if (refreshedLikeBtn) {
-        refreshedLikeBtn.classList.remove('like-pop');
-        void refreshedLikeBtn.offsetWidth;
-        refreshedLikeBtn.classList.add('like-pop');
-      }
-    }
-    if (currentTopicId === topic.id) refreshDetailButtons(topic);
-    showToast(topic.liked ? '已快捷点赞' : '已取消点赞');
+    toggleLikeForTopic(topic, quickLikeBtn);
     return;
   }
 
@@ -1320,13 +1819,9 @@ replyCancelBtn.addEventListener('click', () => {
   replyInput.value = '';
   replyBox.hidden = true;
 });
-likeBtn.addEventListener('click', () => {
+likeBtn.addEventListener('click', async () => {
   const topic = getCurrentTopic();
-  if (!topic) return;
-  toggleTopicLike(topic, likeBtn);
-  refreshDetailButtons(topic);
-  renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
-  showToast(topic.liked ? '已点赞' : '已取消点赞');
+  await toggleLikeForTopic(topic, likeBtn);
 });
 favoriteBtn.addEventListener('click', () => {
   const topic = getCurrentTopic();
@@ -1339,25 +1834,54 @@ favoriteBtn.addEventListener('click', () => {
 reportBtn.addEventListener('click', () => {
   showToast('举报已提交，管理员会进行审核');
 });
-replySubmitBtn.addEventListener('click', () => {
+replySubmitBtn.addEventListener('click', async () => {
   const topic = getCurrentTopic();
   if (!topic || !replyInput.value.trim()) {
     showToast('请先输入评论内容');
     return;
   }
-  topic.replies += 1;
-  topic.activity = '刚刚';
-  if (!topic.posters.includes('我')) topic.posters.unshift('我');
-  replyInput.value = '';
-  replyBox.hidden = true;
-  openTopicDetail(topic.id);
-  showToast('评论已提交');
+  if (!currentUser) {
+    showToast('请先登录后再评论');
+    openLogin();
+    return;
+  }
+  const content = replyInput.value.trim();
+  replySubmitBtn.disabled = true;
+  try {
+    if (topic.persisted) {
+      const { comment, post } = await apiRequest(`/api/posts/${encodeURIComponent(topic.id)}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+      const updatedTopic = updateTopicFromPost(post, { preserveState: true, prepend: false }) || topic;
+      updatedTopic.comments = [...(updatedTopic.comments || []), comment].filter(Boolean);
+      renderComments(updatedTopic.comments);
+      renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
+    } else {
+      topic.replies += 1;
+      topic.activity = '刚刚';
+      if (!topic.posters.includes('我')) topic.posters.unshift('我');
+      topic.comments = [...(topic.comments || []), {
+        id: `local-comment-${Date.now()}`,
+        content,
+        author: { name: currentUser.nickname || currentUser.email?.split('@')[0] || '我' },
+        createdAt: new Date().toISOString(),
+      }];
+      renderComments(topic.comments);
+      renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
+    }
+    replyInput.value = '';
+    replyBox.hidden = true;
+    showToast('评论已提交');
+  } catch (error) {
+    showToast(error.message || '评论失败，请稍后重试');
+  } finally {
+    replySubmitBtn.disabled = false;
+  }
 });
 
 if (generateReportBtn) {
-  generateReportBtn.addEventListener('click', () => {
-    showToast('管理员账号配置后开启后台功能');
-  });
+  generateReportBtn.addEventListener('click', generateAdminReport);
 }
 
 window.addEventListener('resize', () => {
@@ -1389,6 +1913,7 @@ const profileModal = document.getElementById('profileModal');
 const profileClose = document.getElementById('profileClose');
 const profileCancel = document.getElementById('profileCancel');
 const profileForm = document.getElementById('profileForm');
+const profileEmail = document.getElementById('profileEmail');
 const profileNickname = document.getElementById('profileNickname');
 const securityModal = document.getElementById('securityModal');
 const securityClose = document.getElementById('securityClose');
@@ -1401,6 +1926,7 @@ const confirmNewPassword = document.getElementById('confirmNewPassword');
 const closeProfile = () => {
   profileModal.hidden = true;
   profileForm.reset();
+  profileEmail.classList.remove('invalid');
   profileNickname.classList.remove('invalid');
 };
 
@@ -1409,10 +1935,12 @@ const openProfile = () => {
     openLogin();
     return;
   }
+  profileEmail.value = currentUser.email || '';
   profileNickname.value = currentUser.nickname || currentUser.email.split('@')[0];
+  profileEmail.classList.remove('invalid');
   profileNickname.classList.remove('invalid');
   profileModal.hidden = false;
-  setTimeout(() => profileNickname.focus(), 60);
+  setTimeout(() => profileEmail.focus(), 60);
 };
 
 const closeSecurity = () => {
@@ -1538,6 +2066,7 @@ profileCancel.addEventListener('click', closeProfile);
 profileModal.addEventListener('click', (event) => {
   if (event.target === profileModal) closeProfile();
 });
+profileEmail.addEventListener('input', () => profileEmail.classList.remove('invalid'));
 profileNickname.addEventListener('input', () => profileNickname.classList.remove('invalid'));
 securityClose.addEventListener('click', closeSecurity);
 securityCancel.addEventListener('click', closeSecurity);
@@ -1614,9 +2143,16 @@ registerForm.addEventListener('submit', async (event) => {
 });
 profileForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+  const email = profileEmail.value.trim();
   const nickname = profileNickname.value.trim();
+  profileEmail.classList.remove('invalid');
   profileNickname.classList.remove('invalid');
 
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    profileEmail.classList.add('invalid');
+    showToast('请输入有效邮箱');
+    return;
+  }
   if (!nickname) {
     profileNickname.classList.add('invalid');
     showToast('请输入用户名');
@@ -1635,7 +2171,7 @@ profileForm.addEventListener('submit', async (event) => {
   try {
     const { user } = await apiRequest('/api/auth/me', {
       method: 'PATCH',
-      body: JSON.stringify({ nickname }),
+      body: JSON.stringify({ email, nickname }),
     });
     updateAuthUI(user);
     await loadPersistedTopics();
@@ -1738,7 +2274,11 @@ document.addEventListener('click', (event) => {
     loginBtn.setAttribute('aria-expanded', 'false');
   }
 });
-restoreAuthState();
+const bootstrapApp = async () => {
+  await loadCategories();
+  await restoreAuthState();
+};
+bootstrapApp();
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!loginModal.hidden) closeLogin();

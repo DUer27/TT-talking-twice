@@ -40,9 +40,18 @@ const createUser = async ({ email, passwordHash, role = 'student', nickname }) =
   }
 };
 
-const updateUserProfile = async (id, { nickname }) => {
-  await getPool().execute('UPDATE users SET nickname = ? WHERE id = ?', [nickname, id]);
-  return findUserById(id);
+const updateUserProfile = async (id, { email, nickname }) => {
+  try {
+    await getPool().execute('UPDATE users SET email = ?, nickname = ? WHERE id = ?', [email.toLowerCase(), nickname, id]);
+    return findUserById(id);
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      const duplicateError = new Error('璇ラ偖绠卞凡娉ㄥ唽');
+      duplicateError.statusCode = 409;
+      throw duplicateError;
+    }
+    throw error;
+  }
 };
 
 const updateUserPassword = async (id, passwordHash) => {

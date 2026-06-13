@@ -1,5 +1,55 @@
 const { db } = require('../config/env');
 const { getPool, getServerPool } = require('./connection');
+const { hashPassword } = require('../utils/password');
+
+const seedDefaultAdmin = async (pool) => {
+  const [adminRows] = await pool.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+  if (adminRows.length) return;
+
+  const passwordHash = await hashPassword('123456');
+  await pool.execute(
+    `INSERT INTO users (email, password_hash, role, nickname)
+     VALUES (?, ?, 'admin', ?)
+     ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = 'admin', nickname = VALUES(nickname)`,
+    ['root@root.root', passwordHash, 'root']
+  );
+};
+
+const seedDemoPosts = async (pool) => {
+  const [postRows] = await pool.execute('SELECT id FROM posts LIMIT 1');
+  if (postRows.length) return;
+
+  const passwordHash = await hashPassword('seed-only');
+  await pool.execute(
+    `INSERT INTO users (email, password_hash, role, nickname)
+     VALUES (?, ?, 'student', ?)
+     ON DUPLICATE KEY UPDATE nickname = VALUES(nickname)`,
+    ['seed@local.test', passwordHash, '演示同学']
+  );
+  const [userRows] = await pool.execute('SELECT id FROM users WHERE email = ? LIMIT 1', ['seed@local.test']);
+  const userId = userRows[0]?.id;
+  if (!userId) return;
+
+  const demoPosts = [
+    ['关于校园吐槽社区试运行与文明发言说明', '这里是校园反馈社区试运行公告。请大家真实表达、理性吐槽，尽量说明具体场景和影响。', '公告', 0, 'resolved', 1260, 18, 72],
+    ['高数早八课程连续三周调课，希望能提前通知', '高数早八最近连续三周临时调课，很多同学前一天晚上才知道，希望后续能提前通知。', '课程吐槽', 1, 'open', 438, 24, 33],
+    ['食堂二楼晚饭排队太久，热门窗口能不能多开一个', '食堂二楼晚饭高峰排队时间太久，热门窗口经常排到楼梯口，希望能增加窗口或错峰提示。', '食堂吐槽', 1, 'open', 982, 46, 86],
+    ['宿舍热水晚上十点后不稳定，最近很多人遇到', '宿舍热水晚上十点后经常变冷，洗澡时间很尴尬，希望能检查热水供应和维修安排。', '宿舍生活', 1, 'open', 756, 37, 68],
+    ['图书馆自习区插座数量不够，考试周特别明显', '图书馆自习区插座不够用，考试周大家都在找位置，希望增加插座或开放更多自习区域。', '校园设施', 1, 'open', 502, 19, 41],
+    ['希望社团活动通知能集中展示，不要分散在多个群里', '社团活动通知分散在多个群，报名时间容易错过，希望能集中展示活动信息和报名入口。', '活动社团', 1, 'open', 241, 12, 24],
+    ['操场夜间照明有几盏灯坏了，跑步区域比较暗', '操场夜间照明最近有几盏灯不亮，跑步时部分区域比较暗，希望尽快维修。', '校园设施', 1, 'resolved', 198, 8, 18],
+    ['部分公共课作业截止时间集中，希望老师之间能协调', '公共课作业截止时间都挤在同一天，考试复习压力很大，希望课程之间能协调一下。', '课程吐槽', 1, 'open', 1118, 53, 92],
+    ['北门快递点雨天排队区域没有遮挡，取件不太方便', '北门快递点雨天排队没有遮挡，地面也容易积水，希望增加雨棚或优化排队区域。', '宿舍生活', 1, 'open', 326, 15, 29],
+  ];
+
+  for (const post of demoPosts) {
+    await pool.execute(
+      `INSERT INTO posts (user_id, title, content, category, is_anonymous, status, view_count, reply_count, like_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, ...post]
+    );
+  }
+};
 
 const migrate = async () => {
   const serverPool = getServerPool();
@@ -73,6 +123,119 @@ const migrate = async () => {
       CONSTRAINT fk_posts_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(64) NOT NULL,
+      label VARCHAR(32) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_categories_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS category_tags (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      category_id BIGINT UNSIGNED NOT NULL,
+      name VARCHAR(64) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_category_tags_category_name (category_id, name),
+      CONSTRAINT fk_category_tags_category_id FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS post_tags (
+      post_id BIGINT UNSIGNED NOT NULL,
+      tag_name VARCHAR(64) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (post_id, tag_name),
+      CONSTRAINT fk_post_tags_post_id FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  const defaultCategories = [
+    ['课程吐槽', '课程', ['调课', '作业', '考试']],
+    ['食堂吐槽', '食堂', ['排队', '价格', '口味']],
+    ['宿舍生活', '宿舍', ['热水', '噪音', '网络']],
+    ['校园设施', '设施', ['插座', '照明', '维修']],
+    ['活动社团', '活动', ['通知', '报名', '场地']],
+    ['公告', '公告', ['社区规则']],
+  ];
+  for (const category of defaultCategories) {
+    await pool.execute(
+      'INSERT IGNORE INTO categories (name, label) VALUES (?, ?)',
+      [category[0], category[1]]
+    );
+    const [categoryRows] = await pool.execute('SELECT id FROM categories WHERE name = ? LIMIT 1', [category[0]]);
+    const categoryId = categoryRows[0]?.id;
+    if (categoryId) {
+      for (const tag of category[2]) {
+        await pool.execute('INSERT IGNORE INTO category_tags (category_id, name) VALUES (?, ?)', [categoryId, tag]);
+      }
+    }
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      post_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      content TEXT NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'visible',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_comments_post_id_created_at (post_id, created_at),
+      KEY idx_comments_user_id (user_id),
+      CONSTRAINT fk_comments_post_id FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      CONSTRAINT fk_comments_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS post_likes (
+      post_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (post_id, user_id),
+      KEY idx_post_likes_user_id (user_id),
+      CONSTRAINT fk_post_likes_post_id FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      CONSTRAINT fk_post_likes_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_reports (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      title VARCHAR(160) NOT NULL,
+      summary TEXT NOT NULL,
+      payload JSON NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_admin_reports_user_id_created_at (user_id, created_at),
+      CONSTRAINT fk_admin_reports_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_report_posts (
+      report_id BIGINT UNSIGNED NOT NULL,
+      post_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (report_id, post_id),
+      KEY idx_admin_report_posts_post_id (post_id),
+      CONSTRAINT fk_admin_report_posts_report_id FOREIGN KEY (report_id) REFERENCES admin_reports(id) ON DELETE CASCADE,
+      CONSTRAINT fk_admin_report_posts_post_id FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await seedDefaultAdmin(pool);
+  await seedDemoPosts(pool);
 
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');

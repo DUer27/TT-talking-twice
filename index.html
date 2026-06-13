@@ -49,7 +49,7 @@
 
     <div class="main-wrap">
       <aside class="sidebar" id="sidebar">
-        <section class="sidebar-section">
+        <section class="sidebar-section" id="categorySidebarSection">
           <div class="sidebar-title">导航</div>
           <a class="sidebar-link active" href="#" data-filter="all" data-title="最新吐槽"><span>⌁</span> 最新吐槽</a>
           <a class="sidebar-link" href="#" data-filter="hot" data-title="热门吐槽"><span>🔥</span> 热门吐槽</a>
@@ -64,7 +64,7 @@
           <a class="sidebar-link" href="#" data-filter="校园设施" data-title="校园设施"><span class="dot green"></span> 校园设施</a>
           <a class="sidebar-link" href="#" data-filter="活动社团" data-title="活动社团"><span class="dot cyan"></span> 活动社团</a>
         </section>
-        <section class="sidebar-section teacher-entry">
+        <section class="sidebar-section teacher-entry" hidden>
           <div class="sidebar-title">管理</div>
           <a class="sidebar-link" href="#" data-filter="admin" data-title="管理员后台"><span>▣</span> 管理员后台</a>
         </section>
@@ -162,7 +162,7 @@
                 </div>
                 <span>按当前板块切换</span>
               </div>
-              <canvas id="complaintTrendChart" height="180" aria-label="当前板块高频关键词出现次数折线图"></canvas>
+              <canvas id="complaintTrendChart" height="140" aria-label="当前板块高频关键词出现次数折线图"></canvas>
             </article>
             <article class="chart-card chart-card-compact">
               <div class="chart-heading">
@@ -171,14 +171,80 @@
                   <p>本周各板块吐槽数量</p>
                 </div>
               </div>
-              <canvas id="categoryBarChart" height="210" aria-label="本周各板块吐槽数量柱状图"></canvas>
+              <canvas id="categoryBarChart" height="160" aria-label="本周各板块吐槽数量柱状图"></canvas>
             </article>
           </div>
-          <div class="admin-report">
-          <div class="admin-empty">
-            <h2>管理员后台</h2>
-            <p>后台入口已预留。管理员账号确认后，这里会接入帖子管理、AI 智能总结、情绪分析和报告生成。</p>
-          </div>
+          <section class="admin-manage" aria-label="帖子管理">
+            <div class="admin-manage-head">
+              <div>
+                <h2>帖子管理</h2>
+                <p>查看、筛选并处理学生反馈帖子。</p>
+              </div>
+              <div class="admin-tools">
+                <input type="search" id="adminSearchInput" placeholder="搜索标题、内容或板块" aria-label="搜索管理帖子">
+                <select id="adminStatusFilter" aria-label="按状态筛选帖子">
+                  <option value="all">全部状态</option>
+                  <option value="open">待处理</option>
+                  <option value="resolved">已处理</option>
+                  <option value="hidden">已隐藏</option>
+                </select>
+              </div>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="admin-post-table">
+                <thead>
+                  <tr>
+                    <th>帖子</th>
+                    <th>板块</th>
+                    <th>状态</th>
+                    <th>互动</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="adminPostBody"></tbody>
+              </table>
+            </div>
+            <div class="admin-empty" id="adminPostEmpty" hidden>暂无符合条件的帖子。</div>
+          </section>
+          <section class="admin-workbench" aria-label="总结与报告">
+            <article class="admin-flow-card">
+              <h2>建议处理</h2>
+              <p>生成报告后，AI 会把本次纳入报告的吐槽归类为处理项。</p>
+              <div class="admin-action-list" id="adminActionList"></div>
+            </article>
+            <article class="admin-ai-card">
+              <div class="admin-card-heading">
+                <div>
+                  <h2>智能总结</h2>
+                  <p id="adminAiSummary">生成报告后会展示本次反馈摘要。</p>
+                </div>
+                <button type="button" class="primary-btn" id="generateReportBtn">生成报告</button>
+              </div>
+              <ul class="admin-suggestion-list" id="adminSuggestionList"></ul>
+            </article>
+            <article class="admin-category-card">
+              <h2>添加板块</h2>
+              <form class="admin-category-form" id="adminCategoryForm">
+                <input type="text" id="adminCategoryName" placeholder="板块名称" maxlength="64" required>
+                <input type="text" id="adminCategoryLabel" placeholder="可用标签，用逗号分隔" maxlength="120">
+                <button type="submit" class="primary-btn">添加</button>
+              </form>
+            </article>
+            <article class="admin-archived-card">
+              <h2>已归档处理</h2>
+              <div class="admin-archived-list" id="adminArchivedList"></div>
+            </article>
+            <article class="admin-history-card">
+              <div class="admin-card-heading">
+                <div>
+                  <h2>历史报告</h2>
+                  <p>保留最近生成的处理报告，支持导出。</p>
+                </div>
+              </div>
+              <div class="admin-report-list" id="adminReportList"></div>
+            </article>
+          </section>
         </section>
       </main>
     </div>
@@ -226,6 +292,10 @@
           </select>
         </label>
         <label>
+          <span>标签</span>
+          <div class="post-tag-options" id="postTagOptions"></div>
+        </label>
+        <label>
           <span>具体内容</span>
           <textarea id="postContentInput" rows="6" maxlength="5000" placeholder="请描述发生了什么、影响是什么、你希望如何改进..." required></textarea>
         </label>
@@ -248,6 +318,7 @@
       <h2 id="detailTitle"></h2>
       <div class="detail-meta" id="detailMeta"></div>
       <article class="detail-content" id="detailContent"></article>
+      <section class="comment-list" id="commentList" aria-label="评论列表"></section>
       <div class="detail-actions">
         <button class="ghost-btn like-action-btn" id="likeBtn">
           <span class="like-thumb" aria-hidden="true">👍</span>
@@ -343,10 +414,14 @@
         <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
         <div>
           <h2 id="profileTitle">修改个人信息</h2>
-          <p>这里只能修改用户名，用户名不能为空。</p>
+          <p>可以修改登录邮箱和用户名，保存后立即生效。</p>
         </div>
       </div>
       <form class="login-form account-form" id="profileForm">
+        <label>
+          <span>登录邮箱</span>
+          <input id="profileEmail" type="email" placeholder="请输入新的登录邮箱" required />
+        </label>
         <label>
           <span>用户名</span>
           <input id="profileNickname" type="text" maxlength="24" placeholder="请输入 1-24 个字符的用户名" required />

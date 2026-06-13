@@ -18,7 +18,18 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
+const requireAdmin = (req, res, next) => {
+  if (!req.currentUser) {
+    return res.status(401).json({ message: 'Please log in first' });
+  }
+  if (req.currentUser.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin permission required' });
+  }
+  next();
+};
+
 module.exports = {
   attachCurrentUser,
+  requireAdmin,
   requireAuth,
 };

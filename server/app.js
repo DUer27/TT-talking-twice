@@ -5,6 +5,7 @@ const { port, rootDir } = require('./config/env');
 const { migrate } = require('./database/migrate');
 const { attachCurrentUser } = require('./middleware/authMiddleware');
 const authRoutes = require('./routes/authRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
 const postRoutes = require('./routes/postRoutes');
 
 const app = express();
@@ -15,6 +16,7 @@ app.set('trust proxy', 1);
 app.use(attachCurrentUser);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/categories', categoryRoutes);
 app.use('/api/posts', postRoutes);
 
 app.use(express.static(rootDir));
