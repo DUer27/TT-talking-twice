@@ -411,6 +411,16 @@ const getPostListQuery = (filter = currentFilter) => {
   return query;
 };
 
+const syncLatestSeenPostId = async ({ markSeen = false } = {}) => {
+  const { posts = [] } = await apiRequest('/api/posts?limit=1&offset=0&sort=latest');
+  const latestId = posts[0]?.id ? String(posts[0].id) : '';
+  if (!latestId) return false;
+  if (!latestSeenPostId || markSeen || isNewerPostId(latestId, latestSeenPostId)) {
+    if (markSeen || !latestSeenPostId) latestSeenPostId = latestId;
+  }
+  return isNewerPostId(latestId, latestSeenPostId);
+};
+
 const loadPersistedTopics = async ({ silent = true, reset = true } = {}) => {
   if (postPageLoading && !reset) return;
   const requestId = postPageRequestId + 1;
@@ -429,13 +439,13 @@ const loadPersistedTopics = async ({ silent = true, reset = true } = {}) => {
     const query = getPostListQuery();
     const { posts = [] } = await apiRequest(`/api/posts?${query.toString()}`);
     if (requestId !== postPageRequestId) return;
-    if (reset && posts[0]?.id && (!latestSeenPostId || isNewerPostId(posts[0].id, latestSeenPostId))) {
-      latestSeenPostId = String(posts[0].id);
-    }
     posts.forEach((post) => updateTopicFromPost(post, { preserveState: true, prepend: false }));
     postPageOffset += posts.length;
     postPageHasMore = posts.length === postPageSize;
-    if (reset) hasNewPostsNotice = false;
+    if (reset) {
+      hasNewPostsNotice = false;
+      if (getPostListSort(currentFilter) === 'latest') await syncLatestSeenPostId({ markSeen: currentFilter === 'all' && !currentTagKeyword });
+    }
 
     if (currentFilter === 'admin') await loadAdminStats({ silent: true });
     else renderTopics(currentFilter, currentTitle);
@@ -448,17 +458,9 @@ const loadPersistedTopics = async ({ silent = true, reset = true } = {}) => {
 };
 
 const checkForNewPosts = async () => {
-  if (currentFilter === 'admin' || postPageLoading || hasNewPostsNotice) return;
+  if (currentFilter !== 'all' || currentTagKeyword || postPageLoading || hasNewPostsNotice) return;
   try {
-    const { posts = [] } = await apiRequest('/api/posts?limit=1&offset=0&sort=latest');
-    const latestPost = posts[0];
-    if (!latestPost) return;
-    const latestId = String(latestPost.id);
-    if (!latestSeenPostId) {
-      latestSeenPostId = latestId;
-      return;
-    }
-    if (isNewerPostId(latestId, latestSeenPostId)) {
+    if (await syncLatestSeenPostId()) {
       hasNewPostsNotice = true;
       renderTopics(currentFilter, currentTitle);
     }
