@@ -58,34 +58,13 @@ const complaintTrendChart = document.getElementById('complaintTrendChart');
 const categoryBarChart = document.getElementById('categoryBarChart');
 const hotCategoryName = document.getElementById('hotCategoryName');
 const hotCategorySummary = document.getElementById('hotCategorySummary');
-const hotCategoryButtons = document.querySelectorAll('.hot-breakdown [data-category-key]');
+const todayPostCount = document.getElementById('todayPostCount');
+const todayPostChange = document.getElementById('todayPostChange');
+const hotBreakdown = document.querySelector('.hot-breakdown');
+let hotCategoryButtons = [];
 
-const categoryTrendMap = {
-  食堂吐槽: {
-    keyword: '排队',
-    mentions: 42,
-    labels: ['排队', '价格', '窗口', '菜品', '晚饭', '早餐', '拥挤', '卫生', '支付', '座位', '口味', '份量'],
-    points: [42, 36, 31, 27, 24, 18, 16, 14, 12, 11, 9, 8],
-  },
-  宿舍生活: {
-    keyword: '热水',
-    mentions: 34,
-    labels: ['热水', '空调', '网络', '门禁', '噪音', '洗衣机', '维修', '卫生', '插座', '电费', '楼管', '晾晒'],
-    points: [34, 29, 25, 21, 19, 16, 15, 13, 12, 10, 8, 7],
-  },
-  课程吐槽: {
-    keyword: '调课',
-    mentions: 27,
-    labels: ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'],
-    points: [27, 25, 22, 20, 17, 15, 14, 12, 11, 9, 8, 7],
-  },
-  校园设施: {
-    keyword: '插座',
-    mentions: 21,
-    labels: ['插座', '照明', '空调', '自习室', '电梯', '快递点', '座椅', '网络', '维修', '饮水机', '路灯', '门禁'],
-    points: [21, 19, 18, 16, 14, 13, 11, 10, 9, 8, 7, 6],
-  },
-};
+const defaultTrendLabels = ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'];
+let categoryTrendMap = {};
 const categoryStatOrder = [
   { category: '课程吐槽', label: '课程' },
   { category: '食堂吐槽', label: '食堂' },
@@ -94,10 +73,26 @@ const categoryStatOrder = [
   { category: '活动社团', label: '活动' },
 ];
 
-const getCategoryStats = () => categoryStatOrder.map((item) => ({
-  ...item,
-  value: topics.filter((topic) => topic.category === item.category).length,
-}));
+const createEmptyTrendMap = () => Object.fromEntries(categoryStatOrder.map((item) => [item.category, {
+  keyword: '暂无',
+  mentions: 0,
+  labels: defaultTrendLabels,
+  points: defaultTrendLabels.map(() => 0),
+}]));
+
+categoryTrendMap = createEmptyTrendMap();
+
+let adminStats = {
+  summary: { total: 0, today: 0, yesterday: 0, dailyChange: 0 },
+  hotCategory: '课程吐槽',
+  categories: categoryStatOrder.map((item) => ({ ...item, value: 0 })),
+  trends: categoryTrendMap,
+};
+
+const getCategoryStats = () => categoryStatOrder.map((item) => {
+  const matched = adminStats.categories.find((stat) => stat.category === item.category);
+  return { ...item, value: Number(matched?.value || 0) };
+});
 
 let currentFilter = 'all';
 let currentTitle = '最新吐槽';
@@ -290,11 +285,65 @@ const loadPersistedTopics = async ({ silent = true } = {}) => {
 
     topics.unshift(...persistedTopics);
     ensureTopicIds();
-    if (currentFilter === 'admin') renderAdminCharts();
+    if (currentFilter === 'admin') await loadAdminStats({ silent: true });
     else renderTopics(currentFilter, currentTitle);
     if (!silent) showToast('已刷新数据库帖子');
   } catch (error) {
     if (!silent) showToast(error.message || '帖子加载失败，请稍后重试');
+  }
+};
+
+const formatDailyChange = (change) => {
+  const value = Number(change || 0);
+  if (value > 0) return `较昨日 +${value}%`;
+  if (value < 0) return `较昨日 ${value}%`;
+  return '较昨日持平';
+};
+
+const renderHotBreakdown = () => {
+  if (!hotBreakdown) return;
+  const categories = [...getCategoryStats()].sort((a, b) => b.value - a.value).slice(0, 4);
+  hotBreakdown.innerHTML = categories.map((item) => {
+    const trendData = getTrendData(item.category);
+    return `
+      <button type="button" class="${item.category === activeTrendCategory ? 'active' : ''}" data-category-key="${escapeHtml(item.category)}">
+        <b>${escapeHtml(trendData.keyword)} ${Number(trendData.mentions || 0)}</b>
+        <em>${escapeHtml(item.category)} · ${Number(item.value || 0)} 条</em>
+      </button>
+    `;
+  }).join('');
+  hotCategoryButtons = [...hotBreakdown.querySelectorAll('[data-category-key]')];
+  hotCategoryButtons.forEach((button) => {
+    button.addEventListener('click', () => updateHotCategory(button.dataset.categoryKey));
+  });
+};
+
+const renderAdminSummary = () => {
+  if (todayPostCount) todayPostCount.textContent = Number(adminStats.summary.today || 0);
+  if (todayPostChange) todayPostChange.textContent = formatDailyChange(adminStats.summary.dailyChange);
+  if (hotCategoryName) hotCategoryName.textContent = activeTrendCategory;
+  const trendData = getTrendData(activeTrendCategory);
+  if (hotCategorySummary) {
+    hotCategorySummary.textContent = `${activeTrendCategory}：近 30 天提及最多的是“${trendData.keyword}”，共 ${Number(trendData.mentions || 0)} 次。`;
+  }
+  renderHotBreakdown();
+};
+
+const loadAdminStats = async ({ silent = true } = {}) => {
+  try {
+    const { stats } = await apiRequest('/api/posts/stats');
+    adminStats = stats || adminStats;
+    categoryTrendMap = { ...createEmptyTrendMap(), ...(adminStats.trends || {}) };
+    activeTrendCategory = adminStats.hotCategory || activeTrendCategory || categoryStatOrder[0].category;
+    activeTrendIndex = 0;
+    trendAnimation = { from: getTrendData(activeTrendCategory).points, to: getTrendData(activeTrendCategory).points, progress: 1 };
+    renderAdminSummary();
+    renderAdminCharts();
+    if (!silent) showToast('管理员统计已更新');
+  } catch (error) {
+    renderAdminSummary();
+    renderAdminCharts();
+    if (!silent) showToast(error.message || '管理员统计加载失败');
   }
 };
 
@@ -466,10 +515,15 @@ const drawGrid = (ctx, area, ySteps, xSteps) => {
   ctx.restore();
 };
 
+const getTrendData = (category = activeTrendCategory) => categoryTrendMap[category]
+  || categoryTrendMap[adminStats.hotCategory]
+  || categoryTrendMap[categoryStatOrder[0].category]
+  || { keyword: '暂无', mentions: 0, labels: defaultTrendLabels, points: defaultTrendLabels.map(() => 0) };
+
 const drawTrendChart = () => {
   const canvasState = setupCanvas(complaintTrendChart);
   if (!canvasState) return;
-  const trendData = categoryTrendMap[activeTrendCategory] || categoryTrendMap.食堂吐槽;
+  const trendData = getTrendData(activeTrendCategory);
   const theme = getChartTheme();
   const animationProgress = easeOutCubic(trendAnimation.progress);
   const sourcePoints = trendAnimation.from || trendData.points;
@@ -483,7 +537,8 @@ const drawTrendChart = () => {
   const area = { left: 48, top: 14, right: width - 18, bottom: height - 48 };
   area.width = area.right - area.left;
   area.height = area.bottom - area.top;
-  const maxValue = 50;
+  const maxPointValue = Math.max(...targetPoints, ...sourcePoints, 1);
+  const maxValue = Math.max(5, Math.ceil(maxPointValue / 5) * 5);
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = theme.background;
@@ -503,9 +558,9 @@ const drawTrendChart = () => {
   ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  [0, 10, 20, 30, 40, 50].forEach((value) => {
+  [0, maxValue * .2, maxValue * .4, maxValue * .6, maxValue * .8, maxValue].forEach((value) => {
     const y = area.bottom - (value / maxValue) * area.height;
-    ctx.fillText(value, area.left - 8, y);
+    ctx.fillText(Math.round(value), area.left - 8, y);
   });
 
   ctx.textAlign = 'right';
@@ -686,6 +741,7 @@ const drawCategoryBarChart = () => {
 };
 
 const renderAdminCharts = () => {
+  renderAdminSummary();
   requestAnimationFrame(() => {
     drawTrendChart();
     drawCategoryBarChart();
@@ -718,7 +774,7 @@ const updateHotCategory = (category) => {
   const trendData = categoryTrendMap[category];
   if (!trendData) return;
   const previousCategory = activeTrendCategory;
-  const previousPoints = (categoryTrendMap[previousCategory] || categoryTrendMap.食堂吐槽).points;
+  const previousPoints = getTrendData(previousCategory).points;
   activeTrendCategory = category;
   activeTrendIndex = 0;
   hotCategoryButtons.forEach((button) => {
@@ -726,8 +782,9 @@ const updateHotCategory = (category) => {
   });
   if (hotCategoryName) hotCategoryName.textContent = category;
   if (hotCategorySummary) {
-    hotCategorySummary.textContent = `${category}：本周提及最多的是“${trendData.keyword}”，共 ${trendData.mentions} 次。`;
+    hotCategorySummary.textContent = `${category}：近 30 天提及最多的是“${trendData.keyword}”，共 ${Number(trendData.mentions || 0)} 次。`;
   }
+  renderHotBreakdown();
   if (previousCategory === category) drawTrendChart();
   else animateTrendTo(previousPoints, trendData.points);
   showToast(`已切换到 ${category} 关键词统计`);
@@ -745,7 +802,7 @@ const getCanvasPointer = (canvas, event) => {
 
 const updateTrendHover = (event) => {
   const pointer = getCanvasPointer(complaintTrendChart, event);
-  const trendPoints = (categoryTrendMap[activeTrendCategory] || categoryTrendMap.食堂吐槽).points;
+  const trendPoints = getTrendData(activeTrendCategory).points;
   const area = { left: 48, right: pointer.width - 18, top: 16, bottom: pointer.height - 50 };
   if (pointer.x < area.left || pointer.x > area.right || pointer.y < area.top || pointer.y > area.bottom) {
     activeTrendIndex = 0;
@@ -793,11 +850,7 @@ if (categoryBarChart) {
   });
 }
 
-hotCategoryButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    updateHotCategory(button.dataset.categoryKey);
-  });
-});
+renderHotBreakdown();
 
 const getFilteredTopics = (filter) => {
   if (filter === 'all') return topics;
@@ -933,7 +986,7 @@ sidebarLinks.forEach((link) => {
       sidebarLinks.forEach((item) => item.classList.remove('active'));
       link.classList.add('active');
       navLinks.forEach((item) => item.classList.remove('active'));
-      renderAdminCharts();
+      loadAdminStats({ silent: true });
       showToast('已进入管理员后台');
       return;
     }
@@ -1144,6 +1197,7 @@ createPostForm.addEventListener('submit', async (event) => {
     closeCreatePost();
     resetChips();
     switchFilter('all', '最新吐槽');
+    loadAdminStats({ silent: true });
     showToast('发布成功，已保存到数据库');
   } catch (error) {
     showToast(error.message || '发布失败，请稍后重试');

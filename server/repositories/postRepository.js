@@ -78,9 +78,40 @@ const incrementPostViews = async (id, currentUserId = null) => {
   return findPostById(id, currentUserId);
 };
 
+const getPostStatsData = async () => {
+  const [summaryRows] = await getPool().query(`
+    SELECT
+      COUNT(*) AS total_count,
+      SUM(CASE WHEN DATE(created_at) = UTC_DATE() THEN 1 ELSE 0 END) AS today_count,
+      SUM(CASE WHEN DATE(created_at) = DATE_SUB(UTC_DATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END) AS yesterday_count
+    FROM posts
+  `);
+
+  const [categoryRows] = await getPool().query(`
+    SELECT category, COUNT(*) AS post_count
+    FROM posts
+    GROUP BY category
+  `);
+
+  const [recentRows] = await getPool().query(`
+    SELECT category, title, content, created_at
+    FROM posts
+    WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1000
+  `);
+
+  return {
+    summary: summaryRows[0] || {},
+    categories: categoryRows,
+    recentPosts: recentRows,
+  };
+};
+
 module.exports = {
   createPost,
   findPostById,
+  getPostStatsData,
   incrementPostViews,
   listPosts,
   publicPostFields,

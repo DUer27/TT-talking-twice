@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/authMiddleware');
-const { getPost, getPosts, publishPost } = require('../services/postService');
+const { getPost, getPostStats, getPosts, publishPost } = require('../services/postService');
 
 const router = express.Router();
 
@@ -8,6 +8,15 @@ router.get('/', async (req, res, next) => {
   try {
     const posts = await getPosts({ currentUserId: req.currentUser?.id });
     res.json({ posts });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/stats', async (_req, res, next) => {
+  try {
+    const stats = await getPostStats();
+    res.json({ stats });
   } catch (error) {
     next(error);
   }
