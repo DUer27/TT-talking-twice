@@ -162,6 +162,7 @@ const migrate = async () => {
       post_id BIGINT UNSIGNED NOT NULL,
       user_id BIGINT UNSIGNED NOT NULL,
       content TEXT NOT NULL,
+      like_count INT UNSIGNED NOT NULL DEFAULT 0,
       status VARCHAR(32) NOT NULL DEFAULT 'visible',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -170,6 +171,23 @@ const migrate = async () => {
       KEY idx_comments_user_id (user_id),
       CONSTRAINT fk_comments_post_id FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
       CONSTRAINT fk_comments_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  const [commentColumns] = await pool.query("SHOW COLUMNS FROM comments LIKE 'like_count'");
+  if (!commentColumns.length) {
+    await pool.query('ALTER TABLE comments ADD COLUMN like_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER content');
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS comment_likes (
+      comment_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (comment_id, user_id),
+      KEY idx_comment_likes_user_id (user_id),
+      CONSTRAINT fk_comment_likes_comment_id FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE,
+      CONSTRAINT fk_comment_likes_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

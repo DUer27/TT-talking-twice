@@ -109,7 +109,7 @@
           <div class="tabs-and-action">
             <nav class="nav-pills" aria-label="话题导航">
               <a class="active" href="#" data-nav-filter="all" data-nav-title="最新吐槽">最新</a>
-              <a href="#" data-nav-filter="new" data-nav-title="新吐槽">新吐槽 <span>32</span></a>
+              <a href="#" data-nav-filter="new" data-nav-title="新吐槽">新吐槽</a>
               <a href="#" data-nav-filter="unread" data-nav-title="未读吐槽">未读</a>
               <a href="#" data-nav-filter="hot" data-nav-title="热门吐槽">热门</a>
               <a href="#" data-nav-filter="mine" data-nav-title="我的帖子">我的帖子</a>
@@ -120,7 +120,7 @@
           </div>
         </section>
         <section class="topic-panel" id="topicPanel">
-          <div class="show-more" id="listHint">查看 6 个新的或更新的吐槽</div>
+          <div class="show-more" id="listHint" hidden>有新的吐槽，点击进行刷新</div>
           <table class="topic-list">
             <thead>
               <tr>
@@ -160,20 +160,20 @@
               <div class="chart-heading">
                 <div>
                   <h3>关键词统计</h3>
-                  <p>论坛高频关键词出现次数</p>
+                  <p>近30天的论坛关键词</p>
                 </div>
                 <span>按当前板块切换</span>
               </div>
-              <canvas id="complaintTrendChart" height="140" aria-label="当前板块高频关键词出现次数折线图"></canvas>
+              <canvas id="complaintTrendChart" height="140" aria-label="近30天的论坛关键词折线图"></canvas>
             </article>
             <article class="chart-card chart-card-compact">
               <div class="chart-heading">
                 <div>
                   <h3>板块统计</h3>
-                  <p>本周各板块吐槽数量</p>
+                  <p>近30天的板块吐槽数量</p>
                 </div>
               </div>
-              <canvas id="categoryBarChart" height="160" aria-label="本周各板块吐槽数量柱状图"></canvas>
+              <canvas id="categoryBarChart" height="160" aria-label="近30天的板块吐槽数量柱状图"></canvas>
             </article>
           </div>
           <section class="admin-manage" aria-label="帖子管理">

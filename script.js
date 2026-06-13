@@ -213,6 +213,8 @@ let postPageOffset = 0;
 let postPageLoading = false;
 let postPageHasMore = true;
 let postPageRequestId = 0;
+let hasNewPostsNotice = false;
+let latestSeenPostId = '';
 const postPageSize = 30;
 let adminPosts = [];
 let adminPostLoading = false;
@@ -228,6 +230,13 @@ let trendAnimation = {
   from: null,
   to: null,
   progress: 1,
+};
+
+const isNewerPostId = (candidateId, baselineId) => {
+  const candidate = Number(candidateId);
+  const baseline = Number(baselineId);
+  if (Number.isFinite(candidate) && Number.isFinite(baseline)) return candidate > baseline;
+  return String(candidateId) > String(baselineId);
 };
 const isMacOS = /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.platform || '')
   || /Mac OS X/.test(navigator.userAgent || '');
@@ -420,9 +429,13 @@ const loadPersistedTopics = async ({ silent = true, reset = true } = {}) => {
     const query = getPostListQuery();
     const { posts = [] } = await apiRequest(`/api/posts?${query.toString()}`);
     if (requestId !== postPageRequestId) return;
+    if (reset && posts[0]?.id && (!latestSeenPostId || isNewerPostId(posts[0].id, latestSeenPostId))) {
+      latestSeenPostId = String(posts[0].id);
+    }
     posts.forEach((post) => updateTopicFromPost(post, { preserveState: true, prepend: false }));
     postPageOffset += posts.length;
     postPageHasMore = posts.length === postPageSize;
+    if (reset) hasNewPostsNotice = false;
 
     if (currentFilter === 'admin') await loadAdminStats({ silent: true });
     else renderTopics(currentFilter, currentTitle);
@@ -431,6 +444,26 @@ const loadPersistedTopics = async ({ silent = true, reset = true } = {}) => {
     if (!silent) showToast(error.message || '帖子加载失败，请稍后重试');
   } finally {
     if (requestId === postPageRequestId) postPageLoading = false;
+  }
+};
+
+const checkForNewPosts = async () => {
+  if (currentFilter === 'admin' || postPageLoading || hasNewPostsNotice) return;
+  try {
+    const { posts = [] } = await apiRequest('/api/posts?limit=1&offset=0&sort=latest');
+    const latestPost = posts[0];
+    if (!latestPost) return;
+    const latestId = String(latestPost.id);
+    if (!latestSeenPostId) {
+      latestSeenPostId = latestId;
+      return;
+    }
+    if (isNewerPostId(latestId, latestSeenPostId)) {
+      hasNewPostsNotice = true;
+      renderTopics(currentFilter, currentTitle);
+    }
+  } catch (_error) {
+    // New-post polling should stay quiet; normal list loading handles visible errors.
   }
 };
 
@@ -448,7 +481,7 @@ const renderHotBreakdown = () => {
     const trendData = getTrendData(item.category);
     return `
       <button type="button" class="${item.category === activeTrendCategory ? 'active' : ''}" data-category-key="${escapeHtml(item.category)}">
-        <b>${escapeHtml(trendData.keyword)} ${Number(trendData.mentions || 0)}</b>
+        <b>${escapeHtml(trendData.keyword)}</b>
         <em>${escapeHtml(item.category)} · ${Number(item.value || 0)} 条</em>
       </button>
     `;
@@ -480,7 +513,10 @@ const loadAdminStats = async ({ silent = true } = {}) => {
     categoryTrendMap = { ...createEmptyTrendMap(), ...(adminStats.trends || {}) };
     activeTrendCategory = adminStats.hotCategory || activeTrendCategory || categoryStatOrder[0].category;
     activeTrendIndex = 0;
-    trendAnimation = { from: getTrendData(activeTrendCategory).points, to: getTrendData(activeTrendCategory).points, progress: 1 };
+    cancelAnimationFrame(trendAnimationFrame);
+    trendAnimationFrame = null;
+    const activePoints = normalizeChartPoints(getTrendData(activeTrendCategory).points);
+    trendAnimation = { from: activePoints, to: activePoints, progress: 1 };
     renderAdminSummary();
     renderAdminCharts();
     if (!silent) showToast('管理员统计已更新');
@@ -529,7 +565,7 @@ const renderAdminPosts = () => {
     const isReported = reportedPostIds.has(String(post.id));
     const safeId = escapeHtml(post.id);
     return `
-      <tr class="${isReported ? 'is-reported' : ''}">
+      <tr class="admin-post-row ${isReported ? 'is-reported' : ''}" data-admin-row-id="${safeId}" tabindex="0">
         <td>
           <div class="admin-post-title">
             <strong>${escapeHtml(post.title)}</strong>
@@ -546,10 +582,10 @@ const renderAdminPosts = () => {
         <td>${escapeHtml(getRelativeActivity(post.updatedAt || post.createdAt))}</td>
         <td>
           <div class="admin-action-group">
-            <button type="button" data-admin-open-id="${safeId}" title="打开帖子详情">查看</button>
             <button type="button" data-admin-status-id="${safeId}" data-status="open" ${status === 'open' ? 'disabled' : ''}>待处理</button>
             <button type="button" data-admin-status-id="${safeId}" data-status="resolved" ${status === 'resolved' ? 'disabled' : ''}>已处理</button>
             <button type="button" data-admin-status-id="${safeId}" data-status="${status === 'deleted' ? 'open' : 'deleted'}">${status === 'deleted' ? '恢复' : '删除'}</button>
+            ${isReported ? `<button type="button" data-admin-dismiss-report-id="${safeId}">驳回举报</button>` : ''}
           </div>
         </td>
       </tr>
@@ -620,11 +656,14 @@ const renderAdminReport = (report = adminReports[0]) => {
 
 const renderAdminActionItems = (report = adminReports[0]) => {
   if (!adminActionList) return;
-  if (!report) {
+  if (!adminReports.length) {
     adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项</div>';
     return;
   }
-  const actionItems = (report?.payload?.actionItems || []).filter((item) => !archivedActionItems.has(`${report.id}:${item.id}`));
+  const actionItems = adminReports.flatMap((reportItem) => (
+    reportItem?.payload?.actionItems || []
+  ).map((item) => ({ ...item, reportId: reportItem.id })))
+    .filter((item) => !archivedActionItems.has(`${item.reportId}:${item.id}`) && item.status !== 'resolved');
   if (!actionItems.length) {
     adminActionList.innerHTML = '<div class="admin-empty">暂无待处理建议</div>';
     return;
@@ -632,7 +671,7 @@ const renderAdminActionItems = (report = adminReports[0]) => {
   adminActionList.innerHTML = actionItems.map((item) => {
     const isResolved = item.status === 'resolved';
     return `
-      <div class="admin-action-item ${isResolved ? 'is-resolved' : ''}" data-action-id="${escapeHtml(item.id)}" data-report-id="${escapeHtml(report.id)}">
+      <div class="admin-action-item ${isResolved ? 'is-resolved' : ''}" data-action-id="${escapeHtml(item.id)}" data-report-id="${escapeHtml(item.reportId)}">
         <div class="admin-action-title">
           <strong>${escapeHtml(item.title || '建议处理')}</strong>
           <span>${Number(item.postCount || item.postIds?.length || 0)} 条帖子</span>
@@ -665,6 +704,14 @@ const renderArchivedActionItems = () => {
       <button type="button" data-restore-archived="true">恢复显示</button>
     </div>
   `).join('');
+};
+
+const normalizeChartPoints = (points = []) => (Array.isArray(points) ? points : [])
+  .map((value) => Math.max(0, Number(value) || 0));
+
+const alignChartPoints = (points = [], length = 0) => {
+  const normalized = normalizeChartPoints(points);
+  return Array.from({ length }, (_item, index) => normalized[index] || 0);
 };
 
 const renderAdminReportList = () => {
@@ -909,13 +956,14 @@ const drawTrendChart = () => {
   const trendData = getTrendData(activeTrendCategory);
   const theme = getChartTheme();
   const animationProgress = easeOutCubic(trendAnimation.progress);
-  const sourcePoints = trendAnimation.from || trendData.points;
-  const targetPoints = trendAnimation.to || trendData.points;
+  const currentPoints = normalizeChartPoints(trendData.points);
+  const sourcePoints = normalizeChartPoints(trendAnimation.from || currentPoints);
+  const targetPoints = normalizeChartPoints(trendAnimation.to || currentPoints);
   const trendPoints = targetPoints.map((value, index) => {
     const startValue = sourcePoints[index] ?? value;
     return startValue + (value - startValue) * animationProgress;
   });
-  const trendLabels = trendData.labels;
+  const trendLabels = Array.isArray(trendData.labels) && trendData.labels.length ? trendData.labels : defaultTrendLabels;
   const { ctx, width, height } = canvasState;
   const area = { left: 48, top: 14, right: width - 18, bottom: height - 48 };
   area.width = area.right - area.left;
@@ -1051,7 +1099,8 @@ const drawCategoryBarChart = () => {
   const area = { left: leftPadding, top: 10, right: width - rightPadding, bottom: height - 30 };
   area.width = area.right - area.left;
   area.height = area.bottom - area.top;
-  const maxValue = Math.max(4, Math.ceil(Math.max(...categoryStats.map((item) => item.value), 1) / 2) * 2);
+  const maxStatValue = Math.max(...categoryStats.map((item) => item.value), 1);
+  const maxValue = Math.max(4, Math.ceil((maxStatValue * 1.2) / 2) * 2);
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = theme.background;
@@ -1097,7 +1146,7 @@ const drawCategoryBarChart = () => {
     ctx.fillStyle = isActive ? theme.text : theme.text;
     ctx.font = isActive ? '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' : '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(item.value, x + currentBarWidth / 2, y - 6);
+    ctx.fillText(item.value, x + currentBarWidth / 2, Math.max(area.top + 14, y - 6));
     ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   });
 
@@ -1135,9 +1184,11 @@ const renderAdminCharts = () => {
 
 const animateTrendTo = (previousPoints, nextPoints) => {
   cancelAnimationFrame(trendAnimationFrame);
+  const toPoints = normalizeChartPoints(nextPoints);
+  const fromPoints = alignChartPoints(previousPoints, toPoints.length);
   trendAnimation = {
-    from: previousPoints,
-    to: nextPoints,
+    from: fromPoints,
+    to: toPoints,
     progress: 0,
   };
   const startedAt = performance.now();
@@ -1148,7 +1199,7 @@ const animateTrendTo = (previousPoints, nextPoints) => {
     if (trendAnimation.progress < 1) {
       trendAnimationFrame = requestAnimationFrame(tick);
     } else {
-      trendAnimation = { from: nextPoints, to: nextPoints, progress: 1 };
+      trendAnimation = { from: toPoints, to: toPoints, progress: 1 };
       trendAnimationFrame = null;
     }
   };
@@ -1159,7 +1210,7 @@ const updateHotCategory = (category) => {
   const trendData = categoryTrendMap[category];
   if (!trendData) return;
   const previousCategory = activeTrendCategory;
-  const previousPoints = getTrendData(previousCategory).points;
+  const previousPoints = normalizeChartPoints(getTrendData(previousCategory).points);
   activeTrendCategory = category;
   activeTrendIndex = 0;
   hotCategoryButtons.forEach((button) => {
@@ -1170,8 +1221,9 @@ const updateHotCategory = (category) => {
     hotCategorySummary.textContent = `${category}近 30 天高频关键词「${trendData.keyword}」，共 ${Number(trendData.mentions || 0)} 次`;
   }
   renderHotBreakdown();
+  const nextPoints = normalizeChartPoints(trendData.points);
   if (previousCategory === category) drawTrendChart();
-  else animateTrendTo(previousPoints, trendData.points);
+  else animateTrendTo(previousPoints, nextPoints);
   showToast(`已切换到 ${category} 关键词统计`);
 };
 
@@ -1323,8 +1375,9 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   syncCategoryChip(filter);
   const searchText = query ? `，搜索「${searchInput.value.trim()}」` : '';
   const tagText = currentTagKeyword ? `，标签「${currentTagKeyword}」` : '';
-  const moreText = postPageHasMore ? '，向下滚动加载更多' : '';
-  listHint.textContent = `${title}${searchText}${tagText}，已加载 ${data.length} 条帖子${moreText}`;
+  listHint.hidden = !hasNewPostsNotice;
+  listHint.textContent = '有新的吐槽，点击进行刷新';
+  listHint.title = `${title}${searchText}${tagText}，已加载 ${data.length} 条帖子`;
 
   if (!data.length) {
     topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">暂时没有符合条件的帖子</td></tr>`;
@@ -1341,7 +1394,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
     const safeLikeLabel = escapeHtml(`${topic.liked ? '取消点赞' : '点赞'}：${topic.title}`);
 
     return `
-      <tr class="topic-row">
+      <tr class="topic-row" data-topic-row-id="${safeId}" tabindex="0">
         <td class="topic-main">
           <div class="topic-title-line">
             ${topic.pinned ? '<span class="pin">置顶</span>' : ''}
@@ -1569,16 +1622,23 @@ if (adminDeleteCategoryBtn) {
 
 if (adminPostBody) {
   adminPostBody.addEventListener('click', async (event) => {
-    const openButton = event.target.closest('[data-admin-open-id]');
-    if (openButton) {
-      const adminPost = adminPosts.find((post) => String(post.id) === String(openButton.dataset.adminOpenId));
-      if (adminPost) updateTopicFromPost(adminPost, { preserveState: true, prepend: false });
-      openTopicDetail(openButton.dataset.adminOpenId);
+    const dismissReportButton = event.target.closest('[data-admin-dismiss-report-id]');
+    if (dismissReportButton) {
+      reportedPostIds.delete(String(dismissReportButton.dataset.adminDismissReportId));
+      renderAdminPosts();
+      showToast('举报已驳回');
       return;
     }
 
     const statusButton = event.target.closest('[data-admin-status-id]');
-    if (!statusButton) return;
+    if (!statusButton) {
+      const row = event.target.closest('.admin-post-row[data-admin-row-id]');
+      if (!row || event.target.closest('.admin-action-group')) return;
+      const adminPost = adminPosts.find((post) => String(post.id) === String(row.dataset.adminRowId));
+      if (adminPost) updateTopicFromPost(adminPost, { preserveState: true, prepend: false });
+      openTopicDetail(row.dataset.adminRowId);
+      return;
+    }
     statusButton.disabled = true;
     try {
       const { post } = await apiRequest(`/api/posts/${encodeURIComponent(statusButton.dataset.adminStatusId)}/status`, {
@@ -1589,7 +1649,8 @@ if (adminPostBody) {
       if (index >= 0) adminPosts.splice(index, 1, post);
       else adminPosts.unshift(post);
       if (post.status === 'deleted') {
-        topics = topics.filter((topic) => !(topic.persisted && String(topic.id) === String(post.id)));
+        const topicIndex = topics.findIndex((topic) => topic.persisted && String(topic.id) === String(post.id));
+        if (topicIndex >= 0) topics.splice(topicIndex, 1);
       } else {
         updateTopicFromPost(post, { preserveState: true, prepend: false });
       }
@@ -1605,6 +1666,16 @@ if (adminPostBody) {
     } finally {
       statusButton.disabled = false;
     }
+  });
+
+  adminPostBody.addEventListener('keydown', (event) => {
+    if (!['Enter', ' '].includes(event.key)) return;
+    const row = event.target.closest('.admin-post-row[data-admin-row-id]');
+    if (!row || event.target.closest('.admin-action-group')) return;
+    event.preventDefault();
+    const adminPost = adminPosts.find((post) => String(post.id) === String(row.dataset.adminRowId));
+    if (adminPost) updateTopicFromPost(adminPost, { preserveState: true, prepend: false });
+    openTopicDetail(row.dataset.adminRowId);
   });
 }
 
@@ -1727,7 +1798,7 @@ weekActiveChip.addEventListener('click', () => {
 });
 
 listHint.addEventListener('click', async () => {
-  await loadPersistedTopics({ silent: false });
+  await loadPersistedTopics({ silent: false, reset: true });
 });
 
 const themeToggle = document.getElementById('themeToggle');
@@ -1963,15 +2034,40 @@ const renderComments = (comments = []) => {
     commentList.innerHTML = '<div class="comment-empty">还没有评论，来写下第一条吧。</div>';
     return;
   }
-  commentList.innerHTML = comments.map((comment) => `
-    <article class="comment-item">
+  commentList.innerHTML = comments.map((comment) => {
+    const canDelete = Boolean(currentUser && (currentUser.role === 'admin' || comment.mine || String(comment.author?.id) === String(currentUser.id)));
+    const canLike = Boolean(currentUser && currentUser.role !== 'admin' && !canDelete);
+    const actionHtml = canDelete
+      ? `<button type="button" class="comment-action-btn" data-comment-delete-id="${escapeHtml(comment.id)}">删除</button>`
+      : `<button type="button" class="comment-action-btn ${comment.liked ? 'liked' : ''}" data-comment-like-id="${escapeHtml(comment.id)}" ${canLike ? '' : 'disabled'}>${comment.liked ? '已点赞' : '点赞'} ${Number(comment.likeCount || 0)}</button>`;
+    return `
+    <article class="comment-item" data-comment-id="${escapeHtml(comment.id)}">
       <div class="comment-meta">
-        <strong>${escapeHtml(comment.author?.name || '同学')}</strong>
-        <span>${escapeHtml(getRelativeActivity(comment.createdAt))}</span>
+        <div>
+          <strong>${escapeHtml(comment.author?.name || '同学')}</strong>
+          <span>${escapeHtml(getRelativeActivity(comment.createdAt))}</span>
+        </div>
+        ${actionHtml}
       </div>
       <p class="comment-body">${escapeHtml(comment.content || '')}</p>
     </article>
-  `).join('');
+  `;
+  }).join('');
+};
+
+const replaceTopicComment = (topic, comment) => {
+  if (!topic || !comment) return;
+  const comments = Array.isArray(topic.comments) ? [...topic.comments] : [];
+  const index = comments.findIndex((item) => String(item.id) === String(comment.id));
+  if (index >= 0) comments.splice(index, 1, comment);
+  else comments.push(comment);
+  topic.comments = comments;
+};
+
+const removeTopicComment = (topic, commentId) => {
+  if (!topic) return;
+  topic.comments = (topic.comments || []).filter((comment) => String(comment.id) !== String(commentId));
+  topic.replies = Math.max(0, Number(topic.replies || 0) - 1);
 };
 
 const toggleTopicLike = (topic, sourceButton = null) => {
@@ -2086,13 +2182,67 @@ topicBody.addEventListener('click', (event) => {
   }
 
   const link = event.target.closest('.topic-title[data-topic-id]');
-  if (!link) return;
+  const row = event.target.closest('.topic-row[data-topic-row-id]');
+  if (!link && !row) return;
   event.preventDefault();
-  openTopicDetail(link.dataset.topicId);
+  openTopicDetail(link?.dataset.topicId || row.dataset.topicRowId);
+});
+
+topicBody.addEventListener('keydown', (event) => {
+  if (!['Enter', ' '].includes(event.key)) return;
+  const row = event.target.closest('.topic-row[data-topic-row-id]');
+  if (!row) return;
+  event.preventDefault();
+  openTopicDetail(row.dataset.topicRowId);
 });
 
 topicDetailClose.addEventListener('click', closeTopicDetail);
 topicDetailModal.addEventListener('click', (event) => { if (event.target === topicDetailModal) closeTopicDetail(); });
+commentList.addEventListener('click', async (event) => {
+  const likeButton = event.target.closest('[data-comment-like-id]');
+  const deleteButton = event.target.closest('[data-comment-delete-id]');
+  if (!likeButton && !deleteButton) return;
+  const topic = getCurrentTopic();
+  if (!topic) return;
+  if (!currentUser) {
+    showToast('请先登录后再操作评论');
+    openLogin();
+    return;
+  }
+
+  if (likeButton) {
+    likeButton.disabled = true;
+    try {
+      const { comment } = await apiRequest(`/api/posts/comments/${encodeURIComponent(likeButton.dataset.commentLikeId)}/like`, { method: 'POST' });
+      replaceTopicComment(topic, comment);
+      renderComments(topic.comments || []);
+      showToast(comment.liked ? '已点赞评论' : '已取消评论点赞');
+    } catch (error) {
+      showToast(error.message || '评论点赞失败');
+    } finally {
+      likeButton.disabled = false;
+    }
+    return;
+  }
+
+  deleteButton.disabled = true;
+  try {
+    const { post } = await apiRequest(`/api/posts/comments/${encodeURIComponent(deleteButton.dataset.commentDeleteId)}`, { method: 'DELETE' });
+    removeTopicComment(topic, deleteButton.dataset.commentDeleteId);
+    if (post) {
+      const updatedTopic = updateTopicFromPost(post, { preserveState: true, prepend: false }) || topic;
+      updatedTopic.comments = topic.comments || [];
+    }
+    renderComments(topic.comments || []);
+    renderCurrentTopicList();
+    detailMeta.querySelector('span:nth-child(2)').textContent = `评论：${Number(topic.replies || 0)}`;
+    showToast('评论已删除');
+  } catch (error) {
+    showToast(error.message || '评论删除失败');
+  } finally {
+    deleteButton.disabled = false;
+  }
+});
 detailReplyBtn.addEventListener('click', () => {
   replyBox.hidden = !replyBox.hidden;
   if (!replyBox.hidden) replyInput.focus();
@@ -2174,7 +2324,10 @@ replySubmitBtn.addEventListener('click', async () => {
       topic.comments = [...(topic.comments || []), {
         id: `local-comment-${Date.now()}`,
         content,
-        author: { name: currentUser.nickname || currentUser.email?.split('@')[0] || '我' },
+        author: { id: currentUser.id, name: currentUser.nickname || currentUser.email?.split('@')[0] || '我' },
+        likeCount: 0,
+        liked: false,
+        mine: true,
         createdAt: new Date().toISOString(),
       }];
       renderComments(topic.comments);
@@ -2601,6 +2754,7 @@ const bootstrapApp = async () => {
   await restoreAuthState();
 };
 bootstrapApp();
+setInterval(checkForNewPosts, 60000);
 setInterval(() => {
   if (adminPanel && !adminPanel.hidden && adminPosts.some((post) => post.status === 'deleted')) {
     renderAdminPosts();

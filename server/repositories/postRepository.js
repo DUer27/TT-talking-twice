@@ -42,18 +42,22 @@ const publicPostFields = (post, currentUserId = null) => {
   };
 };
 
-const publicCommentFields = (comment) => {
+const publicCommentFields = (comment, currentUserId = null) => {
   if (!comment) return null;
   const authorName = comment.author_nickname || comment.author_email?.split('@')[0] || '同学';
+  const isMine = Boolean(currentUserId && String(comment.user_id) === String(currentUserId));
   return {
     id: String(comment.id),
     postId: String(comment.post_id),
     content: comment.content,
+    likeCount: Number(comment.like_count || 0),
+    liked: Boolean(Number(comment.liked_by_current_user || 0)),
     author: {
       id: String(comment.user_id),
       name: authorName,
       initial: authorName.slice(0, 1).toUpperCase(),
     },
+    mine: isMine,
     createdAt: toIsoString(comment.created_at),
     updatedAt: toIsoString(comment.updated_at),
   };
@@ -204,16 +208,25 @@ const updatePostsStatus = async ({ postIds, status, currentUserId = null }) => {
   return rows.map((row) => publicPostFields(row, currentUserId));
 };
 
-const listCommentsByPostId = async (postId) => {
+const selectCommentSql = (currentUserId = null) => `
+  SELECT
+    comments.*,
+    users.email AS author_email,
+    users.nickname AS author_nickname,
+    ${currentUserId ? 'EXISTS(SELECT 1 FROM comment_likes WHERE comment_likes.comment_id = comments.id AND comment_likes.user_id = ?)' : '0'} AS liked_by_current_user
+  FROM comments
+  INNER JOIN users ON users.id = comments.user_id
+`;
+
+const listCommentsByPostId = async (postId, currentUserId = null) => {
+  const params = currentUserId ? [currentUserId, postId] : [postId];
   const [rows] = await getPool().execute(
-    `SELECT comments.*, users.email AS author_email, users.nickname AS author_nickname
-     FROM comments
-     INNER JOIN users ON users.id = comments.user_id
+    `${selectCommentSql(currentUserId)}
      WHERE comments.post_id = ? AND comments.status = 'visible'
      ORDER BY comments.created_at ASC, comments.id ASC`,
-    [postId]
+    params
   );
-  return rows.map(publicCommentFields);
+  return rows.map((row) => publicCommentFields(row, currentUserId));
 };
 
 const createPost = async ({ userId, title, content, category, isAnonymous, tagNames = [] }) => {
@@ -275,14 +288,93 @@ const createComment = async ({ postId, userId, content }) => {
     await connection.commit();
 
     const [rows] = await getPool().execute(
-      `SELECT comments.*, users.email AS author_email, users.nickname AS author_nickname
-       FROM comments
-       INNER JOIN users ON users.id = comments.user_id
+      `${selectCommentSql(userId)}
        WHERE comments.id = ?
        LIMIT 1`,
-      [result.insertId]
+      [userId, result.insertId]
     );
-    return publicCommentFields(rows[0]);
+    return publicCommentFields(rows[0], userId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const toggleCommentLike = async ({ commentId, userId }) => {
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [commentRows] = await connection.execute(
+      `SELECT comments.id, comments.user_id
+       FROM comments
+       INNER JOIN posts ON posts.id = comments.post_id
+       WHERE comments.id = ? AND comments.status = 'visible' AND posts.status NOT IN ('hidden', 'deleted')
+       FOR UPDATE`,
+      [commentId]
+    );
+    if (!commentRows.length) {
+      await connection.rollback();
+      return null;
+    }
+    if (String(commentRows[0].user_id) === String(userId)) {
+      await connection.rollback();
+      return { self: true };
+    }
+    const [likeRows] = await connection.execute(
+      'SELECT comment_id FROM comment_likes WHERE comment_id = ? AND user_id = ? LIMIT 1',
+      [commentId, userId]
+    );
+    const liked = likeRows.length === 0;
+    if (liked) {
+      await connection.execute('INSERT INTO comment_likes (comment_id, user_id) VALUES (?, ?)', [commentId, userId]);
+      await connection.execute('UPDATE comments SET like_count = like_count + 1 WHERE id = ?', [commentId]);
+    } else {
+      await connection.execute('DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?', [commentId, userId]);
+      await connection.execute('UPDATE comments SET like_count = GREATEST(like_count - 1, 0) WHERE id = ?', [commentId]);
+    }
+    await connection.commit();
+
+    const [rows] = await getPool().execute(
+      `${selectCommentSql(userId)}
+       WHERE comments.id = ?
+       LIMIT 1`,
+      [userId, commentId]
+    );
+    return { liked, comment: publicCommentFields(rows[0], userId) };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const deleteComment = async ({ commentId, currentUserId, isAdmin = false }) => {
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [commentRows] = await connection.execute(
+      `SELECT id, post_id, user_id, status
+       FROM comments
+       WHERE id = ?
+       FOR UPDATE`,
+      [commentId]
+    );
+    const comment = commentRows[0];
+    if (!comment || comment.status !== 'visible') {
+      await connection.rollback();
+      return null;
+    }
+    if (!isAdmin && String(comment.user_id) !== String(currentUserId)) {
+      await connection.rollback();
+      return { forbidden: true };
+    }
+    await connection.execute("UPDATE comments SET status = 'deleted' WHERE id = ?", [commentId]);
+    await connection.execute('UPDATE posts SET reply_count = GREATEST(reply_count - 1, 0), updated_at = CURRENT_TIMESTAMP WHERE id = ?', [comment.post_id]);
+    await connection.commit();
+    return { commentId: String(commentId), postId: String(comment.post_id) };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -375,12 +467,12 @@ const getPostStatsData = async () => {
   const [categoryRows] = await getPool().query(`
     SELECT category, COUNT(*) AS post_count
     FROM posts
-    WHERE status <> 'deleted'
+    WHERE status <> 'deleted' AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
     GROUP BY category
   `);
 
   const [recentRows] = await getPool().query(`
-    SELECT category, title, content, created_at
+    SELECT id, category, title, content, created_at
     FROM posts
     WHERE status <> 'deleted' AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
     ORDER BY created_at DESC, id DESC
@@ -397,6 +489,7 @@ const getPostStatsData = async () => {
 module.exports = {
   createPost,
   createComment,
+  deleteComment,
   findPostById,
   getPostStatsData,
   incrementPostViews,
@@ -406,6 +499,7 @@ module.exports = {
   purgeExpiredDeletedPosts,
   publicPostFields,
   togglePostFavorite,
+  toggleCommentLike,
   togglePostLike,
   updatePostStatus,
   updatePostsStatus,

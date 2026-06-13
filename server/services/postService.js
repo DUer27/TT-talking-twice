@@ -1,6 +1,7 @@
 const {
   createComment,
   createPost,
+  deleteComment,
   findPostById,
   getPostStatsData,
   incrementPostViews,
@@ -8,6 +9,7 @@ const {
   listCommentsByPostId,
   listPosts,
   togglePostFavorite,
+  toggleCommentLike,
   togglePostLike,
   updatePostStatus,
   updatePostsStatus,
@@ -152,30 +154,68 @@ const extractDynamicKeywords = (posts, limit = 12) => {
     .slice(0, limit);
 };
 
-const getReportKeywordTrends = async (statCategories) => {
+const buildAllowedKeywordMap = (statCategories, categories = []) => new Map(statCategories.map((config) => {
+  const staticKeywords = categoryConfig.find((item) => item.category === config.category)?.keywords || [];
+  const dynamicTags = categories.find((item) => item.name === config.category)?.tags || [];
+  return [config.category, new Set([...staticKeywords, ...dynamicTags].map((item) => normalizeText(item)).filter(Boolean))];
+}));
+
+const buildCurrentKeywordCounts = (categoryPosts = [], allowedKeywords = new Set()) => {
+  const counts = new Map();
+  allowedKeywords.forEach((keyword) => {
+    let postCount = 0;
+    categoryPosts.forEach((post) => {
+      if (countKeyword(getPostAnalysisText(post), keyword)) postCount += 1;
+    });
+    if (postCount > 0 && isUsefulKeyword(keyword)) counts.set(keyword, postCount);
+  });
+
+  extractDynamicKeywords(categoryPosts, 20).forEach((item) => {
+    const keyword = normalizeText(item.keyword);
+    if (isUsefulKeyword(keyword)) counts.set(keyword, Math.max(counts.get(keyword) || 0, item.count || 0));
+  });
+
+  return counts;
+};
+
+const getReportKeywordTrends = async (statCategories, categories = [], recentPosts = []) => {
   const reports = await listReports({ limit: 50 });
   const trendMap = Object.fromEntries(statCategories.map((config) => [config.category, new Map()]));
+  const allowedKeywordMap = buildAllowedKeywordMap(statCategories, categories);
+  const currentKeywordMap = new Map(statCategories.map((config) => {
+    const categoryPosts = recentPosts.filter((post) => post.category === config.category);
+    const currentKeywords = buildCurrentKeywordCounts(categoryPosts, allowedKeywordMap.get(config.category));
+    return [config.category, new Set(currentKeywords.keys())];
+  }));
+  const isAllowedTrendKeyword = (category, keyword) => {
+    const normalizedKeyword = normalizeText(keyword);
+    if (!isUsefulKeyword(normalizedKeyword)) return false;
+    const currentKeywords = currentKeywordMap.get(category);
+    if (!currentKeywords || !currentKeywords.has(normalizedKeyword)) return false;
+    const allowedKeywords = allowedKeywordMap.get(category);
+    if (!allowedKeywords || !allowedKeywords.size) return false;
+    return allowedKeywords.has(normalizedKeyword);
+  };
   const addKeywordCount = (category, keyword, count) => {
     const normalizedKeyword = normalizeText(keyword);
     const safeCount = Number(count || 0);
     if (!trendMap[category] || !normalizedKeyword || safeCount <= 0) return;
+    if (!isAllowedTrendKeyword(category, normalizedKeyword)) return;
     trendMap[category].set(normalizedKeyword, (trendMap[category].get(normalizedKeyword) || 0) + safeCount);
   };
 
   reports.forEach((report) => {
     const payload = report.payload || {};
     const keywordTrends = payload.keywordTrends || {};
-    let hasTrendPayload = false;
     Object.entries(keywordTrends).forEach(([category, trend]) => {
       const labels = Array.isArray(trend.labels) ? trend.labels : [];
       const points = Array.isArray(trend.points) ? trend.points : [];
       labels.forEach((label, index) => {
-        if (label && Number(points[index] || 0) > 0) hasTrendPayload = true;
         addKeywordCount(category, label, points[index]);
       });
     });
 
-    if (!hasTrendPayload && Array.isArray(payload.actionItems)) {
+    if (Array.isArray(payload.actionItems)) {
       payload.actionItems.forEach((item) => {
         addKeywordCount(item.category, item.keyword, item.postCount || item.postIds?.length || 0);
       });
@@ -196,6 +236,31 @@ const getReportKeywordTrends = async (statCategories) => {
     }];
   }));
 };
+
+const buildKeywordTrendsFromPosts = (statCategories, recentPosts = [], categories = []) => {
+  const allowedKeywordMap = buildAllowedKeywordMap(statCategories, categories);
+  return Object.fromEntries(statCategories.map((config) => {
+    const categoryPosts = recentPosts.filter((post) => post.category === config.category);
+    const items = [...buildCurrentKeywordCounts(categoryPosts, allowedKeywordMap.get(config.category)).entries()]
+      .map(([keyword, count]) => ({ keyword, count }))
+      .sort((a, b) => b.count - a.count || a.keyword.localeCompare(b.keyword, 'zh-CN'))
+      .slice(0, 8);
+    const topKeyword = items[0] || { keyword: '暂无', count: 0 };
+    return [config.category, {
+      keyword: topKeyword.keyword,
+      mentions: topKeyword.count,
+      labels: items.map((item) => item.keyword),
+      points: items.map((item) => item.count),
+    }];
+  }));
+};
+
+const mergeKeywordTrendFallback = (primaryTrends, fallbackTrends) => Object.fromEntries(
+  Object.entries(primaryTrends).map(([category, trend]) => {
+    const hasTrendData = Array.isArray(trend.labels) && trend.labels.length > 0;
+    return [category, hasTrendData ? trend : (fallbackTrends[category] || trend)];
+  })
+);
 
 const normalizePostQuery = ({ limit = 30, offset = 0, sort = 'latest', category = '', status = '', scope = '' } = {}) => ({
   limit: Math.max(1, Math.min(Number(limit) || 30, 30)),
@@ -256,7 +321,9 @@ const getPostStats = async () => {
   const categoryCountMap = new Map(
     statsData.categories.map((row) => [row.category, Number(row.post_count || 0)])
   );
-  const trendMap = await getReportKeywordTrends(statCategories);
+  const reportTrendMap = await getReportKeywordTrends(statCategories, categories, statsData.recentPosts);
+  const recentTrendMap = buildKeywordTrendsFromPosts(statCategories, statsData.recentPosts, categories);
+  const trendMap = mergeKeywordTrendFallback(recentTrendMap, reportTrendMap);
 
   const categoryStats = statCategories.map((config) => ({
     category: config.category,
@@ -299,7 +366,7 @@ const getPost = async (id, { currentUserId, increaseViews = false, includeHidden
     throw createHttpError('帖子不存在', 404);
   }
 
-  const comments = await listCommentsByPostId(id);
+  const comments = await listCommentsByPostId(id, currentUserId);
   return { ...post, comments };
 };
 
@@ -333,6 +400,42 @@ const toggleLike = async (postId, userId) => {
     throw createHttpError('帖子不存在', 404);
   }
   return result;
+};
+
+const toggleCommentReaction = async (commentId, currentUser) => {
+  if (!commentId || !/^\d+$/.test(String(commentId))) {
+    throw createHttpError('评论不存在', 404);
+  }
+  if (currentUser?.role === 'admin') {
+    throw createHttpError('管理员不能点赞评论', 403);
+  }
+  const result = await toggleCommentLike({ commentId, userId: currentUser.id });
+  if (!result) {
+    throw createHttpError('评论不存在', 404);
+  }
+  if (result.self) {
+    throw createHttpError('不能点赞自己的评论');
+  }
+  return result;
+};
+
+const removeComment = async (commentId, currentUser) => {
+  if (!commentId || !/^\d+$/.test(String(commentId))) {
+    throw createHttpError('评论不存在', 404);
+  }
+  const result = await deleteComment({
+    commentId,
+    currentUserId: currentUser.id,
+    isAdmin: currentUser.role === 'admin',
+  });
+  if (!result) {
+    throw createHttpError('评论不存在', 404);
+  }
+  if (result.forbidden) {
+    throw createHttpError('只能删除自己的评论', 403);
+  }
+  const post = await findPostById(result.postId, currentUser.id, { includeHidden: currentUser.role === 'admin' });
+  return { ...result, post };
 };
 
 const toggleFavorite = async (postId, userId) => {
@@ -420,6 +523,8 @@ module.exports = {
   publishAnnouncement,
   publishComment,
   publishPost,
+  removeComment,
+  toggleCommentReaction,
   toggleFavorite,
   toggleLike,
 };

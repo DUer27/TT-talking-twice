@@ -10,6 +10,8 @@ const {
   publishAnnouncement,
   publishComment,
   publishPost,
+  removeComment,
+  toggleCommentReaction,
   toggleFavorite,
   toggleLike,
 } = require('../services/postService');
@@ -117,6 +119,24 @@ router.post('/:id/comments', requireAuth, async (req, res, next) => {
   try {
     const result = await publishComment(req.params.id, req.currentUser.id, req.body);
     res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/comments/:commentId/like', requireAuth, async (req, res, next) => {
+  try {
+    const result = await toggleCommentReaction(req.params.commentId, req.currentUser);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/comments/:commentId', requireAuth, async (req, res, next) => {
+  try {
+    const result = await removeComment(req.params.commentId, req.currentUser);
+    res.json(result);
   } catch (error) {
     next(error);
   }

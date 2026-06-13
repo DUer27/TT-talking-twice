@@ -49,6 +49,75 @@ const getActionKey = (item) => {
   return `${category}|title:${normalizeActionTitle(item.title || item.name)}`;
 };
 
+const issueStopWords = new Set([
+  '学校', '校园', '同学', '老师', '问题', '建议', '反馈', '吐槽', '地方', '这个', '那个', '一个', '一下', '没有', '不是', '可以', '需要', '希望',
+]);
+
+const getIssueTokens = (post) => {
+  const tokens = new Set();
+  const addToken = (token) => {
+    const normalized = normalizeActionTitle(token);
+    if (!normalized || normalized.length < 2 || normalized.length > 6) return;
+    if (issueStopWords.has(normalized)) return;
+    if ([...issueStopWords].some((word) => normalized.includes(word))) return;
+    if (/^[0-9]+$/.test(normalized)) return;
+    tokens.add(normalized);
+  };
+
+  (post.tags || post.tagNames || []).forEach(addToken);
+  [post.title, post.content, ...(Array.isArray(post.comments) ? post.comments.map((comment) => comment?.content || comment) : [])]
+    .filter(Boolean)
+    .forEach((value) => {
+      const chineseRuns = String(value).match(/[\u4e00-\u9fff]{2,}/g) || [];
+      chineseRuns.forEach((run) => {
+        for (let size = 2; size <= Math.min(4, run.length); size += 1) {
+          for (let index = 0; index <= run.length - size; index += 1) addToken(run.slice(index, index + size));
+        }
+      });
+  });
+
+  return tokens;
+};
+
+const findSharedIssueToken = (leftTokens, rightTokens) => [...leftTokens]
+  .sort((a, b) => a.length - b.length || a.localeCompare(b, 'zh-CN'))
+  .find((token) => rightTokens.has(token));
+
+const getGroupIssueKeyword = (group) => {
+  const tokenCounts = new Map();
+  group.posts.forEach((post) => {
+    getIssueTokens(post).forEach((token) => tokenCounts.set(token, (tokenCounts.get(token) || 0) + 1));
+  });
+  const minCount = group.posts.length > 1 ? 2 : 1;
+  const cleanTokens = [...tokenCounts.entries()]
+    .filter(([token, count]) => count >= minCount)
+    .filter(([token]) => !/[了的地得吗呢吧啊呀哦嘛]$/.test(token))
+    .filter(([token]) => !/^(太|很|真|都|没|不)/.test(token))
+    .filter(([token]) => !token.includes('太'));
+  if (group.posts.length === 1) {
+    return cleanTokens
+      .sort((a, b) => b[0].length - a[0].length || a[0].localeCompare(b[0], 'zh-CN'))[0]?.[0];
+  }
+  return [...tokenCounts.entries()]
+    .filter(([, count]) => count >= minCount)
+    .sort((a, b) => b[1] - a[1] || a[0].length - b[0].length || a[0].localeCompare(b[0], 'zh-CN'))[0]?.[0];
+};
+
+const groupRemainingPosts = (posts) => {
+  const groups = [];
+  posts.forEach((post) => {
+    const tokens = getIssueTokens(post);
+    const matchedGroup = groups.find((group) => findSharedIssueToken(tokens, group.tokens));
+    if (matchedGroup) {
+      matchedGroup.posts.push(post);
+      tokens.forEach((token) => matchedGroup.tokens.add(token));
+      return;
+    }
+    groups.push({ posts: [post], tokens });
+  });
+  return groups;
+};
+
 const dedupeActionItems = (items = []) => {
   const seen = new Map();
   items.forEach((item) => {
@@ -98,19 +167,24 @@ const buildActionItems = (posts) => {
       actionIndex += 1;
     });
 
-    const remainingPosts = categoryPosts.filter((post) => !usedPostIds.has(String(post.id)));
-    if (remainingPosts.length) {
+    groupRemainingPosts(categoryPosts.filter((post) => !usedPostIds.has(String(post.id)))).forEach((group) => {
+      const postIds = group.posts.map((post) => String(post.id));
+      const keyword = getGroupIssueKeyword(group);
+      const title = group.posts.length === 1
+        ? `${categoryItem.category}: ${group.posts[0].title || '其他新增反馈'} 处理`
+        : `${categoryItem.category}: ${keyword || '相似新增反馈'} 相关反馈处理`;
       actionItems.push({
         id: `action-${actionIndex}`,
-        title: `${categoryItem.category}: 其他新增反馈处理`,
+        title,
         category: categoryItem.category,
-        postIds: remainingPosts.map((post) => String(post.id)),
-        postCount: remainingPosts.length,
+        keyword,
+        postIds,
+        postCount: postIds.length,
         status: 'open',
         archived: false,
       });
       actionIndex += 1;
-    }
+    });
   });
 
   return dedupeActionItems(actionItems);
@@ -118,12 +192,52 @@ const buildActionItems = (posts) => {
 
 const mergeAiActionItems = (localItems, aiItems) => {
   if (!Array.isArray(aiItems) || !aiItems.length) return localItems;
+  const usedAiIndexes = new Set();
   const merged = localItems.map((item, index) => {
-    const matchedAiItem = aiItems.find((aiItem) => aiItem.category && aiItem.category === item.category) || aiItems[index];
+    const itemPostIds = new Set(normalizePostIds(item.postIds || []));
+    const overlapIndex = aiItems.findIndex((aiItem, aiIndex) => {
+      if (usedAiIndexes.has(aiIndex)) return false;
+      const aiPostIds = normalizePostIds(aiItem.postIds || []);
+      return aiPostIds.some((postId) => itemPostIds.has(postId));
+    });
+    const categoryIndex = aiItems.findIndex((aiItem, aiIndex) => !usedAiIndexes.has(aiIndex) && aiItem.category && aiItem.category === item.category);
+    const fallbackIndex = aiItems.findIndex((_aiItem, aiIndex) => !usedAiIndexes.has(aiIndex) && aiIndex >= index);
+    const matchedIndex = overlapIndex >= 0 ? overlapIndex : (categoryIndex >= 0 ? categoryIndex : fallbackIndex);
+    const matchedAiItem = matchedIndex >= 0 ? aiItems[matchedIndex] : null;
+    if (matchedIndex >= 0) usedAiIndexes.add(matchedIndex);
     const title = String(matchedAiItem?.title || matchedAiItem?.name || '').trim();
     return title ? { ...item, title } : item;
   });
   return dedupeActionItems(merged);
+};
+
+const normalizeReportCategories = (categories = [], actionItems = []) => {
+  const actionCountMap = new Map();
+  (Array.isArray(actionItems) ? actionItems : []).forEach((item) => {
+    if (!item?.category) return;
+    const current = actionCountMap.get(item.category) || { count: 0, open: 0 };
+    const postCount = Number(item.postCount || item.postIds?.length || 0);
+    current.count += postCount;
+    if ((item.status || 'open') === 'open') current.open += postCount;
+    actionCountMap.set(item.category, current);
+  });
+
+  return (Array.isArray(categories) ? categories : [])
+  .map((item) => {
+    if (typeof item === 'string') {
+      const actionCounts = actionCountMap.get(item) || { count: 0, open: 0 };
+      return { category: item, ...actionCounts };
+    }
+    const category = item?.category || item?.name || item?.label;
+    if (!category) return null;
+    const actionCounts = actionCountMap.get(category) || { count: 0, open: 0 };
+    return {
+      category,
+      count: Number(item.count ?? item.value ?? item.postCount ?? actionCounts.count),
+      open: Number(item.open ?? item.openCount ?? actionCounts.open),
+    };
+  })
+  .filter(Boolean);
 };
 
 const escapePdfText = (value) => String(value || '')
@@ -222,6 +336,11 @@ const generateAdminReport = async (userId) => {
   const payload = aiPayload ? {
     ...localPayload,
     ...aiPayload,
+    categories: localPayload.categories,
+    keywordTrends: localPayload.keywordTrends,
+    keywords: localPayload.keywords,
+    total: localPayload.total,
+    statusCounts: localPayload.statusCounts,
     source: 'ai',
     aiStatus: 'success',
     aiFailure: null,
@@ -252,6 +371,7 @@ const getReportExport = async (id, format = 'markdown') => {
     throw error;
   }
   const payload = report.payload || {};
+  const reportCategories = normalizeReportCategories(payload.categories, payload.actionItems);
   const aiFailureLines = payload.aiFailure ? [
     '',
     '## AI 请求日志',
@@ -274,7 +394,7 @@ const getReportExport = async (id, format = 'markdown') => {
     report.summary,
     '',
     '## 高频板块',
-    ...(payload.categories || []).map((item) => `- ${item.category}: ${item.count} 条，待处理 ${item.open} 条`),
+    ...reportCategories.map((item) => `- ${item.category}: ${item.count} 条，待处理 ${item.open} 条`),
     '',
     '## 高频关键词',
     ...(payload.keywords || []).map((item) => `- ${item.word}: ${item.count} 次`),
