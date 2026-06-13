@@ -39,6 +39,14 @@ const countKeyword = (text, keyword) => {
   return (text.match(new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
 };
 
+const inferTagsFromText = ({ title, content, allowedTags }) => {
+  const normalizeForMatch = (value) => String(value || '').toLowerCase().replace(/\s+/g, '');
+  const text = normalizeForMatch(`${title || ''} ${content || ''}`);
+  return [...allowedTags]
+    .filter((tag) => tag && text.includes(normalizeForMatch(tag)))
+    .slice(0, 3);
+};
+
 const keywordStopWords = new Set([
   '这个', '那个', '我们', '你们', '他们', '希望', '感觉', '现在', '最近', '已经', '可以', '不能', '没有', '不是', '还是', '一下',
   '一个', '一些', '很多', '比较', '真的', '时候', '问题', '建议', '同学', '老师', '学校', '校园', '吐槽', '反馈', '处理',
@@ -229,10 +237,14 @@ const toggleLike = async (postId, userId) => {
   return result;
 };
 
-const publishPost = async (userId, { title, content, category, tags = [], isAnonymous = true }) => {
+const publishPost = async (userId, { title, content, category, tags = [], isAnonymous = true }, { allowAnnouncement = false } = {}) => {
   const normalizedTitle = normalizeText(title);
   const normalizedContent = normalizeContent(content);
   const normalizedCategory = normalizeText(category);
+
+  if (normalizedCategory === '公告' && !allowAnnouncement) {
+    throw createHttpError('公告只能由管理员发布', 403);
+  }
 
   if (!normalizedTitle) {
     throw createHttpError('标题不能为空');
@@ -257,9 +269,17 @@ const publishPost = async (userId, { title, content, category, tags = [], isAnon
   }
 
   const allowedTags = new Set(matchedCategory.tags || []);
-  const normalizedTags = Array.isArray(tags)
+  let normalizedTags = Array.isArray(tags)
     ? [...new Set(tags.map((tag) => normalizeText(tag)).filter(Boolean))].filter((tag) => allowedTags.has(tag)).slice(0, 6)
     : [];
+
+  if (!normalizedTags.length && allowedTags.size) {
+    normalizedTags = inferTagsFromText({
+      title: normalizedTitle,
+      content: normalizedContent,
+      allowedTags,
+    });
+  }
 
   return createPost({
     userId,
@@ -271,6 +291,14 @@ const publishPost = async (userId, { title, content, category, tags = [], isAnon
   });
 };
 
+const publishAnnouncement = async (userId, { title, content }) => publishPost(userId, {
+  title,
+  content,
+  category: '公告',
+  tags: [],
+  isAnonymous: false,
+}, { allowAnnouncement: true });
+
 module.exports = {
   changePostStatus,
   changePostsStatus,
@@ -279,6 +307,7 @@ module.exports = {
   getPost,
   getPostStats,
   getPosts,
+  publishAnnouncement,
   publishComment,
   publishPost,
   toggleLike,

@@ -1,10 +1,31 @@
-﻿const topics = [];
+const topics = [
+  { pinned: true, title: '关于校园吐槽社区试运行与文明发言说明', tags: ['公告', '社区规则'], category: '公告', replies: 18, views: 1260, activity: '置顶', posters: ['校', '师', 'AI'], hot: true, mine: false, resolved: true, unread: false, favorite: false, liked: false },
+  { title: '高数早八课程连续三周调课，希望能提前通知', tags: ['课程吐槽', '待回应', '匿名'], category: '课程吐槽', replies: 24, views: 438, activity: '5分钟前', posters: ['匿', '陈', '王'], hot: false, mine: true, resolved: false, unread: true, favorite: false, liked: false },
+  { title: '食堂二楼晚饭排队太久，热门窗口能不能多开一个', tags: ['食堂吐槽', '高频问题'], category: '食堂吐槽', replies: 46, views: 982, activity: '12分钟前', posters: ['李', '匿', '周'], hot: true, mine: false, resolved: false, unread: true, favorite: false, liked: false },
+  { title: '宿舍热水晚上十点后不稳定，最近很多人遇到', tags: ['宿舍生活', '急需处理'], category: '宿舍生活', replies: 37, views: 756, activity: '21分钟前', posters: ['匿', '赵', '孙'], hot: true, mine: true, resolved: false, unread: true, favorite: false, liked: false },
+  { title: '图书馆自习区插座数量不够，考试周特别明显', tags: ['校园设施', '建议类'], category: '校园设施', replies: 19, views: 502, activity: '34分钟前', posters: ['刘', '匿'], hot: false, mine: false, resolved: false, unread: false, favorite: false, liked: false },
+  { title: '希望社团活动通知能集中展示，不要分散在多个群里', tags: ['活动社团', '建议类'], category: '活动社团', replies: 12, views: 241, activity: '1小时前', posters: ['吴', '郑'], hot: false, mine: false, resolved: false, unread: false, favorite: false, liked: false },
+  { title: '操场夜间照明有几盏灯坏了，跑步区域比较暗', tags: ['校园设施', '已处理'], category: '校园设施', replies: 8, views: 198, activity: '2小时前', posters: ['匿', '何'], hot: false, mine: true, resolved: true, unread: false, favorite: false, liked: false },
+  { title: '部分公共课作业截止时间集中，希望老师之间能协调一下', tags: ['课程吐槽', '情绪较强'], category: '课程吐槽', replies: 53, views: 1118, activity: '3小时前', posters: ['匿', '马', '许'], hot: true, mine: false, resolved: false, unread: true, favorite: false, liked: false },
+  { title: '北门快递点雨天排队区域没有遮挡，取件不太方便', tags: ['生活吐槽', '建议类'], category: '宿舍生活', replies: 15, views: 326, activity: '昨天', posters: ['黄', '匿'], hot: false, mine: false, resolved: false, unread: false, favorite: false, liked: false },
+];
+
+const ensureTopicIds = () => {
+  topics.forEach((topic, index) => {
+    if (!topic.id) topic.id = `topic-${Date.now()}-${index}`;
+    if (typeof topic.likeCount !== 'number') topic.likeCount = Math.max(3, Math.round(topic.views / 18) + topic.replies);
+    if (!topic.content) {
+      topic.content = `这是关于“${topic.title}”的详细吐槽内容。\n\n目前这个帖子详情为前端演示数据，后续接入后端后会展示学生发布的完整正文、评论、处理状态和管理员处理意见。`;
+    }
+  });
+};
+ensureTopicIds();
 
 const tagClass = (tag) => {
   if (tag.includes('课程') || tag.includes('公告')) return 'blue';
   if (tag.includes('食堂') || tag.includes('高频')) return 'orange';
   if (tag.includes('宿舍') || tag.includes('急需') || tag.includes('情绪')) return 'red';
-  if (tag.includes('设施') || tag.includes('已处理')) return 'green';
+  if (tag.includes('设施') || tag.includes('已')) return 'green';
   if (tag.includes('活动')) return 'purple';
   return '';
 };
@@ -26,7 +47,6 @@ const weekActiveChip = document.getElementById('weekActiveChip');
 const categoryMenu = document.getElementById('categoryMenu');
 const tagMenu = document.getElementById('tagMenu');
 const brandHome = document.getElementById('brandHome');
-const announcementBtn = document.getElementById('announcementBtn');
 const generateReportBtn = document.getElementById('generateReportBtn');
 const loginBtn = document.getElementById('loginBtn');
 const userMenuWrap = document.getElementById('userMenuWrap');
@@ -35,7 +55,6 @@ const userMenuAvatar = document.getElementById('userMenuAvatar');
 const avatarFileInput = document.getElementById('avatarFileInput');
 const userMenuName = document.getElementById('userMenuName');
 const userMenuEmail = document.getElementById('userMenuEmail');
-const announcementMenuBtn = document.querySelector('[data-user-action="announcement"]');
 const createPostBtn = document.getElementById('createPostBtn');
 const complaintTrendChart = document.getElementById('complaintTrendChart');
 const categoryBarChart = document.getElementById('categoryBarChart');
@@ -54,10 +73,7 @@ const adminReportList = document.getElementById('adminReportList');
 const adminActionList = document.getElementById('adminActionList');
 const adminCategoryForm = document.getElementById('adminCategoryForm');
 const adminCategoryName = document.getElementById('adminCategoryName');
-const adminTagForm = document.getElementById('adminTagForm');
-const adminTagCategory = document.getElementById('adminTagCategory');
-const adminTagInput = document.getElementById('adminTagInput');
-const adminDeleteCategoryBtn = document.getElementById('adminDeleteCategoryBtn');
+const adminCategoryLabel = document.getElementById('adminCategoryLabel');
 const adminArchivedList = document.getElementById('adminArchivedList');
 let hotCategoryButtons = [];
 
@@ -88,31 +104,9 @@ let adminStats = {
   trends: categoryTrendMap,
 };
 
-const getVisibleCategories = () => {
-  const fallbackCategories = categoryStatOrder.map((item) => ({ name: item.category, label: item.label, tags: [] }));
-  const sourceCategories = appCategories.length ? appCategories : fallbackCategories;
-  return sourceCategories.filter((category) => category.name !== '公告');
-};
-
-const renderTagMenu = (categoryName = currentFilter) => {
-  if (!tagMenu) return;
-  const visibleCategories = getVisibleCategories();
-  const matchedCategory = visibleCategories.find((category) => category.name === categoryName);
-  const sourceCategories = matchedCategory ? [matchedCategory] : visibleCategories;
-  const tagNames = [...new Set(sourceCategories.flatMap((category) => category.tags || []))];
-  if (currentTagKeyword && !tagNames.includes(currentTagKeyword)) {
-    currentTagKeyword = '';
-    tagChip.textContent = '标签：全部 ▸';
-  }
-  tagMenu.innerHTML = ['<button data-tag="全部">全部</button>', ...tagNames.map((tag) => (
-    `<button data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`
-  ))].join('');
-  tagMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn.dataset.tag === (currentTagKeyword || '全部')));
-};
-
 const applyCategories = (categories = []) => {
   appCategories = categories.length ? categories : appCategories;
-  const visibleCategories = getVisibleCategories();
+  const visibleCategories = appCategories.filter((category) => category.name !== '公告');
   if (visibleCategories.length) {
     categoryStatOrder = visibleCategories.map((category) => ({ category: category.name, label: category.label || category.name.slice(0, 4) }));
     categoryTrendMap = { ...createEmptyTrendMap(), ...(adminStats.trends || {}) };
@@ -124,11 +118,10 @@ const applyCategories = (categories = []) => {
     ))].join('');
   }
 
-  renderTagMenu();
-
   if (categorySidebarSection) {
     categorySidebarSection.innerHTML = [
-      '<div class="sidebar-title">吐槽板块</div>',
+      '<div class="sidebar-title">板块</div>',
+      '<a class="sidebar-link active" href="#" data-filter="all" data-title="最新吐槽"><span class="dot blue"></span> 全部吐槽</a>',
       ...visibleCategories.map((category, index) => (
         `<a class="sidebar-link" href="#" data-filter="${escapeHtml(category.name)}" data-title="${escapeHtml(category.name)}"><span class="dot ${['orange', 'purple', 'green', 'cyan', 'blue'][index % 5]}"></span> ${escapeHtml(category.name)}</a>`
       )),
@@ -148,16 +141,6 @@ const applyCategories = (categories = []) => {
     postCategorySelect.innerHTML = visibleCategories.map((category) => (
       `<option value="${escapeHtml(category.name)}">${escapeHtml(category.name)}</option>`
     )).join('');
-  }
-
-  if (adminTagCategory) {
-    const previousValue = adminTagCategory.value;
-    adminTagCategory.innerHTML = visibleCategories.map((category) => (
-      `<option value="${escapeHtml(category.name)}">${escapeHtml(category.name)}</option>`
-    )).join('');
-    if (previousValue && visibleCategories.some((category) => category.name === previousValue)) {
-      adminTagCategory.value = previousValue;
-    }
   }
   renderPostTagOptions();
 };
@@ -201,7 +184,6 @@ let currentTagKeyword = '';
 let adminPosts = [];
 let adminPostLoading = false;
 let adminReports = [];
-const reportedPostIds = new Set();
 const archivedActionItems = new Set();
 let toastTimer = null;
 let activeTrendIndex = 0;
@@ -312,12 +294,12 @@ const isRecentPost = (dateValue) => {
 
 const normalizePostTopic = (post) => {
   if (!post) return null;
-  const authorInitial = post.author?.initial || (post.isAnonymous ? '?' : '?');
+  const authorInitial = post.author?.initial || (post.isAnonymous ? '匿' : '同');
   const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
   const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : []), post.isAnonymous ? '匿名' : '实名'];
   if (post.resolved || post.status === 'resolved') tags.push('已处理');
+  else if (isRecentPost(post.createdAt)) tags.push('新发布');
   else tags.push('待回应');
-
 
   return {
     id: String(post.id),
@@ -326,7 +308,6 @@ const normalizePostTopic = (post) => {
     content: post.content,
     tags,
     category: post.category,
-    pinned: post.category === '公告',
     replies: Number(post.replies || 0),
     views: Number(post.views || 0),
     activity: getRelativeActivity(post.updatedAt || post.createdAt),
@@ -391,7 +372,7 @@ const loadPersistedTopics = async ({ silent = true } = {}) => {
       }));
 
     topics.unshift(...persistedTopics);
-
+    ensureTopicIds();
     if (currentFilter === 'admin') await loadAdminStats({ silent: true });
     else renderTopics(currentFilter, currentTitle);
     if (!silent) showToast('已刷新数据库帖子');
@@ -402,9 +383,9 @@ const loadPersistedTopics = async ({ silent = true } = {}) => {
 
 const formatDailyChange = (change) => {
   const value = Number(change || 0);
-  if (value > 0) return `上涨 +${value}%`;
-  if (value < 0) return `下降 ${value}%`;
-  return '持平';
+  if (value > 0) return `较昨日 +${value}%`;
+  if (value < 0) return `较昨日 ${value}%`;
+  return '较昨日持平';
 };
 
 const renderHotBreakdown = () => {
@@ -431,7 +412,7 @@ const renderAdminSummary = () => {
   if (hotCategoryName) hotCategoryName.textContent = activeTrendCategory;
   const trendData = getTrendData(activeTrendCategory);
   if (hotCategorySummary) {
-    hotCategorySummary.textContent = `${activeTrendCategory}近 30 天高频关键词「${trendData.keyword}」，共 ${Number(trendData.mentions || 0)} 次`;
+    hotCategorySummary.textContent = `${activeTrendCategory}：近 30 天提及最多的是“${trendData.keyword}”，共 ${Number(trendData.mentions || 0)} 次。`;
   }
   renderHotBreakdown();
 };
@@ -462,9 +443,8 @@ const adminStatusLabels = {
 
 const getAdminFilteredPosts = () => {
   const query = (adminSearchInput?.value || '').trim().toLowerCase();
-  const sortedPosts = [...adminPosts].sort((a, b) => Number(reportedPostIds.has(String(b.id))) - Number(reportedPostIds.has(String(a.id))));
-  if (!query) return sortedPosts;
-  return sortedPosts.filter((post) => [
+  if (!query) return adminPosts;
+  return adminPosts.filter((post) => [
     post.title,
     post.content,
     post.category,
@@ -479,10 +459,9 @@ const renderAdminPosts = () => {
   adminPostBody.innerHTML = posts.map((post) => {
     const status = post.status || 'open';
     const statusLabel = adminStatusLabels[status] || status;
-    const isReported = reportedPostIds.has(String(post.id));
     const safeId = escapeHtml(post.id);
     return `
-      <tr class="${isReported ? 'is-reported' : ''}">
+      <tr>
         <td>
           <div class="admin-post-title">
             <strong>${escapeHtml(post.title)}</strong>
@@ -490,10 +469,7 @@ const renderAdminPosts = () => {
           </div>
         </td>
         <td>${escapeHtml(post.category || '-')}</td>
-        <td>
-          ${isReported ? '<span class="admin-status-badge reported">已举报</span>' : ''}
-          <span class="admin-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
-        </td>
+        <td><span class="admin-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span></td>
         <td>${Number(post.replies || 0)} 评 / ${Number(post.likeCount || 0)} 赞 / ${Number(post.views || 0)} 浏览</td>
         <td>${escapeHtml(getRelativeActivity(post.updatedAt || post.createdAt))}</td>
         <td>
@@ -549,16 +525,16 @@ const loadAdminPosts = async ({ silent = true } = {}) => {
 const renderAdminReport = (report = adminReports[0]) => {
   if (!adminAiSummary || !adminSuggestionList) return;
   if (!report) {
-    adminAiSummary.textContent = '暂无报告，请先生成一份';
+    adminAiSummary.textContent = '生成报告后会展示本次反馈摘要。';
     adminSuggestionList.innerHTML = '';
     renderAdminActionItems(null);
     renderArchivedActionItems();
     return;
   }
   const payload = report.payload || {};
-  const sourceText = payload.source === 'ai' ? 'AI 分析' : '系统分析';
-  const postCountText = Array.isArray(payload.postIds) ? `，覆盖 ${payload.postIds.length} 条帖子` : '';
-  adminAiSummary.textContent = `${sourceText}${postCountText}：${report.summary || payload.summary || '暂无摘要'}`;
+  const sourceText = payload.source === 'ai' ? 'AI 生成' : '本地生成';
+  const postCountText = Array.isArray(payload.postIds) ? `，纳入 ${payload.postIds.length} 条新帖` : '';
+  adminAiSummary.textContent = `${sourceText}${postCountText}：${report.summary || payload.summary || '暂无摘要。'}`;
   adminSuggestionList.innerHTML = (payload.suggestions || [])
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join('');
@@ -569,12 +545,12 @@ const renderAdminReport = (report = adminReports[0]) => {
 const renderAdminActionItems = (report = adminReports[0]) => {
   if (!adminActionList) return;
   if (!report) {
-    adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项</div>';
+    adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项。</div>';
     return;
   }
   const actionItems = (report?.payload?.actionItems || []).filter((item) => !archivedActionItems.has(`${report.id}:${item.id}`));
   if (!actionItems.length) {
-    adminActionList.innerHTML = '<div class="admin-empty">暂无待处理建议</div>';
+    adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项。</div>';
     return;
   }
   adminActionList.innerHTML = actionItems.map((item) => {
@@ -583,10 +559,10 @@ const renderAdminActionItems = (report = adminReports[0]) => {
       <div class="admin-action-item ${isResolved ? 'is-resolved' : ''}" data-action-id="${escapeHtml(item.id)}" data-report-id="${escapeHtml(report.id)}">
         <div class="admin-action-title">
           <strong>${escapeHtml(item.title || '建议处理')}</strong>
-          <span>${Number(item.postCount || item.postIds?.length || 0)} 条帖子</span>
+          <span>${Number(item.postCount || item.postIds?.length || 0)} 个帖子吐槽</span>
         </div>
         <div class="admin-action-buttons">
-          <button type="button" data-action-status="${isResolved ? 'open' : 'resolved'}">${isResolved ? '恢复待处理' : '标为已处理'}</button>
+          <button type="button" data-action-status="${isResolved ? 'open' : 'resolved'}">${isResolved ? '标为未处理' : '已处理'}</button>
           <button type="button" data-action-archive="true">归档</button>
         </div>
       </div>
@@ -604,7 +580,7 @@ const renderArchivedActionItems = () => {
     });
   });
   if (!archivedItems.length) {
-    adminArchivedList.innerHTML = '<div class="admin-empty">暂无已归档处理项</div>';
+    adminArchivedList.innerHTML = '<div class="admin-empty">暂无已归档处理。</div>';
     return;
   }
   adminArchivedList.innerHTML = archivedItems.map((item) => `
@@ -618,7 +594,7 @@ const renderArchivedActionItems = () => {
 const renderAdminReportList = () => {
   if (!adminReportList) return;
   if (!adminReports.length) {
-    adminReportList.innerHTML = '<div class="admin-empty">暂无历史报告</div>';
+    adminReportList.innerHTML = '<div class="admin-empty">暂无历史报告。</div>';
     renderAdminReport(null);
     return;
   }
@@ -682,20 +658,20 @@ const getStoredAvatar = (user = currentUser) => {
   }
 };
 
-const setAvatarPreview = (imageDataUrl, displayName = '?') => {
-  const initial = (displayName || '?').trim().slice(0, 1).toUpperCase() || '?';
+const setAvatarPreview = (imageDataUrl, displayName = '我') => {
+  const initial = (displayName || '我').trim().slice(0, 1).toUpperCase() || '我';
   if (imageDataUrl) {
     userMenuAvatar.textContent = '';
     userMenuAvatar.style.backgroundImage = `url(${JSON.stringify(imageDataUrl)})`;
     userMenuAvatar.classList.add('has-image');
-    userMenuAvatar.setAttribute('aria-label', '当前头像，点击更换');
+    userMenuAvatar.setAttribute('aria-label', '当前头像，点击更换头像');
     return;
   }
 
   userMenuAvatar.style.backgroundImage = '';
   userMenuAvatar.classList.remove('has-image');
   userMenuAvatar.textContent = initial;
-  userMenuAvatar.setAttribute('aria-label', '默认头像');
+  userMenuAvatar.setAttribute('aria-label', '点击更换头像');
 };
 
 const resizeAvatarFile = (file) => new Promise((resolve, reject) => {
@@ -719,7 +695,7 @@ const resizeAvatarFile = (file) => new Promise((resolve, reject) => {
   };
   image.onerror = () => {
     URL.revokeObjectURL(objectUrl);
-    reject(new Error('头像图片读取失败，请重试'));
+    reject(new Error('图片读取失败，请换一张图片试试'));
   };
   image.src = objectUrl;
 });
@@ -772,7 +748,6 @@ const handleAvatarFileChange = async () => {
 const updateAuthUI = (user) => {
   currentUser = user;
   if (teacherEntry) teacherEntry.hidden = user?.role !== 'admin';
-  if (announcementMenuBtn) announcementMenuBtn.hidden = user?.role !== 'admin';
   if (user?.role !== 'admin' && currentFilter === 'admin') {
     switchFilter('all', '最新吐槽');
   }
@@ -781,11 +756,11 @@ const updateAuthUI = (user) => {
     loginBtn.textContent = `${displayName} ▾`;
     loginBtn.classList.add('logged-in');
     loginBtn.setAttribute('aria-expanded', 'false');
-    loginBtn.title = '打开个人菜单';
+    loginBtn.title = '用户中心';
     userMenu.hidden = false;
     userMenuWrap.classList.add('is-logged-in');
     userMenuAvatar.disabled = false;
-    userMenuAvatar.title = '更换头像';
+    userMenuAvatar.title = '点击更换头像';
     setAvatarPreview(getStoredAvatar(user), displayName);
     userMenuName.textContent = displayName;
     userMenuEmail.textContent = user.email;
@@ -799,9 +774,9 @@ const updateAuthUI = (user) => {
     userMenuWrap.classList.remove('is-logged-in');
     userMenuAvatar.disabled = true;
     userMenuAvatar.title = '请先登录';
-    setAvatarPreview('', '?');
+    setAvatarPreview('', '我');
     userMenuName.textContent = '未登录';
-    userMenuEmail.textContent = '欢迎回来';
+    userMenuEmail.textContent = '请先登录';
   }
 };
 
@@ -967,7 +942,7 @@ const drawTrendChart = () => {
   ctx.textAlign = 'left';
   ctx.fillText(trendLabels[focusIndex], tooltipX + 10, tooltipY + 15);
   ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('提及次数', tooltipX + 10, tooltipY + 32);
+  ctx.fillText('出现次数', tooltipX + 10, tooltipY + 32);
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(focusValue, tooltipX + tooltipWidth - 10, tooltipY + 32);
@@ -1108,7 +1083,7 @@ const updateHotCategory = (category) => {
   });
   if (hotCategoryName) hotCategoryName.textContent = category;
   if (hotCategorySummary) {
-    hotCategorySummary.textContent = `${category}近 30 天高频关键词「${trendData.keyword}」，共 ${Number(trendData.mentions || 0)} 次`;
+    hotCategorySummary.textContent = `${category}：近 30 天提及最多的是“${trendData.keyword}”，共 ${Number(trendData.mentions || 0)} 次。`;
   }
   renderHotBreakdown();
   if (previousCategory === category) drawTrendChart();
@@ -1183,7 +1158,7 @@ const getFilteredTopics = (filter) => {
   if (filter === 'hot') return topics.filter((topic) => topic.hot);
   if (filter === 'mine') return currentUser ? topics.filter((topic) => topic.mine) : [];
   if (filter === 'resolved') return topics.filter((topic) => topic.resolved);
-  if (filter === 'new') return topics;
+  if (filter === 'new') return topics.filter((topic) => topic.tags.includes('新发布') || topic.activity === '刚刚');
   if (filter === 'unread') return topics.filter((topic) => topic.unread);
   if (filter === 'liked') return currentUser ? topics.filter((topic) => topic.liked) : [];
   if (filter === 'favorites') return currentUser ? topics.filter((topic) => topic.favorite) : [];
@@ -1199,13 +1174,13 @@ const setActiveNav = (filter) => {
 };
 
 const resetChips = () => {
-  categoryChip.textContent = '板块：全部 ▸';
+  categoryChip.textContent = '类别：全部 ▸';
   tagChip.textContent = '标签：全部 ▸';
   currentTagKeyword = '';
   if (typeof categoryMenu !== 'undefined') {
     categoryMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn.dataset.category === '全部'));
+    tagMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn.dataset.tag === '全部'));
   }
-  renderTagMenu('all');
 };
 
 const setAdminMode = (enabled) => {
@@ -1226,8 +1201,6 @@ const switchFilter = (filter, title, options = {}) => {
   setAdminMode(false);
   if (!options.keepSearch) searchInput.value = '';
   if (!options.keepTag) currentTagKeyword = '';
-  if (!currentTagKeyword) tagChip.textContent = '标签：全部 ▸';
-  renderTagMenu(filter);
   setActiveSidebar(filter);
   setActiveNav(filter);
   renderTopics(filter, title);
@@ -1241,27 +1214,27 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   const data = baseData.filter((topic) => {
     const text = [topic.title, topic.content, topic.category, topic.activity, topic.authorName, ...topic.tags, ...topic.posters].join(' ').toLowerCase();
     const matchedSearch = query ? text.includes(query) : true;
-    const matchedTag = currentTagKeyword ? topic.tags.includes(currentTagKeyword) : true;
+    const matchedTag = currentTagKeyword ? text.includes(currentTagKeyword.toLowerCase()) : true;
     return matchedSearch && matchedTag;
   });
 
   topicPanel.hidden = false;
   adminPanel.hidden = true;
   setAdminMode(false);
-  const searchText = query ? `，搜索「${searchInput.value.trim()}」` : '';
-  const tagText = currentTagKeyword ? `，标签「${currentTagKeyword}」` : '';
-  listHint.textContent = `${title}${searchText}${tagText}，共 ${data.length} 条帖子`;
+  const searchText = query ? `，搜索“${searchInput.value.trim()}”` : '';
+  const tagText = currentTagKeyword ? `，标签“${currentTagKeyword}”` : '';
+  listHint.textContent = `${title}${searchText}${tagText}：共 ${data.length} 条吐槽`;
 
   if (!data.length) {
-    topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">暂时没有符合条件的帖子</td></tr>`;
+    topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">没有找到相关吐槽，换个栏目或关键词试试。</td></tr>`;
     return;
   }
 
   topicBody.innerHTML = data.map((topic, index) => {
     const safeId = escapeHtml(topic.id);
     const safeTitle = escapeHtml(topic.title);
-    const safeAuthor = escapeHtml(topic.authorName || topic.posters[0] || '?');
-    const safePoster = escapeHtml(topic.posters[0] || '?');
+    const safeAuthor = escapeHtml(topic.authorName || topic.posters[0] || '匿');
+    const safePoster = escapeHtml(topic.posters[0] || '匿');
     const safeActivity = escapeHtml(topic.activity);
     const safeColor = colors[index % colors.length];
     const safeLikeLabel = escapeHtml(`${topic.liked ? '取消点赞' : '点赞'}：${topic.title}`);
@@ -1270,7 +1243,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
       <tr class="topic-row">
         <td class="topic-main">
           <div class="topic-title-line">
-            ${topic.pinned ? '<span class="pin">置顶</span>' : ''}
+            ${topic.pinned ? '<span class="pin">📌</span>' : ''}
             <a class="topic-title" href="#" data-topic-id="${safeId}">${safeTitle}</a>
           </div>
           <div class="topic-meta">
@@ -1280,13 +1253,13 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
           </div>
         </td>
         <td class="posters-cell">
-          <div class="posters author-posters" title="发布人：${safeAuthor}">
+          <div class="posters author-posters" title="发帖人：${safeAuthor}">
             <span class="mini-avatar" style="background:${safeColor}" title="${safeAuthor}">${safePoster}</span>
           </div>
         </td>
         <td class="like-cell">
           <button class="quick-like-btn ${topic.liked ? 'liked' : ''}" data-like-topic-id="${safeId}" aria-label="${safeLikeLabel}">
-            <span class="quick-like-thumb" aria-hidden="true">赞</span>
+            <span class="quick-like-thumb" aria-hidden="true">👍</span>
             <span class="quick-like-count">${Number(topic.likeCount || 0)}</span>
           </button>
         </td>
@@ -1408,6 +1381,7 @@ if (adminCategoryForm) {
   adminCategoryForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const name = adminCategoryName.value.trim();
+    const label = adminCategoryLabel.value.trim();
     if (!name) {
       showToast('请输入板块名称');
       return;
@@ -1417,7 +1391,7 @@ if (adminCategoryForm) {
     try {
       await apiRequest('/api/categories', {
         method: 'POST',
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, label }),
       });
       adminCategoryForm.reset();
       await loadCategories();
@@ -1427,61 +1401,6 @@ if (adminCategoryForm) {
       showToast(error.message || '板块添加失败');
     } finally {
       submitBtn.disabled = false;
-    }
-  });
-}
-
-if (adminTagForm) {
-  adminTagForm.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const category = adminTagCategory.value;
-    const tags = adminTagInput.value.trim();
-    if (!category || !tags) {
-      showToast('请选择板块并输入标签');
-      return;
-    }
-    const submitBtn = adminTagForm.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    try {
-      await apiRequest('/api/categories/tags', {
-        method: 'PATCH',
-        body: JSON.stringify({ category, tags }),
-      });
-      adminTagInput.value = '';
-      await loadCategories();
-      showToast('标签已添加');
-    } catch (error) {
-      showToast(error.message || '标签添加失败');
-    } finally {
-      submitBtn.disabled = false;
-    }
-  });
-}
-
-if (adminDeleteCategoryBtn) {
-  adminDeleteCategoryBtn.addEventListener('click', async () => {
-    const category = adminTagCategory.value;
-    const tag = adminTagInput.value.trim();
-    if (!category) {
-      showToast('请选择板块');
-      return;
-    }
-    const targetText = tag ? `删除 ${category} 下的标签「${tag}」` : `删除板块「${category}」`;
-    if (!window.confirm(`${targetText}？此操作不可撤销。`)) return;
-    adminDeleteCategoryBtn.disabled = true;
-    try {
-      await apiRequest('/api/categories', {
-        method: 'DELETE',
-        body: JSON.stringify({ category, tag }),
-      });
-      adminTagInput.value = '';
-      await loadCategories();
-      await loadAdminStats({ silent: true });
-      showToast(tag ? '标签已删除' : '板块已删除');
-    } catch (error) {
-      showToast(error.message || '删除失败');
-    } finally {
-      adminDeleteCategoryBtn.disabled = false;
     }
   });
 }
@@ -1553,7 +1472,7 @@ if (adminActionList) {
       await loadPersistedTopics({ silent: true });
       await loadAdminPosts({ silent: true });
       await loadAdminStats({ silent: true });
-      showToast(nextStatus === 'resolved' ? '相关帖子已标为已处理' : '相关帖子已恢复待处理');
+      showToast(nextStatus === 'resolved' ? '相关帖子已标为已处理' : '相关帖子已恢复未处理');
     } catch (error) {
       showToast(error.message || '处理项更新失败');
     } finally {
@@ -1576,23 +1495,6 @@ if (adminArchivedList) {
   });
 }
 
-document.querySelectorAll('[data-expand-card]').forEach((button) => {
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const card = button.closest('article, .admin-manage');
-    if (!card) return;
-    document.querySelectorAll('.admin-workbench article.is-expanded, .admin-manage.is-expanded').forEach((item) => {
-      if (item !== card) {
-        item.classList.remove('is-expanded');
-        const itemButton = item.querySelector('[data-expand-card]');
-        if (itemButton) itemButton.textContent = '＋';
-      }
-    });
-    card.classList.toggle('is-expanded');
-    button.textContent = card.classList.contains('is-expanded') ? '－' : '＋';
-  });
-});
-
 categoryChip.addEventListener('click', (event) => {
   event.stopPropagation();
   openDropdown(categoryMenu, categoryChip);
@@ -1608,15 +1510,15 @@ categoryMenu.addEventListener('click', (event) => {
   if (!option) return;
   const category = option.dataset.category;
   categoryMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn === option));
-  categoryChip.textContent = `板块：${category} ▸`;
+  categoryChip.textContent = `类别：${category} ▸`;
   searchInput.value = '';
   currentTagKeyword = '';
   tagChip.textContent = '标签：全部 ▸';
-  renderTagMenu(category === '全部' ? 'all' : category);
+  tagMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn.dataset.tag === '全部'));
   closeDropdowns();
   if (category === '全部') switchFilter('all', '最新吐槽', { keepTag: true });
   else switchFilter(category, category, { keepTag: true });
-  showToast(`已选择板块：${category}`);
+  showToast(`已选择类别：${category}`);
 });
 
 tagMenu.addEventListener('click', (event) => {
@@ -1651,7 +1553,7 @@ const applyTheme = (mode) => {
   const isDark = mode === 'dark';
   document.body.classList.toggle('dark-mode', isDark);
   themeIcon.textContent = isDark ? '☀️' : '🌙';
-  themeLabel.textContent = isDark ? '日光' : '黑夜';
+  themeLabel.textContent = isDark ? '白天' : '黑夜';
   if (adminPanel && !adminPanel.hidden) renderAdminCharts();
 };
 
@@ -1662,7 +1564,7 @@ themeToggle.addEventListener('click', () => {
   const nextTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark';
   localStorage.setItem('campusVoiceTheme', nextTheme);
   applyTheme(nextTheme);
-  showToast(nextTheme === 'dark' ? '已切换夜间模式' : '已切换日间模式');
+  showToast(nextTheme === 'dark' ? '已切换黑夜模式' : '已切换白天模式');
 });
 
 const rulesBtn = document.getElementById('rulesBtn');
@@ -1684,57 +1586,6 @@ const postTitleInput = document.getElementById('postTitleInput');
 const postCategoryInput = document.getElementById('postCategoryInput');
 const postContentInput = document.getElementById('postContentInput');
 const postAnonymousInput = document.getElementById('postAnonymousInput');
-const announcementModal = document.getElementById('announcementModal');
-const announcementClose = document.getElementById('announcementClose');
-const announcementList = document.getElementById('announcementList');
-const announcementEditorModal = document.getElementById('announcementEditorModal');
-const announcementEditorClose = document.getElementById('announcementEditorClose');
-const announcementCancel = document.getElementById('announcementCancel');
-const announcementForm = document.getElementById('announcementForm');
-const announcementTitleInput = document.getElementById('announcementTitleInput');
-const announcementContentInput = document.getElementById('announcementContentInput');
-
-const getAnnouncements = () => topics
-  .filter((topic) => topic.category === '公告')
-  .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-const renderAnnouncements = () => {
-  if (!announcementList) return;
-  const announcements = getAnnouncements();
-  if (!announcements.length) {
-    announcementList.innerHTML = '<div class="announcement-empty">暂无公告。</div>';
-    return;
-  }
-  announcementList.innerHTML = announcements.map((topic) => `
-    <button type="button" class="announcement-item" data-announcement-id="${escapeHtml(topic.id)}">
-      <strong>${escapeHtml(topic.title)}</strong>
-      <span>${escapeHtml(new Date(topic.createdAt || Date.now()).toLocaleString('zh-CN'))}</span>
-      <p>${escapeHtml(topic.content || '')}</p>
-    </button>
-  `).join('');
-};
-
-const openAnnouncements = () => {
-  renderAnnouncements();
-  announcementModal.hidden = false;
-};
-
-const closeAnnouncements = () => { announcementModal.hidden = true; };
-
-const openAnnouncementEditor = () => {
-  if (!currentUser || currentUser.role !== 'admin') {
-    showToast('只有管理员可以发布公告');
-    return;
-  }
-  announcementForm.reset();
-  announcementEditorModal.hidden = false;
-  setTimeout(() => announcementTitleInput.focus(), 60);
-};
-
-const closeAnnouncementEditor = () => {
-  announcementEditorModal.hidden = true;
-  announcementForm.reset();
-};
 
 const openCreatePost = () => {
   if (!currentUser) {
@@ -1758,48 +1609,6 @@ createPostClose.addEventListener('click', closeCreatePost);
 createPostCancel.addEventListener('click', closeCreatePost);
 createPostModal.addEventListener('click', (event) => { if (event.target === createPostModal) closeCreatePost(); });
 postCategoryInput.addEventListener('change', renderPostTagOptions);
-announcementBtn.addEventListener('click', openAnnouncements);
-announcementClose.addEventListener('click', closeAnnouncements);
-announcementModal.addEventListener('click', (event) => { if (event.target === announcementModal) closeAnnouncements(); });
-announcementList.addEventListener('click', (event) => {
-  const item = event.target.closest('[data-announcement-id]');
-  if (!item) return;
-  closeAnnouncements();
-  openTopicDetail(item.dataset.announcementId);
-});
-announcementEditorClose.addEventListener('click', closeAnnouncementEditor);
-announcementCancel.addEventListener('click', closeAnnouncementEditor);
-announcementEditorModal.addEventListener('click', (event) => { if (event.target === announcementEditorModal) closeAnnouncementEditor(); });
-
-announcementForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const title = announcementTitleInput.value.trim();
-  const content = announcementContentInput.value.trim();
-  if (!title || !content) {
-    showToast('请填写公告标题和内容');
-    return;
-  }
-  const submitBtn = announcementForm.querySelector('button[type="submit"]');
-  const originalText = submitBtn.textContent;
-  submitBtn.disabled = true;
-  submitBtn.textContent = '发布中...';
-  try {
-    const { post } = await apiRequest('/api/posts/admin/announcements', {
-      method: 'POST',
-      body: JSON.stringify({ title, content }),
-    });
-    updateTopicFromPost(post, { preserveState: false, prepend: true });
-    closeAnnouncementEditor();
-    renderAnnouncements();
-    renderTopics(currentFilter, currentTitle);
-    showToast('公告已发布并留档');
-  } catch (error) {
-    showToast(error.message || '公告发布失败');
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = originalText;
-  }
-});
 
 createPostForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -1964,7 +1773,7 @@ const openTopicDetail = async (topicId) => {
     <span>评论：${Number(latestTopic.replies || 0)}</span>
     <span>浏览：${Number(latestTopic.views || 0)}</span>
     <span>活动：${escapeHtml(latestTopic.activity)}</span>
-    <span>发布人：${escapeHtml(latestTopic.authorName || latestTopic.posters[0] || '匿名')}</span>
+    <span>发帖人：${escapeHtml(latestTopic.authorName || latestTopic.posters[0] || '匿')}</span>
   `;
   detailContent.textContent = latestTopic.content;
   renderComments(latestTopic.comments || []);
@@ -1972,7 +1781,7 @@ const openTopicDetail = async (topicId) => {
   replyInput.value = '';
   refreshDetailButtons(latestTopic);
   topicDetailModal.hidden = false;
-  renderCurrentTopicList();
+  renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
 };
 
 const closeTopicDetail = () => {
@@ -2019,17 +1828,10 @@ favoriteBtn.addEventListener('click', () => {
   if (!topic) return;
   topic.favorite = !topic.favorite;
   refreshDetailButtons(topic);
-  renderCurrentTopicList();
+  renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
   showToast(topic.favorite ? '已加入收藏' : '已取消收藏');
 });
 reportBtn.addEventListener('click', () => {
-  const topic = getCurrentTopic();
-  if (topic) {
-    reportedPostIds.add(String(topic.id));
-    const adminPost = adminPosts.find((post) => String(post.id) === String(topic.id));
-    if (!adminPost) adminPosts.unshift(topic);
-    renderAdminPosts();
-  }
   showToast('举报已提交，管理员会进行审核');
 });
 replySubmitBtn.addEventListener('click', async () => {
@@ -2054,7 +1856,7 @@ replySubmitBtn.addEventListener('click', async () => {
       const updatedTopic = updateTopicFromPost(post, { preserveState: true, prepend: false }) || topic;
       updatedTopic.comments = [...(updatedTopic.comments || []), comment].filter(Boolean);
       renderComments(updatedTopic.comments);
-      renderCurrentTopicList();
+      renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
     } else {
       topic.replies += 1;
       topic.activity = '刚刚';
@@ -2066,7 +1868,7 @@ replySubmitBtn.addEventListener('click', async () => {
         createdAt: new Date().toISOString(),
       }];
       renderComments(topic.comments);
-      renderCurrentTopicList();
+      renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
     }
     replyInput.value = '';
     replyBox.hidden = true;
@@ -2088,15 +1890,8 @@ window.addEventListener('resize', () => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  document.querySelectorAll('.admin-workbench article.is-expanded, .admin-manage.is-expanded').forEach((card) => {
-    card.classList.remove('is-expanded');
-    const button = card.querySelector('[data-expand-card]');
-    if (button) button.textContent = '＋';
-  });
   if (!rulesModal.hidden) closeRules();
   if (!createPostModal.hidden) closeCreatePost();
-  if (!announcementModal.hidden) closeAnnouncements();
-  if (!announcementEditorModal.hidden) closeAnnouncementEditor();
   if (!topicDetailModal.hidden) closeTopicDetail();
 });
 
@@ -2258,11 +2053,6 @@ userMenu.addEventListener('click', async (event) => {
 
   if (userAction === 'security') {
     openSecurity();
-    return;
-  }
-
-  if (userAction === 'announcement') {
-    openAnnouncementEditor();
   }
 });
 loginClose.addEventListener('click', closeLogin);
@@ -2495,6 +2285,4 @@ document.addEventListener('keydown', (event) => {
   if (!registerModal.hidden) closeRegister();
   if (!profileModal.hidden) closeProfile();
   if (!securityModal.hidden) closeSecurity();
-  if (!announcementModal.hidden) closeAnnouncements();
-  if (!announcementEditorModal.hidden) closeAnnouncementEditor();
 });

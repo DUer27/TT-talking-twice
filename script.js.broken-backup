@@ -1,11 +1,11 @@
 ﻿const topics = [];
 
 const tagClass = (tag) => {
-  if (tag.includes('课程') || tag.includes('公告')) return 'blue';
-  if (tag.includes('食堂') || tag.includes('高频')) return 'orange';
-  if (tag.includes('宿舍') || tag.includes('急需') || tag.includes('情绪')) return 'red';
-  if (tag.includes('设施') || tag.includes('已处理')) return 'green';
-  if (tag.includes('活动')) return 'purple';
+  if (tag.includes('??') || tag.includes('??')) return 'blue';
+  if (tag.includes('??') || tag.includes('??')) return 'orange';
+  if (tag.includes('??') || tag.includes('??') || tag.includes('??')) return 'red';
+  if (tag.includes('??') || tag.includes('???')) return 'green';
+  if (tag.includes('??')) return 'purple';
   return '';
 };
 
@@ -61,19 +61,19 @@ const adminDeleteCategoryBtn = document.getElementById('adminDeleteCategoryBtn')
 const adminArchivedList = document.getElementById('adminArchivedList');
 let hotCategoryButtons = [];
 
-const defaultTrendLabels = ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'];
+const defaultTrendLabels = ['璋冭', '浣滀笟', '鏃╁叓', '鑰冭瘯', '绛惧埌', '瀹為獙', '璇句欢', '杩涘害', '绛旂枒', '鍒嗙粍', '鎴愮哗', '閫夎'];
 let categoryTrendMap = {};
 let appCategories = [];
 let categoryStatOrder = [
-  { category: '课程吐槽', label: '课程' },
-  { category: '食堂吐槽', label: '食堂' },
-  { category: '宿舍生活', label: '宿舍' },
-  { category: '校园设施', label: '设施' },
-  { category: '活动社团', label: '活动' },
+  { category: '璇剧▼鍚愭Ы', label: '璇剧▼' },
+  { category: '椋熷爞鍚愭Ы', label: '椋熷爞' },
+  { category: '瀹胯垗鐢熸椿', label: '瀹胯垗' },
+  { category: '鏍″洯璁炬柦', label: '璁炬柦' },
+  { category: '娲诲姩绀惧洟', label: '娲诲姩' },
 ];
 
 const createEmptyTrendMap = () => Object.fromEntries(categoryStatOrder.map((item) => [item.category, {
-  keyword: '暂无',
+  keyword: '鏆傛棤',
   mentions: 0,
   labels: defaultTrendLabels,
   points: defaultTrendLabels.map(() => 0),
@@ -83,7 +83,7 @@ categoryTrendMap = createEmptyTrendMap();
 
 let adminStats = {
   summary: { total: 0, today: 0, yesterday: 0, dailyChange: 0 },
-  hotCategory: '课程吐槽',
+  hotCategory: '璇剧▼鍚愭Ы',
   categories: categoryStatOrder.map((item) => ({ ...item, value: 0 })),
   trends: categoryTrendMap,
 };
@@ -91,7 +91,7 @@ let adminStats = {
 const getVisibleCategories = () => {
   const fallbackCategories = categoryStatOrder.map((item) => ({ name: item.category, label: item.label, tags: [] }));
   const sourceCategories = appCategories.length ? appCategories : fallbackCategories;
-  return sourceCategories.filter((category) => category.name !== '公告');
+  return sourceCategories.filter((category) => category.name !== '??');
 };
 
 const renderTagMenu = (categoryName = currentFilter) => {
@@ -119,7 +119,7 @@ const applyCategories = (categories = []) => {
   }
 
   if (categoryMenu) {
-    categoryMenu.innerHTML = ['<button data-category="全部">全部</button>', ...visibleCategories.map((category) => (
+    categoryMenu.innerHTML = ['<button data-category="鍏ㄩ儴">鍏ㄩ儴</button>', ...visibleCategories.map((category) => (
       `<button data-category="${escapeHtml(category.name)}">${escapeHtml(category.name)}</button>`
     ))].join('');
   }
@@ -128,7 +128,7 @@ const applyCategories = (categories = []) => {
 
   if (categorySidebarSection) {
     categorySidebarSection.innerHTML = [
-      '<div class="sidebar-title">吐槽板块</div>',
+      '<div class="sidebar-title">鍚愭Ы鏉垮潡</div>',
       ...visibleCategories.map((category, index) => (
         `<a class="sidebar-link" href="#" data-filter="${escapeHtml(category.name)}" data-title="${escapeHtml(category.name)}"><span class="dot ${['orange', 'purple', 'green', 'cyan', 'blue'][index % 5]}"></span> ${escapeHtml(category.name)}</a>`
       )),
@@ -178,7 +178,7 @@ const renderPostTagOptions = () => {
   const category = appCategories.find((item) => item.name === postCategorySelect.value);
   const tags = category?.tags || [];
   if (!tags.length) {
-    postTagOptions.innerHTML = '<span class="empty">该板块暂无可选标签</span>';
+    postTagOptions.innerHTML = '<span class="empty">璇ユ澘鍧楁殏鏃犲彲閫夋爣绛?/span>';
     return;
   }
   postTagOptions.innerHTML = tags.map((tag) => `
@@ -195,7 +195,7 @@ const getCategoryStats = () => categoryStatOrder.map((item) => {
 });
 
 let currentFilter = 'all';
-let currentTitle = '最新吐槽';
+let currentTitle = '????';
 let currentTopicId = null;
 let currentTagKeyword = '';
 let adminPosts = [];
@@ -206,7 +206,7 @@ const archivedActionItems = new Set();
 let toastTimer = null;
 let activeTrendIndex = 0;
 let activeCategoryIndex = -1;
-let activeTrendCategory = '食堂吐槽';
+let activeTrendCategory = '椋熷爞鍚愭Ы';
 let trendAnimationFrame = null;
 let trendAnimation = {
   from: null,
@@ -275,7 +275,7 @@ const apiRequest = async (url, options = {}) => {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.message || '请求失败，请稍后重试');
+    throw new Error(data.message || '璇锋眰澶辫触锛岃绋嶅悗閲嶈瘯');
   }
   return data;
 };
@@ -290,17 +290,17 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => 
 
 const getRelativeActivity = (dateValue) => {
   const date = dateValue ? new Date(dateValue) : null;
-  if (!date || Number.isNaN(date.getTime())) return '刚刚';
+  if (!date || Number.isNaN(date.getTime())) return '??';
 
   const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (diffSeconds < 60) return '刚刚';
+  if (diffSeconds < 60) return '??';
   const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes}分钟前`;
+  if (diffMinutes < 60) return `${diffMinutes}???`;
   const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffHours < 24) return `${diffHours}???`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return '昨天';
-  if (diffDays < 7) return `${diffDays}天前`;
+  if (diffDays === 1) return '??';
+  if (diffDays < 7) return `${diffDays}??`;
   return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
 };
 
@@ -313,10 +313,10 @@ const isRecentPost = (dateValue) => {
 const normalizePostTopic = (post) => {
   if (!post) return null;
   const authorInitial = post.author?.initial || (post.isAnonymous ? '?' : '?');
-  const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
-  const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : []), post.isAnonymous ? '匿名' : '实名'];
-  if (post.resolved || post.status === 'resolved') tags.push('已处理');
-  else tags.push('待回应');
+  const authorName = post.author?.name || (post.isAnonymous ? '????' : '??');
+  const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : []), post.isAnonymous ? '??' : '??'];
+  if (post.resolved || post.status === 'resolved') tags.push('???');
+  else tags.push('???');
 
 
   return {
@@ -394,17 +394,17 @@ const loadPersistedTopics = async ({ silent = true } = {}) => {
 
     if (currentFilter === 'admin') await loadAdminStats({ silent: true });
     else renderTopics(currentFilter, currentTitle);
-    if (!silent) showToast('已刷新数据库帖子');
+    if (!silent) showToast('????????');
   } catch (error) {
-    if (!silent) showToast(error.message || '帖子加载失败，请稍后重试');
+    if (!silent) showToast(error.message || '????????????');
   }
 };
 
 const formatDailyChange = (change) => {
   const value = Number(change || 0);
-  if (value > 0) return `上涨 +${value}%`;
-  if (value < 0) return `下降 ${value}%`;
-  return '持平';
+  if (value > 0) return `??? +${value}%`;
+  if (value < 0) return `??? ${value}%`;
+  return '?????';
 };
 
 const renderHotBreakdown = () => {
@@ -415,7 +415,7 @@ const renderHotBreakdown = () => {
     return `
       <button type="button" class="${item.category === activeTrendCategory ? 'active' : ''}" data-category-key="${escapeHtml(item.category)}">
         <b>${escapeHtml(trendData.keyword)} ${Number(trendData.mentions || 0)}</b>
-        <em>${escapeHtml(item.category)} · ${Number(item.value || 0)} 条</em>
+        <em>${escapeHtml(item.category)} ? ${Number(item.value || 0)} ?</em>
       </button>
     `;
   }).join('');
@@ -431,7 +431,7 @@ const renderAdminSummary = () => {
   if (hotCategoryName) hotCategoryName.textContent = activeTrendCategory;
   const trendData = getTrendData(activeTrendCategory);
   if (hotCategorySummary) {
-    hotCategorySummary.textContent = `${activeTrendCategory}近 30 天高频关键词「${trendData.keyword}」，共 ${Number(trendData.mentions || 0)} 次`;
+    hotCategorySummary.textContent = `${activeTrendCategory}?? 30 ????????${trendData.keyword}??? ${Number(trendData.mentions || 0)} ??`;
   }
   renderHotBreakdown();
 };
@@ -446,18 +446,18 @@ const loadAdminStats = async ({ silent = true } = {}) => {
     trendAnimation = { from: getTrendData(activeTrendCategory).points, to: getTrendData(activeTrendCategory).points, progress: 1 };
     renderAdminSummary();
     renderAdminCharts();
-    if (!silent) showToast('管理员统计已更新');
+    if (!silent) showToast('????????');
   } catch (error) {
     renderAdminSummary();
     renderAdminCharts();
-    if (!silent) showToast(error.message || '管理员统计加载失败');
+    if (!silent) showToast(error.message || '?????????');
   }
 };
 
 const adminStatusLabels = {
-  open: '待处理',
-  resolved: '已处理',
-  hidden: '已隐藏',
+  open: '???',
+  resolved: '???',
+  hidden: '???',
 };
 
 const getAdminFilteredPosts = () => {
@@ -491,17 +491,17 @@ const renderAdminPosts = () => {
         </td>
         <td>${escapeHtml(post.category || '-')}</td>
         <td>
-          ${isReported ? '<span class="admin-status-badge reported">已举报</span>' : ''}
+          ${isReported ? '<span class="admin-status-badge reported">宸蹭妇鎶?/span>' : ''}
           <span class="admin-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
         </td>
-        <td>${Number(post.replies || 0)} 评 / ${Number(post.likeCount || 0)} 赞 / ${Number(post.views || 0)} 浏览</td>
+        <td>${Number(post.replies || 0)} 璇?/ ${Number(post.likeCount || 0)} 璧?/ ${Number(post.views || 0)} 娴忚</td>
         <td>${escapeHtml(getRelativeActivity(post.updatedAt || post.createdAt))}</td>
         <td>
           <div class="admin-action-group">
-            <button type="button" data-admin-open-id="${safeId}" title="打开帖子详情">查看</button>
-            <button type="button" data-admin-status-id="${safeId}" data-status="open" ${status === 'open' ? 'disabled' : ''}>待处理</button>
-            <button type="button" data-admin-status-id="${safeId}" data-status="resolved" ${status === 'resolved' ? 'disabled' : ''}>已处理</button>
-            <button type="button" data-admin-status-id="${safeId}" data-status="hidden" ${status === 'hidden' ? 'disabled' : ''}>隐藏</button>
+            <button type="button" data-admin-open-id="${safeId}" title="鎵撳紑甯栧瓙璇︽儏">鏌ョ湅</button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="open" ${status === 'open' ? 'disabled' : ''}>寰呭鐞?/button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="resolved" ${status === 'resolved' ? 'disabled' : ''}>宸插鐞?/button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="hidden" ${status === 'hidden' ? 'disabled' : ''}>闅愯棌</button>
           </div>
         </td>
       </tr>
@@ -516,30 +516,30 @@ const loadAdminPosts = async ({ silent = true } = {}) => {
   if (!currentUser) {
     adminPosts = [];
     renderAdminPosts();
-    if (!silent) showToast('请先登录后再进入后台');
+    if (!silent) showToast('璇峰厛鐧诲綍鍚庡啀杩涘叆鍚庡彴');
     openLogin();
     return;
   }
   if (currentUser.role !== 'admin') {
     adminPosts = [];
     renderAdminPosts();
-    if (!silent) showToast('当前账号没有管理员权限');
+    if (!silent) showToast('???????????');
     return;
   }
 
   adminPostLoading = true;
-  adminPostBody.innerHTML = '<tr><td colspan="6" class="empty-state">正在读取帖子...</td></tr>';
+  adminPostBody.innerHTML = '<tr><td colspan="6" class="empty-state">姝ｅ湪璇诲彇甯栧瓙...</td></tr>';
   if (adminPostEmpty) adminPostEmpty.hidden = true;
   try {
     const status = adminStatusFilter?.value || 'all';
     const { posts = [] } = await apiRequest(`/api/posts/admin/list?status=${encodeURIComponent(status)}`);
     adminPosts = posts;
     renderAdminPosts();
-    if (!silent) showToast('后台帖子已刷新');
+    if (!silent) showToast('???????');
   } catch (error) {
     adminPosts = [];
     renderAdminPosts();
-    showToast(error.message || '后台帖子加载失败');
+    showToast(error.message || '鍚庡彴甯栧瓙鍔犺浇澶辫触');
   } finally {
     adminPostLoading = false;
     renderAdminPosts();
@@ -549,16 +549,16 @@ const loadAdminPosts = async ({ silent = true } = {}) => {
 const renderAdminReport = (report = adminReports[0]) => {
   if (!adminAiSummary || !adminSuggestionList) return;
   if (!report) {
-    adminAiSummary.textContent = '暂无报告，请先生成一份';
+    adminAiSummary.textContent = '???????????????';
     adminSuggestionList.innerHTML = '';
     renderAdminActionItems(null);
     renderArchivedActionItems();
     return;
   }
   const payload = report.payload || {};
-  const sourceText = payload.source === 'ai' ? 'AI 分析' : '系统分析';
-  const postCountText = Array.isArray(payload.postIds) ? `，覆盖 ${payload.postIds.length} 条帖子` : '';
-  adminAiSummary.textContent = `${sourceText}${postCountText}：${report.summary || payload.summary || '暂无摘要'}`;
+  const sourceText = payload.source === 'ai' ? 'AI ??' : '????';
+  const postCountText = Array.isArray(payload.postIds) ? `??? ${payload.postIds.length} ???` : '';
+  adminAiSummary.textContent = `${sourceText}${postCountText}?${report.summary || payload.summary || '?????'}`;
   adminSuggestionList.innerHTML = (payload.suggestions || [])
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join('');
@@ -569,12 +569,12 @@ const renderAdminReport = (report = adminReports[0]) => {
 const renderAdminActionItems = (report = adminReports[0]) => {
   if (!adminActionList) return;
   if (!report) {
-    adminActionList.innerHTML = '<div class="admin-empty">暂无建议处理项</div>';
+    adminActionList.innerHTML = '<div class="admin-empty">????????</div>';
     return;
   }
   const actionItems = (report?.payload?.actionItems || []).filter((item) => !archivedActionItems.has(`${report.id}:${item.id}`));
   if (!actionItems.length) {
-    adminActionList.innerHTML = '<div class="admin-empty">暂无待处理建议</div>';
+    adminActionList.innerHTML = '<div class="admin-empty">????????</div>';
     return;
   }
   adminActionList.innerHTML = actionItems.map((item) => {
@@ -582,12 +582,12 @@ const renderAdminActionItems = (report = adminReports[0]) => {
     return `
       <div class="admin-action-item ${isResolved ? 'is-resolved' : ''}" data-action-id="${escapeHtml(item.id)}" data-report-id="${escapeHtml(report.id)}">
         <div class="admin-action-title">
-          <strong>${escapeHtml(item.title || '建议处理')}</strong>
-          <span>${Number(item.postCount || item.postIds?.length || 0)} 条帖子</span>
+          <strong>${escapeHtml(item.title || '????')}</strong>
+          <span>${Number(item.postCount || item.postIds?.length || 0)} ???</span>
         </div>
         <div class="admin-action-buttons">
-          <button type="button" data-action-status="${isResolved ? 'open' : 'resolved'}">${isResolved ? '恢复待处理' : '标为已处理'}</button>
-          <button type="button" data-action-archive="true">归档</button>
+          <button type="button" data-action-status="${isResolved ? 'open' : 'resolved'}">${isResolved ? '?????' : '???'}</button>
+          <button type="button" data-action-archive="true">??</button>
         </div>
       </div>
     `;
@@ -604,13 +604,13 @@ const renderArchivedActionItems = () => {
     });
   });
   if (!archivedItems.length) {
-    adminArchivedList.innerHTML = '<div class="admin-empty">暂无已归档处理项</div>';
+    adminArchivedList.innerHTML = '<div class="admin-empty">鏆傛棤宸插綊妗ｅ鐞嗐€?/div>';
     return;
   }
   adminArchivedList.innerHTML = archivedItems.map((item) => `
     <div class="admin-archived-item" data-archived-key="${escapeHtml(item.key)}" data-report-id="${escapeHtml(item.reportId)}">
-      <strong>${escapeHtml(item.title || '建议处理')}</strong>
-      <button type="button" data-restore-archived="true">恢复显示</button>
+      <strong>${escapeHtml(item.title || '寤鸿澶勭悊')}</strong>
+      <button type="button" data-restore-archived="true">鎭㈠鏄剧ず</button>
     </div>
   `).join('');
 };
@@ -618,7 +618,7 @@ const renderArchivedActionItems = () => {
 const renderAdminReportList = () => {
   if (!adminReportList) return;
   if (!adminReports.length) {
-    adminReportList.innerHTML = '<div class="admin-empty">暂无历史报告</div>';
+    adminReportList.innerHTML = '<div class="admin-empty">鏆傛棤鍘嗗彶鎶ュ憡銆?/div>';
     renderAdminReport(null);
     return;
   }
@@ -646,7 +646,7 @@ const loadAdminReports = async ({ silent = true } = {}) => {
     adminReports = reports;
     renderAdminReportList();
   } catch (error) {
-    if (!silent) showToast(error.message || '报告历史加载失败');
+    if (!silent) showToast(error.message || '鎶ュ憡鍘嗗彶鍔犺浇澶辫触');
   }
 };
 
@@ -654,14 +654,14 @@ const generateAdminReport = async () => {
   if (!generateReportBtn || currentUser?.role !== 'admin') return;
   const originalText = generateReportBtn.textContent;
   generateReportBtn.disabled = true;
-  generateReportBtn.textContent = '生成中...';
+  generateReportBtn.textContent = '鐢熸垚涓?..';
   try {
     const { report } = await apiRequest('/api/posts/admin/reports', { method: 'POST' });
     adminReports = [report, ...adminReports.filter((item) => String(item.id) !== String(report.id))];
     renderAdminReportList();
-    showToast('报告已生成');
+    showToast('?????');
   } catch (error) {
-    showToast(error.message || '报告生成失败');
+    showToast(error.message || '鎶ュ憡鐢熸垚澶辫触');
   } finally {
     generateReportBtn.disabled = false;
     generateReportBtn.textContent = originalText;
@@ -688,14 +688,14 @@ const setAvatarPreview = (imageDataUrl, displayName = '?') => {
     userMenuAvatar.textContent = '';
     userMenuAvatar.style.backgroundImage = `url(${JSON.stringify(imageDataUrl)})`;
     userMenuAvatar.classList.add('has-image');
-    userMenuAvatar.setAttribute('aria-label', '当前头像，点击更换');
+    userMenuAvatar.setAttribute('aria-label', '???????????');
     return;
   }
 
   userMenuAvatar.style.backgroundImage = '';
   userMenuAvatar.classList.remove('has-image');
   userMenuAvatar.textContent = initial;
-  userMenuAvatar.setAttribute('aria-label', '默认头像');
+  userMenuAvatar.setAttribute('aria-label', '??????');
 };
 
 const resizeAvatarFile = (file) => new Promise((resolve, reject) => {
@@ -719,14 +719,14 @@ const resizeAvatarFile = (file) => new Promise((resolve, reject) => {
   };
   image.onerror = () => {
     URL.revokeObjectURL(objectUrl);
-    reject(new Error('头像图片读取失败，请重试'));
+    reject(new Error('???????????????'));
   };
   image.src = objectUrl;
 });
 
 const openAvatarPicker = () => {
   if (!currentUser) {
-    showToast('请先登录后再更换头像');
+    showToast('璇峰厛鐧诲綍鍚庡啀鏇存崲澶村儚');
     openLogin();
     return;
   }
@@ -740,13 +740,13 @@ const handleAvatarFileChange = async () => {
 
   if (!file.type.startsWith('image/')) {
     avatarFileInput.value = '';
-    showToast('请选择图片文件');
+    showToast('璇烽€夋嫨鍥剧墖鏂囦欢');
     return;
   }
 
   if (file.size > 12 * 1024 * 1024) {
     avatarFileInput.value = '';
-    showToast('头像图片不能超过 12MB');
+    showToast('澶村儚鍥剧墖涓嶈兘瓒呰繃 12MB');
     return;
   }
 
@@ -754,16 +754,16 @@ const handleAvatarFileChange = async () => {
     const avatarDataUrl = await resizeAvatarFile(file);
     const storageKey = getAvatarStorageKey();
     if (!storageKey) {
-      showToast('请先登录后再更换头像');
+      showToast('璇峰厛鐧诲綍鍚庡啀鏇存崲澶村儚');
       return;
     }
 
     localStorage.setItem(storageKey, avatarDataUrl);
     const displayName = currentUser.nickname || currentUser.email.split('@')[0];
     setAvatarPreview(avatarDataUrl, displayName);
-    showToast('头像已更新');
+    showToast('?????');
   } catch (error) {
-    showToast(error.message || '头像更新失败，请稍后重试');
+    showToast(error.message || '澶村儚鏇存柊澶辫触锛岃绋嶅悗閲嶈瘯');
   } finally {
     avatarFileInput.value = '';
   }
@@ -774,23 +774,23 @@ const updateAuthUI = (user) => {
   if (teacherEntry) teacherEntry.hidden = user?.role !== 'admin';
   if (announcementMenuBtn) announcementMenuBtn.hidden = user?.role !== 'admin';
   if (user?.role !== 'admin' && currentFilter === 'admin') {
-    switchFilter('all', '最新吐槽');
+    switchFilter('all', '????');
   }
   if (user) {
     const displayName = user.nickname || user.email.split('@')[0];
-    loginBtn.textContent = `${displayName} ▾`;
+    loginBtn.textContent = `${displayName} ?`;
     loginBtn.classList.add('logged-in');
     loginBtn.setAttribute('aria-expanded', 'false');
-    loginBtn.title = '打开个人菜单';
+    loginBtn.title = '????';
     userMenu.hidden = false;
     userMenuWrap.classList.add('is-logged-in');
     userMenuAvatar.disabled = false;
-    userMenuAvatar.title = '更换头像';
+    userMenuAvatar.title = '??????';
     setAvatarPreview(getStoredAvatar(user), displayName);
     userMenuName.textContent = displayName;
     userMenuEmail.textContent = user.email;
   } else {
-    loginBtn.textContent = '登录';
+    loginBtn.textContent = '??';
     loginBtn.classList.remove('logged-in');
     loginBtn.setAttribute('aria-expanded', 'false');
     loginBtn.title = '';
@@ -798,10 +798,10 @@ const updateAuthUI = (user) => {
     userMenu.classList.remove('open');
     userMenuWrap.classList.remove('is-logged-in');
     userMenuAvatar.disabled = true;
-    userMenuAvatar.title = '请先登录';
+    userMenuAvatar.title = '????';
     setAvatarPreview('', '?');
-    userMenuName.textContent = '未登录';
-    userMenuEmail.textContent = '欢迎回来';
+    userMenuName.textContent = '???';
+    userMenuEmail.textContent = '????';
   }
 };
 
@@ -844,7 +844,7 @@ const drawGrid = (ctx, area, ySteps, xSteps) => {
 const getTrendData = (category = activeTrendCategory) => categoryTrendMap[category]
   || categoryTrendMap[adminStats.hotCategory]
   || categoryTrendMap[categoryStatOrder[0].category]
-  || { keyword: '暂无', mentions: 0, labels: defaultTrendLabels, points: defaultTrendLabels.map(() => 0) };
+  || { keyword: '鏆傛棤', mentions: 0, labels: defaultTrendLabels, points: defaultTrendLabels.map(() => 0) };
 
 const drawTrendChart = () => {
   const canvasState = setupCanvas(complaintTrendChart);
@@ -967,7 +967,7 @@ const drawTrendChart = () => {
   ctx.textAlign = 'left';
   ctx.fillText(trendLabels[focusIndex], tooltipX + 10, tooltipY + 15);
   ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('提及次数', tooltipX + 10, tooltipY + 32);
+  ctx.fillText('????', tooltipX + 10, tooltipY + 32);
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'right';
   ctx.fillText(focusValue, tooltipX + tooltipWidth - 10, tooltipY + 32);
@@ -976,7 +976,7 @@ const drawTrendChart = () => {
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText(`${activeTrendCategory} · ${trendData.keyword} ${trendData.mentions}次`, area.left, area.top + 6);
+  ctx.fillText(`${activeTrendCategory} ? ${trendData.keyword} ${trendData.mentions}?`, area.left, area.top + 6);
 
   complaintTrendChart.style.cursor = 'crosshair';
 };
@@ -1060,7 +1060,7 @@ const drawCategoryBarChart = () => {
     ctx.textBaseline = 'middle';
     ctx.fillText(item.label, tooltipX + 10, tooltipY + 15);
     ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-    ctx.fillText(`板块吐槽 ${item.value}`, tooltipX + 10, tooltipY + 30);
+    ctx.fillText(`鏉垮潡鍚愭Ы ${item.value}`, tooltipX + 10, tooltipY + 30);
   }
 
   categoryBarChart.style.cursor = activeCategoryIndex >= 0 ? 'pointer' : 'default';
@@ -1108,12 +1108,12 @@ const updateHotCategory = (category) => {
   });
   if (hotCategoryName) hotCategoryName.textContent = category;
   if (hotCategorySummary) {
-    hotCategorySummary.textContent = `${category}近 30 天高频关键词「${trendData.keyword}」，共 ${Number(trendData.mentions || 0)} 次`;
+    hotCategorySummary.textContent = `${category}?? 30 ????????${trendData.keyword}??? ${Number(trendData.mentions || 0)} ??`;
   }
   renderHotBreakdown();
   if (previousCategory === category) drawTrendChart();
   else animateTrendTo(previousPoints, trendData.points);
-  showToast(`已切换到 ${category} 关键词统计`);
+  showToast(`???? ${category} ?????`);
 };
 
 const getCanvasPointer = (canvas, event) => {
@@ -1199,11 +1199,11 @@ const setActiveNav = (filter) => {
 };
 
 const resetChips = () => {
-  categoryChip.textContent = '板块：全部 ▸';
-  tagChip.textContent = '标签：全部 ▸';
+  categoryChip.textContent = '????? ?';
+  tagChip.textContent = '????? ?';
   currentTagKeyword = '';
   if (typeof categoryMenu !== 'undefined') {
-    categoryMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn.dataset.category === '全部'));
+    categoryMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn.dataset.category === '鍏ㄩ儴'));
   }
   renderTagMenu('all');
 };
@@ -1214,7 +1214,7 @@ const setAdminMode = (enabled) => {
 
 const switchFilter = (filter, title, options = {}) => {
   if (!currentUser && ['mine', 'liked', 'favorites'].includes(filter)) {
-    showToast('请先登录后查看个人内容');
+    showToast('???????????');
     openLogin();
     return;
   }
@@ -1226,7 +1226,7 @@ const switchFilter = (filter, title, options = {}) => {
   setAdminMode(false);
   if (!options.keepSearch) searchInput.value = '';
   if (!options.keepTag) currentTagKeyword = '';
-  if (!currentTagKeyword) tagChip.textContent = '标签：全部 ▸';
+  if (!currentTagKeyword) tagChip.textContent = '????? ?';
   renderTagMenu(filter);
   setActiveSidebar(filter);
   setActiveNav(filter);
@@ -1248,12 +1248,12 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   topicPanel.hidden = false;
   adminPanel.hidden = true;
   setAdminMode(false);
-  const searchText = query ? `，搜索「${searchInput.value.trim()}」` : '';
-  const tagText = currentTagKeyword ? `，标签「${currentTagKeyword}」` : '';
-  listHint.textContent = `${title}${searchText}${tagText}，共 ${data.length} 条帖子`;
+  const searchText = query ? `????${searchInput.value.trim()}?` : '';
+  const tagText = currentTagKeyword ? `????${currentTagKeyword}?` : '';
+  listHint.textContent = `${title}${searchText}${tagText}?? ${data.length} ???`;
 
   if (!data.length) {
-    topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">暂时没有符合条件的帖子</td></tr>`;
+    topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">????????????????????</td></tr>`;
     return;
   }
 
@@ -1264,35 +1264,35 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
     const safePoster = escapeHtml(topic.posters[0] || '?');
     const safeActivity = escapeHtml(topic.activity);
     const safeColor = colors[index % colors.length];
-    const safeLikeLabel = escapeHtml(`${topic.liked ? '取消点赞' : '点赞'}：${topic.title}`);
+    const safeLikeLabel = escapeHtml(`${topic.liked ? '????' : '??'}?${topic.title}`);
 
     return `
       <tr class="topic-row">
         <td class="topic-main">
           <div class="topic-title-line">
-            ${topic.pinned ? '<span class="pin">置顶</span>' : ''}
+            ${topic.pinned ? '<span class="pin">??</span>' : ''}
             <a class="topic-title" href="#" data-topic-id="${safeId}">${safeTitle}</a>
           </div>
           <div class="topic-meta">
             ${topic.tags.map(tag => `<span class="tag ${tagClass(tag)}">${escapeHtml(tag)}</span>`).join('')}
-            ${topic.favorite ? '<span class="tag purple">已收藏</span>' : ''}
-            ${topic.liked ? '<span class="tag blue">已点赞</span>' : ''}
+            ${topic.favorite ? '<span class="tag purple">???</span>' : ''}
+            ${topic.liked ? '<span class="tag blue">???</span>' : ''}
           </div>
         </td>
         <td class="posters-cell">
-          <div class="posters author-posters" title="发布人：${safeAuthor}">
+          <div class="posters author-posters" title="????${safeAuthor}">
             <span class="mini-avatar" style="background:${safeColor}" title="${safeAuthor}">${safePoster}</span>
           </div>
         </td>
         <td class="like-cell">
           <button class="quick-like-btn ${topic.liked ? 'liked' : ''}" data-like-topic-id="${safeId}" aria-label="${safeLikeLabel}">
-            <span class="quick-like-thumb" aria-hidden="true">赞</span>
+            <span class="quick-like-thumb" aria-hidden="true">??</span>
             <span class="quick-like-count">${Number(topic.likeCount || 0)}</span>
           </button>
         </td>
-        <td class="num">${Number(topic.replies || 0)}<small>评论</small></td>
-        <td class="num">${Number(topic.views || 0)}<small>浏览</small></td>
-        <td class="num activity">${safeActivity}<small>活动</small></td>
+        <td class="num">${Number(topic.replies || 0)}<small>??</small></td>
+        <td class="num">${Number(topic.views || 0)}<small>??</small></td>
+        <td class="num activity">${safeActivity}<small>??</small></td>
       </tr>
     `;
   }).join('');
@@ -1307,12 +1307,12 @@ sidebarLinks.forEach((link) => {
 
     if (filter === 'admin') {
       if (!currentUser) {
-        showToast('请先登录后再进入后台');
+        showToast('璇峰厛鐧诲綍鍚庡啀杩涘叆鍚庡彴');
         openLogin();
         return;
       }
       if (currentUser.role !== 'admin') {
-        showToast('当前账号没有管理员权限');
+        showToast('???????????');
         return;
       }
       currentFilter = filter;
@@ -1326,7 +1326,7 @@ sidebarLinks.forEach((link) => {
       loadAdminStats({ silent: true });
       loadAdminPosts({ silent: true });
       loadAdminReports({ silent: true });
-      showToast('已进入管理员后台');
+      showToast('宸茶繘鍏ョ鐞嗗憳鍚庡彴');
       return;
     }
 
@@ -1354,15 +1354,15 @@ searchInput.addEventListener('keydown', (event) => {
     searchInput.value = '';
     renderTopics(currentFilter, currentTitle);
     searchInput.blur();
-    showToast('已清空搜索');
+    showToast('?????');
   }
 });
 
 brandHome.addEventListener('click', (event) => {
   event.preventDefault();
   resetChips();
-  switchFilter('all', '最新吐槽');
-  showToast('已回到首页');
+  switchFilter('all', '????');
+  showToast('?????');
 });
 
 document.getElementById('sidebarToggle').addEventListener('click', () => {
@@ -1409,7 +1409,7 @@ if (adminCategoryForm) {
     event.preventDefault();
     const name = adminCategoryName.value.trim();
     if (!name) {
-      showToast('请输入板块名称');
+      showToast('???????');
       return;
     }
     const submitBtn = adminCategoryForm.querySelector('button[type="submit"]');
@@ -1422,9 +1422,9 @@ if (adminCategoryForm) {
       adminCategoryForm.reset();
       await loadCategories();
       await loadAdminStats({ silent: true });
-      showToast('板块已添加');
+      showToast('?????');
     } catch (error) {
-      showToast(error.message || '板块添加失败');
+      showToast(error.message || '鏉垮潡娣诲姞澶辫触');
     } finally {
       submitBtn.disabled = false;
     }
@@ -1437,7 +1437,7 @@ if (adminTagForm) {
     const category = adminTagCategory.value;
     const tags = adminTagInput.value.trim();
     if (!category || !tags) {
-      showToast('请选择板块并输入标签');
+      showToast('??????????');
       return;
     }
     const submitBtn = adminTagForm.querySelector('button[type="submit"]');
@@ -1449,9 +1449,9 @@ if (adminTagForm) {
       });
       adminTagInput.value = '';
       await loadCategories();
-      showToast('标签已添加');
+      showToast('?????');
     } catch (error) {
-      showToast(error.message || '标签添加失败');
+      showToast(error.message || '鏍囩娣诲姞澶辫触');
     } finally {
       submitBtn.disabled = false;
     }
@@ -1463,11 +1463,11 @@ if (adminDeleteCategoryBtn) {
     const category = adminTagCategory.value;
     const tag = adminTagInput.value.trim();
     if (!category) {
-      showToast('请选择板块');
+      showToast('?????');
       return;
     }
-    const targetText = tag ? `删除 ${category} 下的标签「${tag}」` : `删除板块「${category}」`;
-    if (!window.confirm(`${targetText}？此操作不可撤销。`)) return;
+    const targetText = tag ? `???${category}??????${tag}?` : `???????${category}?`;
+    if (!window.confirm(`${targetText}?????????`)) return;
     adminDeleteCategoryBtn.disabled = true;
     try {
       await apiRequest('/api/categories', {
@@ -1477,9 +1477,9 @@ if (adminDeleteCategoryBtn) {
       adminTagInput.value = '';
       await loadCategories();
       await loadAdminStats({ silent: true });
-      showToast(tag ? '标签已删除' : '板块已删除');
+      showToast(tag ? '?????' : '?????');
     } catch (error) {
-      showToast(error.message || '删除失败');
+      showToast(error.message || '????');
     } finally {
       adminDeleteCategoryBtn.disabled = false;
     }
@@ -1512,9 +1512,9 @@ if (adminPostBody) {
       await loadPersistedTopics({ silent: true });
       await loadAdminStats({ silent: true });
       await loadAdminPosts({ silent: true });
-      showToast('帖子状态已更新');
+      showToast('???????');
     } catch (error) {
-      showToast(error.message || '状态更新失败');
+      showToast(error.message || '??????');
     } finally {
       statusButton.disabled = false;
     }
@@ -1534,7 +1534,7 @@ if (adminActionList) {
       archivedActionItems.add(`${report.id}:${actionItem.id}`);
       renderAdminActionItems(report);
       renderArchivedActionItems();
-      showToast('处理项已归档');
+      showToast('??????');
       return;
     }
 
@@ -1553,9 +1553,9 @@ if (adminActionList) {
       await loadPersistedTopics({ silent: true });
       await loadAdminPosts({ silent: true });
       await loadAdminStats({ silent: true });
-      showToast(nextStatus === 'resolved' ? '相关帖子已标为已处理' : '相关帖子已恢复待处理');
+      showToast(nextStatus === 'resolved' ? '??????????' : '??????????');
     } catch (error) {
-      showToast(error.message || '处理项更新失败');
+      showToast(error.message || '???????');
     } finally {
       statusButton.disabled = false;
     }
@@ -1572,7 +1572,7 @@ if (adminArchivedList) {
     const report = adminReports.find((reportItem) => String(reportItem.id) === String(item.dataset.reportId)) || adminReports[0];
     renderAdminActionItems(report);
     renderArchivedActionItems();
-    showToast('已恢复建议处理项');
+    showToast('宸叉仮澶嶅缓璁鐞嗛」');
   });
 }
 
@@ -1585,11 +1585,11 @@ document.querySelectorAll('[data-expand-card]').forEach((button) => {
       if (item !== card) {
         item.classList.remove('is-expanded');
         const itemButton = item.querySelector('[data-expand-card]');
-        if (itemButton) itemButton.textContent = '＋';
+        if (itemButton) itemButton.textContent = '?';
       }
     });
     card.classList.toggle('is-expanded');
-    button.textContent = card.classList.contains('is-expanded') ? '－' : '＋';
+    button.textContent = card.classList.contains('is-expanded') ? '?' : '?';
   });
 });
 
@@ -1608,15 +1608,15 @@ categoryMenu.addEventListener('click', (event) => {
   if (!option) return;
   const category = option.dataset.category;
   categoryMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn === option));
-  categoryChip.textContent = `板块：${category} ▸`;
+  categoryChip.textContent = `???${category} ?`;
   searchInput.value = '';
   currentTagKeyword = '';
-  tagChip.textContent = '标签：全部 ▸';
-  renderTagMenu(category === '全部' ? 'all' : category);
+  tagChip.textContent = '????? ?';
+  renderTagMenu(category === '??' ? 'all' : category);
   closeDropdowns();
-  if (category === '全部') switchFilter('all', '最新吐槽', { keepTag: true });
+  if (category === '??') switchFilter('all', '????', { keepTag: true });
   else switchFilter(category, category, { keepTag: true });
-  showToast(`已选择板块：${category}`);
+  showToast(`??????${category}`);
 });
 
 tagMenu.addEventListener('click', (event) => {
@@ -1624,19 +1624,19 @@ tagMenu.addEventListener('click', (event) => {
   if (!option) return;
   const tag = option.dataset.tag;
   tagMenu.querySelectorAll('button').forEach((btn) => btn.classList.toggle('active', btn === option));
-  currentTagKeyword = tag === '全部' ? '' : tag;
-  tagChip.textContent = `标签：${tag} ▸`;
+  currentTagKeyword = tag === '??' ? '' : tag;
+  tagChip.textContent = `???${tag} ?`;
   closeDropdowns();
-  renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '最新吐槽' : currentTitle);
-  showToast(currentTagKeyword ? `已选择标签：${currentTagKeyword}` : '已清除标签筛选');
+  renderTopics(currentFilter === 'admin' ? 'all' : currentFilter, currentFilter === 'admin' ? '????' : currentTitle);
+  showToast(currentTagKeyword ? `??????${currentTagKeyword}` : '???????');
 });
 
 document.addEventListener('click', closeDropdowns);
 
 weekActiveChip.addEventListener('click', () => {
   resetChips();
-  switchFilter('hot', '本周活跃');
-  showToast('已切换到本周活跃吐槽');
+  switchFilter('hot', '鏈懆娲昏穬');
+  showToast('宸插垏鎹㈠埌鏈懆娲昏穬鍚愭Ы');
 });
 
 listHint.addEventListener('click', async () => {
@@ -1650,8 +1650,8 @@ const themeLabel = document.getElementById('themeLabel');
 const applyTheme = (mode) => {
   const isDark = mode === 'dark';
   document.body.classList.toggle('dark-mode', isDark);
-  themeIcon.textContent = isDark ? '☀️' : '🌙';
-  themeLabel.textContent = isDark ? '日光' : '黑夜';
+  themeIcon.textContent = isDark ? '??' : '??';
+  themeLabel.textContent = isDark ? '??' : '??';
   if (adminPanel && !adminPanel.hidden) renderAdminCharts();
 };
 
@@ -1662,7 +1662,7 @@ themeToggle.addEventListener('click', () => {
   const nextTheme = document.body.classList.contains('dark-mode') ? 'light' : 'dark';
   localStorage.setItem('campusVoiceTheme', nextTheme);
   applyTheme(nextTheme);
-  showToast(nextTheme === 'dark' ? '已切换夜间模式' : '已切换日间模式');
+  showToast(nextTheme === 'dark' ? '???????' : '???????');
 });
 
 const rulesBtn = document.getElementById('rulesBtn');
@@ -1738,7 +1738,7 @@ const closeAnnouncementEditor = () => {
 
 const openCreatePost = () => {
   if (!currentUser) {
-    showToast('请先登录后再发布吐槽');
+    showToast('璇峰厛鐧诲綍鍚庡啀鍙戝竷鍚愭Ы');
     openLogin();
     return;
   }
@@ -1811,20 +1811,20 @@ createPostForm.addEventListener('submit', async (event) => {
 
   if (!title) {
     postTitleInput.focus();
-    showToast('请输入标题');
+    showToast('?????');
     return;
   }
 
   if (!content) {
     postContentInput.focus();
-    showToast('请输入具体内容');
+    showToast('???????');
     return;
   }
 
   const submitBtn = createPostForm.querySelector('button[type="submit"]');
   const originalText = submitBtn.textContent;
   submitBtn.disabled = true;
-  submitBtn.textContent = '发布中...';
+  submitBtn.textContent = '???...';
 
   try {
     const { post } = await apiRequest('/api/posts', {
@@ -1835,11 +1835,11 @@ createPostForm.addEventListener('submit', async (event) => {
     if (topic) topic.unread = true;
     closeCreatePost();
     resetChips();
-    switchFilter('all', '最新吐槽');
+    switchFilter('all', '????');
     loadAdminStats({ silent: true });
-    showToast('发布成功，已保存到数据库');
+    showToast('????????????');
   } catch (error) {
-    showToast(error.message || '发布失败，请稍后重试');
+    showToast(error.message || '??????????');
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = originalText;
@@ -2091,7 +2091,7 @@ document.addEventListener('keydown', (event) => {
   document.querySelectorAll('.admin-workbench article.is-expanded, .admin-manage.is-expanded').forEach((card) => {
     card.classList.remove('is-expanded');
     const button = card.querySelector('[data-expand-card]');
-    if (button) button.textContent = '＋';
+    if (button) button.textContent = '?';
   });
   if (!rulesModal.hidden) closeRules();
   if (!createPostModal.hidden) closeCreatePost();
@@ -2185,9 +2185,9 @@ const logoutCurrentUser = async () => {
     await loadPersistedTopics();
     if (['liked', 'favorites', 'mine'].includes(currentFilter)) {
       resetChips();
-      switchFilter('all', '最新吐槽');
+      switchFilter('all', '????');
     }
-    showToast('已退出登录');
+    showToast('?????');
   } catch (error) {
     showToast(error.message);
   }
@@ -2239,10 +2239,10 @@ userMenu.addEventListener('click', async (event) => {
   loginBtn.setAttribute('aria-expanded', 'false');
 
   if (userFilter) {
-    const titles = { liked: '我的点赞', favorites: '我的收藏', mine: '我的帖子' };
+    const titles = { liked: '鎴戠殑鐐硅禐', favorites: '鎴戠殑鏀惰棌', mine: '鎴戠殑甯栧瓙' };
     resetChips();
-    switchFilter(userFilter, titles[userFilter] || '个人中心');
-    showToast(`已打开${titles[userFilter] || '个人中心'}`);
+    switchFilter(userFilter, titles[userFilter] || '涓汉涓績');
+    showToast(`宸叉墦寮€${titles[userFilter] || '涓汉涓績'}`);
     return;
   }
 
@@ -2322,18 +2322,18 @@ registerForm.addEventListener('submit', async (event) => {
   const confirmPassword = registerConfirmPassword.value.trim();
   if (!email) {
     registerEmail.classList.add('invalid');
-    showToast('请输入注册邮箱');
+    showToast('???????');
     return;
   }
   if (password.length < 6) {
     registerPassword.classList.add('invalid');
-    showToast('密码至少需要 6 位');
+    showToast('?????? 6 ?');
     return;
   }
   if (password !== confirmPassword) {
     registerPassword.classList.add('invalid');
     registerConfirmPassword.classList.add('invalid');
-    showToast('两次输入的密码不一致');
+    showToast('??????????');
     return;
   }
 
@@ -2346,7 +2346,7 @@ registerForm.addEventListener('submit', async (event) => {
     loginModal.hidden = false;
     loginEmail.value = email;
     setTimeout(() => loginPassword.focus(), 60);
-    showToast('注册成功，请登录');
+    showToast('娉ㄥ唽鎴愬姛锛岃鐧诲綍');
   } catch (error) {
     showToast(error.message);
   }
@@ -2360,24 +2360,24 @@ profileForm.addEventListener('submit', async (event) => {
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     profileEmail.classList.add('invalid');
-    showToast('请输入有效邮箱');
+    showToast('???????');
     return;
   }
   if (!nickname) {
     profileNickname.classList.add('invalid');
-    showToast('请输入用户名');
+    showToast('璇疯緭鍏ョ敤鎴峰悕');
     return;
   }
   if (nickname.length > 24) {
     profileNickname.classList.add('invalid');
-    showToast('用户名不能超过 24 个字符');
+    showToast('??????? 24 ???');
     return;
   }
 
   const submitBtn = profileForm.querySelector('button[type="submit"]');
   const originalText = submitBtn.textContent;
   submitBtn.disabled = true;
-  submitBtn.textContent = '保存中...';
+  submitBtn.textContent = '淇濆瓨涓?..';
   try {
     const { user } = await apiRequest('/api/auth/me', {
       method: 'PATCH',
@@ -2386,7 +2386,7 @@ profileForm.addEventListener('submit', async (event) => {
     updateAuthUI(user);
     await loadPersistedTopics();
     closeProfile();
-    showToast('用户名已更新');
+    showToast('鐢ㄦ埛鍚嶅凡鏇存柊');
   } catch (error) {
     profileNickname.classList.add('invalid');
     showToast(error.message);
@@ -2404,30 +2404,30 @@ securityForm.addEventListener('submit', async (event) => {
 
   if (!currentPasswordValue) {
     currentPassword.classList.add('invalid');
-    showToast('请输入当前密码');
+    showToast('???????');
     return;
   }
   if (newPasswordValue.length < 6) {
     newPassword.classList.add('invalid');
-    showToast('新密码至少需要 6 位');
+    showToast('??????? 6 ?');
     return;
   }
   if (newPasswordValue !== confirmNewPasswordValue) {
     newPassword.classList.add('invalid');
     confirmNewPassword.classList.add('invalid');
-    showToast('两次输入的新密码不一致');
+    showToast('???????????');
     return;
   }
   if (currentPasswordValue === newPasswordValue) {
     newPassword.classList.add('invalid');
-    showToast('新密码不能与当前密码相同');
+    showToast('鏂板瘑鐮佷笉鑳戒笌褰撳墠瀵嗙爜鐩稿悓');
     return;
   }
 
   const submitBtn = securityForm.querySelector('button[type="submit"]');
   const originalText = submitBtn.textContent;
   submitBtn.disabled = true;
-  submitBtn.textContent = '更新中...';
+  submitBtn.textContent = '鏇存柊涓?..';
   try {
     const { user } = await apiRequest('/api/auth/password', {
       method: 'PATCH',
@@ -2435,7 +2435,7 @@ securityForm.addEventListener('submit', async (event) => {
     });
     updateAuthUI(user);
     closeSecurity();
-    showToast('密码已更新');
+    showToast('?????');
   } catch (error) {
     currentPassword.classList.add('invalid');
     showToast(error.message);
@@ -2449,7 +2449,7 @@ loginForm.addEventListener('submit', async (event) => {
   const email = loginEmail.value.trim();
   const password = loginPassword.value.trim();
   if (!email || !password) {
-    markLoginError('请填写邮箱和密码');
+    markLoginError('璇峰～鍐欓偖绠卞拰瀵嗙爜');
     return;
   }
 
@@ -2461,7 +2461,7 @@ loginForm.addEventListener('submit', async (event) => {
     closeLogin();
     updateAuthUI(user);
     await loadPersistedTopics();
-    showToast('登录成功，欢迎回来');
+    showToast('?????????');
   } catch (error) {
     markLoginError(error.message);
   }

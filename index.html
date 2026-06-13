@@ -21,7 +21,8 @@
         <input type="search" id="searchInput" placeholder="搜索吐槽、课程、宿舍、食堂..." />
       </div>
       <div class="topbar-actions">
-        <button class="theme-toggle" id="themeToggle" aria-label="切换黑夜或白天模式" title="切换黑夜/白天模式">
+        <button class="text-btn announcement-entry" id="announcementBtn" type="button">公告</button>
+        <button class="theme-toggle" id="themeToggle" aria-label="切换黑夜或日光模式" title="切换黑夜/日光模式">
           <span class="theme-icon" id="themeIcon">🌙</span>
           <span class="theme-label" id="themeLabel">黑夜</span>
         </button>
@@ -38,6 +39,7 @@
             <button type="button" data-user-filter="liked">👍 我的点赞</button>
             <button type="button" data-user-filter="favorites">★ 我的收藏</button>
             <button type="button" data-user-filter="mine">✎ 我的帖子</button>
+            <button type="button" data-user-action="announcement" hidden>📣 编写公告</button>
             <button type="button" data-user-action="profile">⚙ 修改信息</button>
             <button type="button" data-user-action="security">🔒 账号安全</button>
             <button type="button" class="logout-menu-btn" data-user-action="logout">退出登录</button>
@@ -49,14 +51,14 @@
 
     <div class="main-wrap">
       <aside class="sidebar" id="sidebar">
-        <section class="sidebar-section" id="categorySidebarSection">
+        <section class="sidebar-section">
           <div class="sidebar-title">导航</div>
           <a class="sidebar-link active" href="#" data-filter="all" data-title="最新吐槽"><span>⌁</span> 最新吐槽</a>
           <a class="sidebar-link" href="#" data-filter="hot" data-title="热门吐槽"><span>🔥</span> 热门吐槽</a>
           <a class="sidebar-link" href="#" data-filter="mine" data-title="我的吐槽"><span>✎</span> 我的吐槽</a>
           <a class="sidebar-link" href="#" data-filter="resolved" data-title="已处理"><span>✓</span> 已处理</a>
         </section>
-        <section class="sidebar-section">
+        <section class="sidebar-section" id="categorySidebarSection">
           <div class="sidebar-title">吐槽板块</div>
           <a class="sidebar-link" href="#" data-filter="课程吐槽" data-title="课程吐槽"><span class="dot blue"></span> 课程吐槽</a>
           <a class="sidebar-link" href="#" data-filter="食堂吐槽" data-title="食堂吐槽"><span class="dot orange"></span> 食堂吐槽</a>
@@ -175,6 +177,7 @@
             </article>
           </div>
           <section class="admin-manage" aria-label="帖子管理">
+            <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
             <div class="admin-manage-head">
               <div>
                 <h2>帖子管理</h2>
@@ -209,33 +212,45 @@
           </section>
           <section class="admin-workbench" aria-label="总结与报告">
             <article class="admin-flow-card">
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
               <h2>建议处理</h2>
               <p>生成报告后，AI 会把本次纳入报告的吐槽归类为处理项。</p>
               <div class="admin-action-list" id="adminActionList"></div>
             </article>
             <article class="admin-ai-card">
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
               <div class="admin-card-heading">
                 <div>
                   <h2>智能总结</h2>
                   <p id="adminAiSummary">生成报告后会展示本次反馈摘要。</p>
                 </div>
-                <button type="button" class="primary-btn" id="generateReportBtn">生成报告</button>
               </div>
+              <button type="button" class="primary-btn admin-report-generate" id="generateReportBtn">生成报告</button>
               <ul class="admin-suggestion-list" id="adminSuggestionList"></ul>
             </article>
             <article class="admin-category-card">
-              <h2>添加板块</h2>
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+              <h2>板块管理</h2>
               <form class="admin-category-form" id="adminCategoryForm">
                 <input type="text" id="adminCategoryName" placeholder="板块名称" maxlength="64" required>
-                <input type="text" id="adminCategoryLabel" placeholder="可用标签，用逗号分隔" maxlength="120">
                 <button type="submit" class="primary-btn">添加</button>
+              </form>
+              <form class="admin-category-form" id="adminTagForm">
+                <select id="adminTagCategory" required></select>
+                <input type="text" id="adminTagInput" placeholder="标签名；留空并删除即删除板块" maxlength="64">
+                <div class="admin-category-actions">
+                  <button type="submit" class="primary-btn">添加标签</button>
+                  <button type="button" class="ghost-btn" id="adminDeleteCategoryBtn">删除</button>
+                </div>
               </form>
             </article>
             <article class="admin-archived-card">
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
               <h2>已归档处理</h2>
               <div class="admin-archived-list" id="adminArchivedList"></div>
             </article>
             <article class="admin-history-card">
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
               <div class="admin-card-heading">
                 <div>
                   <h2>历史报告</h2>
@@ -306,6 +321,37 @@
         <div class="create-actions">
           <button type="button" class="ghost-btn" id="createPostCancel">取消</button>
           <button type="submit" class="primary-btn">发布</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="announcementModal" hidden>
+    <div class="create-modal announcement-modal" role="dialog" aria-modal="true" aria-labelledby="announcementTitle">
+      <button class="modal-close" id="announcementClose" aria-label="关闭公告弹窗">×</button>
+      <h2 id="announcementTitle">公告留档</h2>
+      <p class="create-intro">按发布时间记录管理员发布的公告。</p>
+      <div class="announcement-list" id="announcementList"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="announcementEditorModal" hidden>
+    <div class="create-modal" role="dialog" aria-modal="true" aria-labelledby="announcementEditorTitle">
+      <button class="modal-close" id="announcementEditorClose" aria-label="关闭编写公告弹窗">×</button>
+      <h2 id="announcementEditorTitle">编写公告</h2>
+      <p class="create-intro">公告会以帖子形式留档，并记录发布时间。</p>
+      <form class="create-form" id="announcementForm">
+        <label>
+          <span>标题</span>
+          <input id="announcementTitleInput" type="text" maxlength="60" placeholder="请输入公告标题" required />
+        </label>
+        <label>
+          <span>公告内容</span>
+          <textarea id="announcementContentInput" rows="7" maxlength="5000" placeholder="请输入公告内容..." required></textarea>
+        </label>
+        <div class="create-actions">
+          <button type="button" class="ghost-btn" id="announcementCancel">取消</button>
+          <button type="submit" class="primary-btn">发布公告</button>
         </div>
       </form>
     </div>

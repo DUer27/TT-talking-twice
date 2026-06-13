@@ -59,12 +59,14 @@ const selectPostSql = (currentUserId = null) => `
     posts.*,
     users.email AS author_email,
     users.nickname AS author_nickname,
-    GROUP_CONCAT(post_tags.tag_name ORDER BY post_tags.tag_name SEPARATOR ',') AS tag_names,
-    ${currentUserId ? 'CASE WHEN post_likes.user_id IS NULL THEN 0 ELSE 1 END' : '0'} AS liked_by_current_user
+    (
+      SELECT GROUP_CONCAT(post_tags.tag_name ORDER BY post_tags.tag_name SEPARATOR ',')
+      FROM post_tags
+      WHERE post_tags.post_id = posts.id
+    ) AS tag_names,
+    ${currentUserId ? 'EXISTS(SELECT 1 FROM post_likes WHERE post_likes.post_id = posts.id AND post_likes.user_id = ?)' : '0'} AS liked_by_current_user
   FROM posts
   INNER JOIN users ON users.id = posts.user_id
-  LEFT JOIN post_tags ON post_tags.post_id = posts.id
-  ${currentUserId ? 'LEFT JOIN post_likes ON post_likes.post_id = posts.id AND post_likes.user_id = ?' : ''}
 `;
 
 const listPosts = async ({ limit = 100, currentUserId = null, includeHidden = false } = {}) => {
@@ -74,7 +76,6 @@ const listPosts = async ({ limit = 100, currentUserId = null, includeHidden = fa
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
      ${visibilitySql}
-     GROUP BY posts.id
      ORDER BY posts.created_at DESC, posts.id DESC
      LIMIT ${safeLimit}`,
     params
@@ -89,7 +90,6 @@ const findPostById = async (id, currentUserId = null, { includeHidden = false } 
     `${selectPostSql(currentUserId)}
      WHERE posts.id = ?
      ${visibilitySql}
-     GROUP BY posts.id
      LIMIT 1`,
     params
   );
@@ -107,7 +107,6 @@ const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = nul
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
      ${statusSql}
-     GROUP BY posts.id
      ORDER BY posts.created_at DESC, posts.id DESC
      LIMIT ${safeLimit}`,
     params
@@ -131,7 +130,6 @@ const updatePostsStatus = async ({ postIds, status, currentUserId = null }) => {
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
      WHERE posts.id IN (${placeholders})
-     GROUP BY posts.id
      ORDER BY posts.created_at DESC, posts.id DESC`,
     currentUserId ? [currentUserId, ...safeIds] : safeIds
   );
@@ -160,7 +158,11 @@ const createPost = async ({ userId, title, content, category, isAnonymous, tagNa
       [userId, title, content, category, isAnonymous ? 1 : 0]
     );
     for (const tagName of tagNames) {
-      await connection.execute('INSERT IGNORE INTO post_tags (post_id, tag_name) VALUES (?, ?)', [result.insertId, tagName]);
+      try {
+        await connection.execute('INSERT IGNORE INTO post_tags (post_id, tag_name) VALUES (?, ?)', [result.insertId, tagName]);
+      } catch (_error) {
+        // Tags are best-effort enrichment; they should never block the post itself.
+      }
     }
     await connection.commit();
     return findPostById(result.insertId, userId);

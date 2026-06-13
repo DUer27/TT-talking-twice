@@ -7,6 +7,7 @@ const {
   getPost,
   getPostStats,
   getPosts,
+  publishAnnouncement,
   publishComment,
   publishPost,
   toggleLike,
@@ -55,6 +56,15 @@ router.post('/admin/reports', requireAdmin, async (req, res, next) => {
   try {
     const report = await generateAdminReport(req.currentUser.id);
     res.status(201).json({ report });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admin/announcements', requireAdmin, async (req, res, next) => {
+  try {
+    const post = await publishAnnouncement(req.currentUser.id, req.body);
+    res.status(201).json({ post });
   } catch (error) {
     next(error);
   }

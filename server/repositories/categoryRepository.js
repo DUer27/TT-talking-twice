@@ -48,7 +48,45 @@ const createCategory = async ({ name, label, tags = [] }) => {
   }
 };
 
+const addCategoryTags = async ({ categoryName, tags }) => {
+  const [rows] = await getPool().execute('SELECT id FROM categories WHERE name = ? LIMIT 1', [categoryName]);
+  const categoryId = rows[0]?.id;
+  if (!categoryId) return null;
+  for (const tag of tags) {
+    await getPool().execute('INSERT IGNORE INTO category_tags (category_id, name) VALUES (?, ?)', [categoryId, tag]);
+  }
+  return (await listCategories()).find((category) => category.name === categoryName);
+};
+
+const deleteCategoryTag = async ({ categoryName, tag }) => {
+  const [rows] = await getPool().execute('SELECT id FROM categories WHERE name = ? LIMIT 1', [categoryName]);
+  const categoryId = rows[0]?.id;
+  if (!categoryId) return null;
+  const [result] = await getPool().execute(
+    'DELETE FROM category_tags WHERE category_id = ? AND name = ?',
+    [categoryId, tag]
+  );
+  return result.affectedRows > 0;
+};
+
+const deleteCategory = async (name) => {
+  try {
+    const [result] = await getPool().execute('DELETE FROM categories WHERE name = ?', [name]);
+    return result.affectedRows > 0;
+  } catch (error) {
+    if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_ROW_IS_REFERENCED') {
+      const inUseError = new Error('该板块已有帖子，不能删除');
+      inUseError.statusCode = 409;
+      throw inUseError;
+    }
+    throw error;
+  }
+};
+
 module.exports = {
+  addCategoryTags,
   createCategory,
+  deleteCategory,
+  deleteCategoryTag,
   listCategories,
 };
