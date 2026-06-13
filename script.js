@@ -125,6 +125,7 @@ const applyCategories = (categories = []) => {
   }
 
   renderTagMenu();
+  syncCategoryChip(currentFilter);
 
   if (categorySidebarSection) {
     categorySidebarSection.innerHTML = [
@@ -1218,6 +1219,16 @@ const resetChips = () => {
   renderTagMenu('all');
 };
 
+const syncCategoryChip = (filter = currentFilter) => {
+  if (!categoryChip || !categoryMenu) return;
+  const categoryNames = getVisibleCategories().map((category) => category.name);
+  const selectedCategory = categoryNames.includes(filter) ? filter : '全部';
+  categoryChip.textContent = `板块：${selectedCategory} ▸`;
+  categoryMenu.querySelectorAll('button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.category === selectedCategory);
+  });
+};
+
 const setAdminMode = (enabled) => {
   if (createPostBtn) createPostBtn.hidden = enabled;
 };
@@ -1237,6 +1248,7 @@ const switchFilter = (filter, title, options = {}) => {
   if (!options.keepSearch) searchInput.value = '';
   if (!options.keepTag) currentTagKeyword = '';
   if (!currentTagKeyword) tagChip.textContent = '标签：全部 ▸';
+  syncCategoryChip(filter);
   renderTagMenu(filter);
   setActiveSidebar(filter);
   setActiveNav(filter);
@@ -1258,6 +1270,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   topicPanel.hidden = false;
   adminPanel.hidden = true;
   setAdminMode(false);
+  syncCategoryChip(filter);
   const searchText = query ? `，搜索「${searchInput.value.trim()}」` : '';
   const tagText = currentTagKeyword ? `，标签「${currentTagKeyword}」` : '';
   listHint.textContent = `${title}${searchText}${tagText}，共 ${data.length} 条帖子`;
