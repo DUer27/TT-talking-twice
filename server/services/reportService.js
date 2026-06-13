@@ -1,12 +1,13 @@
 const { createReport, findReportById, listReportedPostIds, listReports } = require('../repositories/reportRepository');
 const { listAdminPosts } = require('../repositories/postRepository');
-const { extractDynamicKeywords } = require('./postService');
-const { generateReportPayload } = require('./aiService');
+const { addSuggestedTagsToCategories, getCategories } = require('./categoryService');
+const { extractDynamicKeywords, getPostAnalysisText } = require('./postService');
+const { generateReportPayload, getLastAiFailure } = require('./aiService');
 
 const statusLabels = {
   open: '待处理',
   resolved: '已处理',
-  hidden: '已隐藏',
+  deleted: '待删除',
 };
 
 const buildCategorySummary = (posts) => {
@@ -25,6 +26,50 @@ const buildKeywordSummary = (posts, limit = 8) => extractDynamicKeywords(posts, 
   count: item.count,
 }));
 
+const buildKeywordTrendMap = (posts, categories) => Object.fromEntries(categories.map((categoryItem) => {
+  const categoryPosts = posts.filter((post) => post.category === categoryItem.category);
+  const keywords = buildKeywordSummary(categoryPosts, 8);
+  const topKeyword = keywords[0] || { word: '暂无', count: 0 };
+  return [categoryItem.category, {
+    keyword: topKeyword.word,
+    mentions: topKeyword.count,
+    labels: keywords.map((item) => item.word),
+    points: keywords.map((item) => item.count),
+  }];
+}));
+
+const normalizeActionTitle = (value) => String(value || '').trim().replace(/\s+/g, ' ');
+
+const normalizePostIds = (postIds = []) => [...new Set(postIds.map((id) => String(id)))].sort();
+
+const getActionKey = (item) => {
+  const postIds = normalizePostIds(item.postIds || []);
+  const category = item.category || '';
+  if (postIds.length) return `${category}|posts:${postIds.join(',')}`;
+  return `${category}|title:${normalizeActionTitle(item.title || item.name)}`;
+};
+
+const dedupeActionItems = (items = []) => {
+  const seen = new Map();
+  items.forEach((item) => {
+    const postIds = normalizePostIds(item.postIds || []);
+    const title = normalizeActionTitle(item.title || item.name);
+    const key = getActionKey({ ...item, title, postIds });
+    if (!title && !postIds.length) return;
+    if (!seen.has(key)) {
+      seen.set(key, { ...item, title, postIds, postCount: postIds.length || item.postCount || 0 });
+      return;
+    }
+    const existing = seen.get(key);
+    seen.set(key, {
+      ...existing,
+      postIds: [...new Set([...(existing.postIds || []), ...postIds])],
+      postCount: Math.max(existing.postCount || 0, item.postCount || 0, postIds.length),
+    });
+  });
+  return [...seen.values()].map((item, index) => ({ ...item, id: item.id || `action-${index + 1}` }));
+};
+
 const buildActionItems = (posts) => {
   const actionItems = [];
   let actionIndex = 1;
@@ -35,17 +80,18 @@ const buildActionItems = (posts) => {
     const keywords = buildKeywordSummary(categoryPosts, 3);
 
     keywords.forEach((keywordItem) => {
-      const matchedPosts = categoryPosts.filter((post) => `${post.title || ''} ${post.content || ''}`.includes(keywordItem.word));
-      if (!matchedPosts.length) return;
+      const matchedPosts = categoryPosts.filter((post) => getPostAnalysisText(post).includes(keywordItem.word));
+      const newMatchedPosts = matchedPosts.filter((post) => !usedPostIds.has(String(post.id)));
+      if (!newMatchedPosts.length) return;
 
-      matchedPosts.forEach((post) => usedPostIds.add(String(post.id)));
+      newMatchedPosts.forEach((post) => usedPostIds.add(String(post.id)));
       actionItems.push({
         id: `action-${actionIndex}`,
         title: `${categoryItem.category}: ${keywordItem.word} 相关反馈处理`,
         category: categoryItem.category,
         keyword: keywordItem.word,
-        postIds: matchedPosts.map((post) => String(post.id)),
-        postCount: matchedPosts.length,
+        postIds: newMatchedPosts.map((post) => String(post.id)),
+        postCount: newMatchedPosts.length,
         status: 'open',
         archived: false,
       });
@@ -67,16 +113,17 @@ const buildActionItems = (posts) => {
     }
   });
 
-  return actionItems;
+  return dedupeActionItems(actionItems);
 };
 
 const mergeAiActionItems = (localItems, aiItems) => {
   if (!Array.isArray(aiItems) || !aiItems.length) return localItems;
-  return localItems.map((item, index) => {
+  const merged = localItems.map((item, index) => {
     const matchedAiItem = aiItems.find((aiItem) => aiItem.category && aiItem.category === item.category) || aiItems[index];
     const title = String(matchedAiItem?.title || matchedAiItem?.name || '').trim();
     return title ? { ...item, title } : item;
   });
+  return dedupeActionItems(merged);
 };
 
 const escapePdfText = (value) => String(value || '')
@@ -110,21 +157,22 @@ const buildSimplePdf = (title, body) => {
   return pdf;
 };
 
-const buildReportPayload = (posts, { source = 'local' } = {}) => {
+const buildReportPayload = (posts, { source = 'local', aiFailure = null } = {}) => {
   const statusCounts = posts.reduce((map, post) => {
     map[post.status] = (map[post.status] || 0) + 1;
     return map;
   }, {});
   const categories = buildCategorySummary(posts);
+  const keywordTrends = buildKeywordTrendMap(posts, categories);
   const keywords = buildKeywordSummary(posts);
   const topCategory = categories[0];
   const openCount = statusCounts.open || 0;
   const resolvedCount = statusCounts.resolved || 0;
-  const hiddenCount = statusCounts.hidden || 0;
+  const deletedCount = statusCounts.deleted || 0;
   const total = posts.length;
 
   const summary = total
-    ? `本次共汇总 ${total} 条反馈，待处理 ${openCount} 条，已处理 ${resolvedCount} 条，已隐藏 ${hiddenCount} 条。${topCategory ? `高频板块为「${topCategory.category}」，共 ${topCategory.count} 条。` : ''}`
+    ? `本次共汇总 ${total} 条反馈，待处理 ${openCount} 条，已处理 ${resolvedCount} 条，待删除 ${deletedCount} 条。${topCategory ? `高频板块为「${topCategory.category}」，共 ${topCategory.count} 条。` : ''}`
     : '当前暂无可汇总的反馈帖子。';
 
   const suggestions = [];
@@ -137,11 +185,14 @@ const buildReportPayload = (posts, { source = 'local' } = {}) => {
     total,
     statusCounts,
     categories,
+    keywordTrends,
     keywords,
     summary,
     suggestions,
     actionItems: buildActionItems(posts),
     source,
+    aiStatus: source === 'ai' ? 'success' : 'fallback',
+    aiFailure,
     postIds: posts.map((post) => String(post.id)),
     generatedAt: new Date().toISOString(),
   };
@@ -150,7 +201,7 @@ const buildReportPayload = (posts, { source = 'local' } = {}) => {
 const generateAdminReport = async (userId) => {
   const posts = await listAdminPosts({ status: 'all', currentUserId: userId, limit: 500 });
   const reportedPostIds = new Set(await listReportedPostIds());
-  const unusedPosts = posts.filter((post) => !reportedPostIds.has(String(post.id)));
+  const unusedPosts = posts.filter((post) => post.status !== 'deleted' && !reportedPostIds.has(String(post.id)));
   if (!unusedPosts.length) {
     const error = new Error('暂无新帖子可生成报告');
     error.statusCode = 409;
@@ -158,15 +209,35 @@ const generateAdminReport = async (userId) => {
   }
 
   const localPayload = buildReportPayload(unusedPosts);
-  const aiPayload = await generateReportPayload({ posts: unusedPosts, localPayload });
+  const existingCategories = await getCategories();
+  const startedAt = Date.now();
+  console.log(`[AI] generating admin report for ${unusedPosts.length} posts...`);
+  const aiPayload = await generateReportPayload({ posts: unusedPosts, localPayload, existingCategories });
+  console.log(`[AI] admin report ${aiPayload ? 'completed' : 'fell back to local summary'} in ${Date.now() - startedAt}ms`);
+  const aiFailure = aiPayload ? null : getLastAiFailure();
+  if (aiFailure) console.warn(`[AI] admin report fallback reason: ${aiFailure.message}${aiFailure.detail ? `: ${aiFailure.detail}` : ''}`);
+  const addedTags = aiPayload?.suggestedTags
+    ? await addSuggestedTagsToCategories(aiPayload.suggestedTags)
+    : [];
   const payload = aiPayload ? {
     ...localPayload,
     ...aiPayload,
     source: 'ai',
+    aiStatus: 'success',
+    aiFailure: null,
+    addedTags,
     postIds: localPayload.postIds,
     actionItems: mergeAiActionItems(localPayload.actionItems, aiPayload.actionItems),
     generatedAt: new Date().toISOString(),
-  } : localPayload;
+  } : {
+    ...localPayload,
+    source: 'local',
+    aiStatus: 'fallback',
+    aiFailure: aiFailure || { message: 'AI request returned no usable result', detail: '', at: new Date().toISOString() },
+    addedTags: [],
+  };
+  payload.actionItems = dedupeActionItems(payload.actionItems);
+  payload.categoriesSnapshot = await getCategories();
   const title = `校园反馈处理报告 ${new Date().toLocaleDateString('zh-CN')}`;
   return createReport({ userId, title, summary: payload.summary, payload, postIds: localPayload.postIds });
 };
@@ -181,6 +252,19 @@ const getReportExport = async (id, format = 'markdown') => {
     throw error;
   }
   const payload = report.payload || {};
+  const aiFailureLines = payload.aiFailure ? [
+    '',
+    '## AI 请求日志',
+    `- 状态：${payload.aiStatus === 'fallback' ? 'AI 请求失败，回退为本地总结链路' : 'AI 请求成功'}`,
+    `- 时间：${payload.aiFailure.at || '-'}`,
+    `- 原因：${payload.aiFailure.message || '-'}`,
+    ...(payload.aiFailure.detail ? [`- 详情：${payload.aiFailure.detail}`] : []),
+  ] : [];
+  const addedTagLines = Array.isArray(payload.addedTags) && payload.addedTags.length ? [
+    '',
+    '## 自动补充标签',
+    ...payload.addedTags.map((item) => `- ${item.category}: ${item.tag}`),
+  ] : [];
   const lines = [
     `# ${report.title}`,
     '',
@@ -200,6 +284,8 @@ const getReportExport = async (id, format = 'markdown') => {
     '',
     '## 建议处理',
     ...(payload.actionItems || []).map((item) => `- ${item.title}: ${item.postCount || item.postIds?.length || 0} 个帖子吐槽`),
+    ...addedTagLines,
+    ...aiFailureLines,
     '',
   ];
   const markdown = lines.join('\n');

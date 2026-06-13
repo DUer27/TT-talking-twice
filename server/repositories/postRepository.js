@@ -20,10 +20,14 @@ const publicPostFields = (post, currentUserId = null) => {
     category: post.category,
     isAnonymous,
     status: post.status,
+    deleteMarkedAt: toIsoString(post.delete_marked_at),
+    deleteExpiresAt: toIsoString(post.delete_marked_at ? new Date(new Date(post.delete_marked_at).getTime() + 5 * 60 * 1000) : null),
     views: Number(post.view_count || 0),
     replies: Number(post.reply_count || 0),
     likeCount: Number(post.like_count || 0),
+    favoriteCount: Number(post.favorite_count || 0),
     liked: Boolean(Number(post.liked_by_current_user || 0)),
+    favorited: Boolean(Number(post.favorited_by_current_user || 0)),
     tags: post.tag_names ? String(post.tag_names).split(',').filter(Boolean) : [],
     author: {
       id: isAnonymous ? null : String(post.user_id),
@@ -32,6 +36,7 @@ const publicPostFields = (post, currentUserId = null) => {
     },
     mine: isMine,
     resolved: post.status === 'resolved',
+    deleted: post.status === 'deleted',
     createdAt: toIsoString(post.created_at),
     updatedAt: toIsoString(post.updated_at),
   };
@@ -64,28 +69,74 @@ const selectPostSql = (currentUserId = null) => `
       FROM post_tags
       WHERE post_tags.post_id = posts.id
     ) AS tag_names,
-    ${currentUserId ? 'EXISTS(SELECT 1 FROM post_likes WHERE post_likes.post_id = posts.id AND post_likes.user_id = ?)' : '0'} AS liked_by_current_user
+    ${currentUserId ? 'EXISTS(SELECT 1 FROM post_likes WHERE post_likes.post_id = posts.id AND post_likes.user_id = ?)' : '0'} AS liked_by_current_user,
+    ${currentUserId ? 'EXISTS(SELECT 1 FROM post_favorites WHERE post_favorites.post_id = posts.id AND post_favorites.user_id = ?)' : '0'} AS favorited_by_current_user
   FROM posts
   INNER JOIN users ON users.id = posts.user_id
 `;
 
-const listPosts = async ({ limit = 100, currentUserId = null, includeHidden = false } = {}) => {
-  const safeLimit = Math.max(1, Math.min(Number(limit) || 100, 200));
-  const params = currentUserId ? [currentUserId] : [];
-  const visibilitySql = includeHidden ? '' : "WHERE posts.status <> 'hidden'";
+const purgeExpiredDeletedPosts = async () => {
+  const [result] = await getPool().execute(
+    "DELETE FROM posts WHERE status = 'deleted' AND delete_marked_at <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)"
+  );
+  return result.affectedRows || 0;
+};
+
+const activePostWhereSql = "posts.status <> 'deleted'";
+
+const buildListOrderSql = (sort = 'latest') => {
+  if (sort === 'hot') return 'ORDER BY (posts.like_count + posts.favorite_count) DESC, posts.created_at DESC, posts.id DESC';
+  return 'ORDER BY posts.created_at DESC, posts.id DESC';
+};
+
+const listPosts = async ({ limit = 30, offset = 0, currentUserId = null, includeHidden = false, sort = 'latest', category = '', status = '', scope = '' } = {}) => {
+  await purgeExpiredDeletedPosts();
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 30, 30));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const params = currentUserId ? [currentUserId, currentUserId] : [];
+  const whereParts = [includeHidden ? activePostWhereSql : "posts.status NOT IN ('hidden', 'deleted')"];
+  if (sort === 'hot') {
+    whereParts.push('(posts.like_count + posts.favorite_count) > 0');
+  }
+  if (category) {
+    whereParts.push('posts.category = ?');
+    params.push(category);
+  }
+  if (status) {
+    whereParts.push('posts.status = ?');
+    params.push(status);
+  }
+  if (['mine', 'liked', 'favorites'].includes(scope) && !currentUserId) {
+    whereParts.push('1 = 0');
+  }
+  if (scope === 'mine' && currentUserId) {
+    whereParts.push('posts.user_id = ?');
+    params.push(currentUserId);
+  }
+  if (scope === 'liked' && currentUserId) {
+    whereParts.push('EXISTS(SELECT 1 FROM post_likes liked_scope WHERE liked_scope.post_id = posts.id AND liked_scope.user_id = ?)');
+    params.push(currentUserId);
+  }
+  if (scope === 'favorites' && currentUserId) {
+    whereParts.push('EXISTS(SELECT 1 FROM post_favorites favorite_scope WHERE favorite_scope.post_id = posts.id AND favorite_scope.user_id = ?)');
+    params.push(currentUserId);
+  }
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
-     ${visibilitySql}
-     ORDER BY posts.created_at DESC, posts.id DESC
-     LIMIT ${safeLimit}`,
+     WHERE ${whereParts.join(' AND ')}
+     ${buildListOrderSql(sort)}
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     params
   );
   return rows.map((row) => publicPostFields(row, currentUserId));
 };
 
-const findPostById = async (id, currentUserId = null, { includeHidden = false } = {}) => {
-  const params = currentUserId ? [currentUserId, id] : [id];
-  const visibilitySql = includeHidden ? '' : "AND posts.status <> 'hidden'";
+const findPostById = async (id, currentUserId = null, { includeHidden = false, includeDeleted = false } = {}) => {
+  await purgeExpiredDeletedPosts();
+  const params = currentUserId ? [currentUserId, currentUserId, id] : [id];
+  const visibilitySql = includeDeleted
+    ? ''
+    : (includeHidden ? "AND posts.status <> 'deleted'" : "AND posts.status NOT IN ('hidden', 'deleted')");
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
      WHERE posts.id = ?
@@ -97,8 +148,9 @@ const findPostById = async (id, currentUserId = null, { includeHidden = false } 
 };
 
 const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = null } = {}) => {
+  await purgeExpiredDeletedPosts();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 500));
-  const params = currentUserId ? [currentUserId] : [];
+  const params = currentUserId ? [currentUserId, currentUserId] : [];
   let statusSql = '';
   if (status && status !== 'all') {
     statusSql = 'WHERE posts.status = ?';
@@ -115,23 +167,39 @@ const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = nul
 };
 
 const updatePostStatus = async ({ postId, status, currentUserId = null }) => {
-  await getPool().execute('UPDATE posts SET status = ? WHERE id = ?', [status, postId]);
-  return findPostById(postId, currentUserId, { includeHidden: true });
+  await purgeExpiredDeletedPosts();
+  if (status === 'deleted') {
+    await getPool().execute(
+      "UPDATE posts SET status = 'deleted', delete_marked_at = UTC_TIMESTAMP() WHERE id = ? AND status <> 'deleted'",
+      [postId]
+    );
+  } else {
+    await getPool().execute('UPDATE posts SET status = ?, delete_marked_at = NULL WHERE id = ?', [status, postId]);
+  }
+  return findPostById(postId, currentUserId, { includeHidden: true, includeDeleted: true });
 };
 
 const updatePostsStatus = async ({ postIds, status, currentUserId = null }) => {
+  await purgeExpiredDeletedPosts();
   const safeIds = [...new Set(postIds.map((id) => Number(id)).filter(Boolean))];
   if (!safeIds.length) return [];
   const placeholders = safeIds.map(() => '?').join(', ');
-  await getPool().execute(
-    `UPDATE posts SET status = ? WHERE id IN (${placeholders})`,
-    [status, ...safeIds]
-  );
+  if (status === 'deleted') {
+    await getPool().execute(
+      `UPDATE posts SET status = 'deleted', delete_marked_at = UTC_TIMESTAMP() WHERE id IN (${placeholders}) AND status <> 'deleted'`,
+      safeIds
+    );
+  } else {
+    await getPool().execute(
+      `UPDATE posts SET status = ?, delete_marked_at = NULL WHERE id IN (${placeholders})`,
+      [status, ...safeIds]
+    );
+  }
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
      WHERE posts.id IN (${placeholders})
      ORDER BY posts.created_at DESC, posts.id DESC`,
-    currentUserId ? [currentUserId, ...safeIds] : safeIds
+    currentUserId ? [currentUserId, currentUserId, ...safeIds] : safeIds
   );
   return rows.map((row) => publicPostFields(row, currentUserId));
 };
@@ -175,7 +243,8 @@ const createPost = async ({ userId, title, content, category, isAnonymous, tagNa
 };
 
 const incrementPostViews = async (id, currentUserId = null, { includeHidden = false } = {}) => {
-  const visibilitySql = includeHidden ? '' : "AND status <> 'hidden'";
+  await purgeExpiredDeletedPosts();
+  const visibilitySql = includeHidden ? "AND status <> 'deleted'" : "AND status NOT IN ('hidden', 'deleted')";
   await getPool().execute(
     `UPDATE posts SET view_count = view_count + 1, updated_at = updated_at WHERE id = ? ${visibilitySql}`,
     [id]
@@ -188,7 +257,7 @@ const createComment = async ({ postId, userId, content }) => {
   try {
     await connection.beginTransaction();
     const [postRows] = await connection.execute(
-      "SELECT id FROM posts WHERE id = ? AND status <> 'hidden' FOR UPDATE",
+      "SELECT id FROM posts WHERE id = ? AND status NOT IN ('hidden', 'deleted') FOR UPDATE",
       [postId]
     );
     if (!postRows.length) {
@@ -227,7 +296,7 @@ const togglePostLike = async ({ postId, userId }) => {
   try {
     await connection.beginTransaction();
     const [postRows] = await connection.execute(
-      "SELECT id FROM posts WHERE id = ? AND status <> 'hidden' FOR UPDATE",
+      "SELECT id FROM posts WHERE id = ? AND status NOT IN ('hidden', 'deleted') FOR UPDATE",
       [postId]
     );
     if (!postRows.length) {
@@ -257,25 +326,63 @@ const togglePostLike = async ({ postId, userId }) => {
   }
 };
 
+const togglePostFavorite = async ({ postId, userId }) => {
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [postRows] = await connection.execute(
+      "SELECT id FROM posts WHERE id = ? AND status NOT IN ('hidden', 'deleted') FOR UPDATE",
+      [postId]
+    );
+    if (!postRows.length) {
+      await connection.rollback();
+      return null;
+    }
+    const [favoriteRows] = await connection.execute(
+      'SELECT post_id FROM post_favorites WHERE post_id = ? AND user_id = ? LIMIT 1',
+      [postId, userId]
+    );
+    const favorited = favoriteRows.length === 0;
+    if (favorited) {
+      await connection.execute('INSERT INTO post_favorites (post_id, user_id) VALUES (?, ?)', [postId, userId]);
+      await connection.execute('UPDATE posts SET favorite_count = favorite_count + 1 WHERE id = ?', [postId]);
+    } else {
+      await connection.execute('DELETE FROM post_favorites WHERE post_id = ? AND user_id = ?', [postId, userId]);
+      await connection.execute('UPDATE posts SET favorite_count = GREATEST(favorite_count - 1, 0) WHERE id = ?', [postId]);
+    }
+    await connection.commit();
+    const post = await findPostById(postId, userId);
+    return { favorited, post };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 const getPostStatsData = async () => {
+  await purgeExpiredDeletedPosts();
   const [summaryRows] = await getPool().query(`
     SELECT
       COUNT(*) AS total_count,
       SUM(CASE WHEN DATE(created_at) = UTC_DATE() THEN 1 ELSE 0 END) AS today_count,
       SUM(CASE WHEN DATE(created_at) = DATE_SUB(UTC_DATE(), INTERVAL 1 DAY) THEN 1 ELSE 0 END) AS yesterday_count
     FROM posts
+    WHERE status <> 'deleted'
   `);
 
   const [categoryRows] = await getPool().query(`
     SELECT category, COUNT(*) AS post_count
     FROM posts
+    WHERE status <> 'deleted'
     GROUP BY category
   `);
 
   const [recentRows] = await getPool().query(`
     SELECT category, title, content, created_at
     FROM posts
-    WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
+    WHERE status <> 'deleted' AND created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 DAY)
     ORDER BY created_at DESC, id DESC
     LIMIT 1000
   `);
@@ -296,7 +403,9 @@ module.exports = {
   listAdminPosts,
   listCommentsByPostId,
   listPosts,
+  purgeExpiredDeletedPosts,
   publicPostFields,
+  togglePostFavorite,
   togglePostLike,
   updatePostStatus,
   updatePostsStatus,

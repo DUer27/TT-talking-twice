@@ -141,12 +141,12 @@
             <article class="admin-card">
               <strong>今日新增</strong>
               <span id="todayPostCount">0</span>
-              <small id="todayPostChange">正在读取数据库...</small>
+              <small id="todayPostChange">等待统计</small>
             </article>
             <article class="admin-card admin-card-hot">
               <strong>高频板块</strong>
               <span id="hotCategoryName">暂无数据</span>
-              <small id="hotCategorySummary">正在读取数据库统计...</small>
+              <small id="hotCategorySummary">等待统计</small>
               <div class="hot-breakdown" aria-label="高频板块占比">
                 <button type="button" class="active" data-category-key="食堂吐槽"><b>排队 42</b><em>食堂吐槽</em></button>
                 <button type="button" data-category-key="宿舍生活"><b>热水 34</b><em>宿舍生活</em></button>
@@ -177,7 +177,7 @@
             </article>
           </div>
           <section class="admin-manage" aria-label="帖子管理">
-            <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+            <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
             <div class="admin-manage-head">
               <div>
                 <h2>帖子管理</h2>
@@ -189,7 +189,7 @@
                   <option value="all">全部状态</option>
                   <option value="open">待处理</option>
                   <option value="resolved">已处理</option>
-                  <option value="hidden">已隐藏</option>
+                  <option value="deleted">待删除</option>
                 </select>
               </div>
             </div>
@@ -212,13 +212,13 @@
           </section>
           <section class="admin-workbench" aria-label="总结与报告">
             <article class="admin-flow-card">
-              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
               <h2>建议处理</h2>
               <p>生成报告后，AI 会把本次纳入报告的吐槽归类为处理项。</p>
               <div class="admin-action-list" id="adminActionList"></div>
             </article>
             <article class="admin-ai-card">
-              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
               <div class="admin-card-heading">
                 <div>
                   <h2>智能总结</h2>
@@ -229,7 +229,7 @@
               <ul class="admin-suggestion-list" id="adminSuggestionList"></ul>
             </article>
             <article class="admin-category-card">
-              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
               <h2>板块管理</h2>
               <form class="admin-category-form" id="adminCategoryForm">
                 <input type="text" id="adminCategoryName" placeholder="板块名称" maxlength="64" required>
@@ -245,12 +245,12 @@
               </form>
             </article>
             <article class="admin-archived-card">
-              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
               <h2>已归档处理</h2>
               <div class="admin-archived-list" id="adminArchivedList"></div>
             </article>
             <article class="admin-history-card">
-              <button type="button" class="admin-expand-btn" data-expand-card title="放大">⛶</button>
+              <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
               <div class="admin-card-heading">
                 <div>
                   <h2>历史报告</h2>
@@ -277,7 +277,7 @@
         <li><strong>聚焦校园公共问题。</strong>鼓励围绕课程安排、食堂、宿舍、设施、活动、学习生活等公共议题发言。</li>
         <li><strong>拒绝虚假与恶意内容。</strong>不得编造事实、恶意带节奏、重复刷屏、发布广告或与校园反馈无关的内容。</li>
         <li><strong>欢迎提出建设性建议。</strong>如果可以，请在吐槽后附上你认为可行的改进方案，方便管理员汇总给相关部门。</li>
-        <li><strong>平台保留管理权。</strong>明显违规内容可能被隐藏、删除或提交管理员处理；严重违规账号可能被限制使用。</li>
+        <li><strong>平台保留管理权。</strong>明显违规内容可能被删除或提交管理员处理；严重违规账号可能被限制使用。</li>
       </ol>
       <div class="rules-footer">
         <span>一句话原则：可以尖锐，但要真实；可以吐槽，但要尊重。</span>

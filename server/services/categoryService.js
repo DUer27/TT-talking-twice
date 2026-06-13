@@ -16,6 +16,73 @@ const parseTags = (value) => normalizeText(value || '')
   .filter(Boolean)
   .slice(0, 12);
 
+const tagStopWords = new Set(['学校', '同学', '老师', '问题', '建议', '反馈', '处理', '吐槽', '情况', '东西', '地方', '这个', '那个']);
+
+const normalizeTagForCompare = (value) => normalizeText(value)
+  .toLowerCase()
+  .replace(/[\s,，。.!！?？;；:：、\-—_()[\]【】《》"“”'‘’/\\]+/g, '');
+
+const isCoveredByExistingTag = (tag, existingTags = []) => {
+  const normalizedTag = normalizeTagForCompare(tag);
+  if (!normalizedTag) return true;
+  return existingTags.some((existingTag) => {
+    const normalizedExisting = normalizeTagForCompare(existingTag);
+    if (!normalizedExisting) return false;
+    if (normalizedExisting === normalizedTag) return true;
+    return normalizedTag.length > normalizedExisting.length && normalizedTag.includes(normalizedExisting);
+  });
+};
+
+const isUsefulTag = (tag) => {
+  if (!tag || tag.length < 2 || tag.length > 8) return false;
+  if (tagStopWords.has(tag)) return false;
+  if (/^[0-9]+$/.test(tag)) return false;
+  return /[\u4e00-\u9fffA-Za-z]/.test(tag);
+};
+
+const normalizeSuggestedTags = (suggestions = [], fallbackCategory = '') => {
+  const normalized = [];
+  const source = Array.isArray(suggestions) ? suggestions : [];
+  source.forEach((item) => {
+    if (typeof item === 'string') {
+      const tag = normalizeText(item);
+      if (fallbackCategory && isUsefulTag(tag)) normalized.push({ category: fallbackCategory, tag });
+      return;
+    }
+    const category = normalizeText(item?.category || item?.categoryName || fallbackCategory);
+    const tags = Array.isArray(item?.tags) ? item.tags : [item?.tag || item?.name || item?.word].filter(Boolean);
+    tags.forEach((value) => {
+      const tag = normalizeText(value);
+      if (category && isUsefulTag(tag)) normalized.push({ category, tag });
+    });
+  });
+  return normalized;
+};
+
+const addSuggestedTagsToCategories = async (suggestions = [], { fallbackCategory = '' } = {}) => {
+  const categories = await listCategories();
+  const categoryMap = new Map(categories.map((category) => [category.name, category]));
+  const groupedTags = new Map();
+
+  normalizeSuggestedTags(suggestions, fallbackCategory).forEach(({ category, tag }) => {
+    const matchedCategory = categoryMap.get(category);
+    if (!matchedCategory) return;
+    const existingTags = matchedCategory.tags || [];
+    if (isCoveredByExistingTag(tag, existingTags)) return;
+    if (!groupedTags.has(category)) groupedTags.set(category, new Set());
+    groupedTags.get(category).add(tag);
+  });
+
+  const addedTags = [];
+  for (const [category, tagSet] of groupedTags.entries()) {
+    const tags = [...tagSet];
+    await addCategoryTags({ categoryName: category, tags });
+    tags.forEach((tag) => addedTags.push({ category, tag }));
+  }
+
+  return addedTags;
+};
+
 const addCategory = async ({ name }) => {
   const normalizedName = normalizeText(name);
   const normalizedLabel = normalizedName.slice(0, 4);
@@ -82,6 +149,7 @@ const removeCategoryOrTag = async ({ category, tag }) => {
 
 module.exports = {
   addCategory,
+  addSuggestedTagsToCategories,
   addTagsToCategory,
   getCategories,
   removeCategoryOrTag,

@@ -10,6 +10,7 @@ const {
   publishAnnouncement,
   publishComment,
   publishPost,
+  toggleFavorite,
   toggleLike,
 } = require('../services/postService');
 const { generateAdminReport, getReportExport, getReportHistory } = require('../services/reportService');
@@ -18,7 +19,7 @@ const router = express.Router();
 
 router.get('/', async (req, res, next) => {
   try {
-    const posts = await getPosts({ currentUserId: req.currentUser?.id });
+    const posts = await getPosts({ currentUserId: req.currentUser?.id, query: req.query });
     res.json({ posts });
   } catch (error) {
     next(error);
@@ -124,6 +125,15 @@ router.post('/:id/comments', requireAuth, async (req, res, next) => {
 router.post('/:id/like', requireAuth, async (req, res, next) => {
   try {
     const result = await toggleLike(req.params.id, req.currentUser.id);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/favorite', requireAuth, async (req, res, next) => {
+  try {
+    const result = await toggleFavorite(req.params.id, req.currentUser.id);
     res.json(result);
   } catch (error) {
     next(error);

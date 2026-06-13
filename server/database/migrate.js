@@ -88,6 +88,19 @@ const migrate = async () => {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  const [deleteMarkedColumnRows] = await pool.execute("SHOW COLUMNS FROM posts LIKE 'delete_marked_at'");
+  if (!deleteMarkedColumnRows.length) {
+    await pool.query('ALTER TABLE posts ADD COLUMN delete_marked_at DATETIME NULL AFTER status');
+  }
+  const [deleteIndexRows] = await pool.execute("SHOW INDEX FROM posts WHERE Key_name = 'idx_posts_status_delete_marked_at'");
+  if (!deleteIndexRows.length) {
+    await pool.query('ALTER TABLE posts ADD KEY idx_posts_status_delete_marked_at (status, delete_marked_at)');
+  }
+  const [favoriteCountColumnRows] = await pool.execute("SHOW COLUMNS FROM posts LIKE 'favorite_count'");
+  if (!favoriteCountColumnRows.length) {
+    await pool.query('ALTER TABLE posts ADD COLUMN favorite_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER like_count');
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS categories (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -173,6 +186,28 @@ const migrate = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS post_favorites (
+      post_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (post_id, user_id),
+      KEY idx_post_favorites_user_id (user_id),
+      CONSTRAINT fk_post_favorites_post_id FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      CONSTRAINT fk_post_favorites_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    UPDATE posts
+    LEFT JOIN (
+      SELECT post_id, COUNT(*) AS favorite_total
+      FROM post_favorites
+      GROUP BY post_id
+    ) favorite_counts ON favorite_counts.post_id = posts.id
+    SET posts.favorite_count = COALESCE(favorite_counts.favorite_total, 0)
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_reports (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       user_id BIGINT UNSIGNED NOT NULL,
@@ -202,6 +237,7 @@ const migrate = async () => {
 
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');
+  await pool.query("DELETE FROM posts WHERE status = 'deleted' AND delete_marked_at <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)");
 };
 
 if (require.main === module) {

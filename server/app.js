@@ -8,6 +8,7 @@ const { attachCurrentUser } = require('./middleware/authMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
 const postRoutes = require('./routes/postRoutes');
+const { purgeExpiredDeletedPosts } = require('./repositories/postRepository');
 
 const app = express();
 const pidFile = path.join(rootDir, '.server.pid');
@@ -50,6 +51,14 @@ app.use((error, _req, res, _next) => {
 
 const start = async () => {
   await migrate();
+  const cleanupDeletedPosts = () => {
+    purgeExpiredDeletedPosts().catch((error) => {
+      console.warn(`Failed to purge expired deleted posts: ${error.message}`);
+    });
+  };
+  cleanupDeletedPosts();
+  const cleanupTimer = setInterval(cleanupDeletedPosts, 60 * 1000);
+  cleanupTimer.unref?.();
   const server = app.listen(port, () => {
     fs.writeFileSync(pidFile, String(process.pid));
     console.log(`TT-talking-twice is running at http://127.0.0.1:${port}`);

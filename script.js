@@ -208,6 +208,11 @@ let currentFilter = 'all';
 let currentTitle = '最新吐槽';
 let currentTopicId = null;
 let currentTagKeyword = '';
+let postPageOffset = 0;
+let postPageLoading = false;
+let postPageHasMore = true;
+let postPageRequestId = 0;
+const postPageSize = 30;
 let adminPosts = [];
 let adminPostLoading = false;
 let adminReports = [];
@@ -324,7 +329,7 @@ const normalizePostTopic = (post) => {
   if (!post) return null;
   const authorInitial = post.author?.initial || (post.isAnonymous ? '?' : '?');
   const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
-  const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : []), post.isAnonymous ? '匿名' : '实名'];
+  const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : [])];
   if (post.resolved || post.status === 'resolved') tags.push('已处理');
   else tags.push('待回应');
 
@@ -342,13 +347,15 @@ const normalizePostTopic = (post) => {
     activity: getRelativeActivity(post.updatedAt || post.createdAt),
     posters: [authorInitial],
     authorName,
-    hot: Number(post.likeCount || 0) + Number(post.replies || 0) * 2 + Number(post.views || 0) >= 50,
+    hotScore: Number(post.likeCount || 0) + Number(post.favoriteCount || 0),
+    hot: Number(post.likeCount || 0) + Number(post.favoriteCount || 0) > 0,
     mine: Boolean(post.mine),
     resolved: Boolean(post.resolved || post.status === 'resolved'),
     unread: false,
-    favorite: false,
+    favorite: Boolean(post.favorited),
     liked: Boolean(post.liked),
     likeCount: Number(post.likeCount || 0),
+    favoriteCount: Number(post.favoriteCount || 0),
     comments: Array.isArray(post.comments) ? post.comments : [],
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
@@ -363,7 +370,6 @@ const updateTopicFromPost = (post, { preserveState = true, prepend = true } = {}
   if (existingIndex >= 0) {
     const existingTopic = topics[existingIndex];
     if (preserveState) {
-      nextTopic.favorite = existingTopic.favorite;
       nextTopic.unread = existingTopic.unread;
       if (!Array.isArray(post.comments) && Array.isArray(existingTopic.comments)) {
         nextTopic.comments = existingTopic.comments;
@@ -379,34 +385,49 @@ const updateTopicFromPost = (post, { preserveState = true, prepend = true } = {}
   return nextTopic;
 };
 
-const loadPersistedTopics = async ({ silent = true } = {}) => {
+const getPostListSort = (filter = currentFilter) => (filter === 'hot' ? 'hot' : 'latest');
+
+const getPostListQuery = (filter = currentFilter) => {
+  const query = new URLSearchParams({
+    limit: String(postPageSize),
+    offset: String(postPageOffset),
+    sort: getPostListSort(filter),
+  });
+  if (getVisibleCategories().some((category) => category.name === filter)) query.set('category', filter);
+  if (filter === 'resolved') query.set('status', 'resolved');
+  if (['mine', 'liked', 'favorites'].includes(filter)) query.set('scope', filter);
+  return query;
+};
+
+const loadPersistedTopics = async ({ silent = true, reset = true } = {}) => {
+  if (postPageLoading && !reset) return;
+  const requestId = postPageRequestId + 1;
+  postPageRequestId = requestId;
+  postPageLoading = true;
   try {
-    const { posts = [] } = await apiRequest('/api/posts');
-    const localState = new Map(topics.map((topic) => [String(topic.id), {
-      favorite: topic.favorite,
-      unread: topic.unread,
-    }]));
-
-    for (let index = topics.length - 1; index >= 0; index -= 1) {
-      if (topics[index].persisted) topics.splice(index, 1);
+    if (reset) {
+      postPageOffset = 0;
+      postPageHasMore = true;
+      for (let index = topics.length - 1; index >= 0; index -= 1) {
+        if (topics[index].persisted) topics.splice(index, 1);
+      }
     }
+    if (!postPageHasMore) return;
 
-    const persistedTopics = posts
-      .map(normalizePostTopic)
-      .filter(Boolean)
-      .map((topic) => ({
-        ...topic,
-        favorite: localState.get(String(topic.id))?.favorite || false,
-        unread: localState.get(String(topic.id))?.unread || false,
-      }));
-
-    topics.unshift(...persistedTopics);
+    const query = getPostListQuery();
+    const { posts = [] } = await apiRequest(`/api/posts?${query.toString()}`);
+    if (requestId !== postPageRequestId) return;
+    posts.forEach((post) => updateTopicFromPost(post, { preserveState: true, prepend: false }));
+    postPageOffset += posts.length;
+    postPageHasMore = posts.length === postPageSize;
 
     if (currentFilter === 'admin') await loadAdminStats({ silent: true });
     else renderTopics(currentFilter, currentTitle);
     if (!silent) showToast('已刷新数据库帖子');
   } catch (error) {
     if (!silent) showToast(error.message || '帖子加载失败，请稍后重试');
+  } finally {
+    if (requestId === postPageRequestId) postPageLoading = false;
   }
 };
 
@@ -450,6 +471,9 @@ const loadAdminStats = async ({ silent = true } = {}) => {
   try {
     const { stats } = await apiRequest('/api/posts/stats');
     adminStats = stats || adminStats;
+    if (Array.isArray(adminStats.categoriesSnapshot)) {
+      applyCategories(adminStats.categoriesSnapshot);
+    }
     categoryTrendMap = { ...createEmptyTrendMap(), ...(adminStats.trends || {}) };
     activeTrendCategory = adminStats.hotCategory || activeTrendCategory || categoryStatOrder[0].category;
     activeTrendIndex = 0;
@@ -467,7 +491,16 @@ const loadAdminStats = async ({ silent = true } = {}) => {
 const adminStatusLabels = {
   open: '待处理',
   resolved: '已处理',
-  hidden: '已隐藏',
+  deleted: '待删除',
+};
+
+const getDeleteRemainingText = (post) => {
+  if (post?.status !== 'deleted' || !post.deleteExpiresAt) return '';
+  const remainingMs = new Date(post.deleteExpiresAt).getTime() - Date.now();
+  if (remainingMs <= 0) return '即将删除';
+  const minutes = Math.floor(remainingMs / 60000);
+  const seconds = Math.ceil((remainingMs % 60000) / 1000);
+  return `${minutes}:${String(seconds).padStart(2, '0')} 后删除`;
 };
 
 const getAdminFilteredPosts = () => {
@@ -489,6 +522,7 @@ const renderAdminPosts = () => {
   adminPostBody.innerHTML = posts.map((post) => {
     const status = post.status || 'open';
     const statusLabel = adminStatusLabels[status] || status;
+    const deleteText = getDeleteRemainingText(post);
     const isReported = reportedPostIds.has(String(post.id));
     const safeId = escapeHtml(post.id);
     return `
@@ -503,6 +537,7 @@ const renderAdminPosts = () => {
         <td>
           ${isReported ? '<span class="admin-status-badge reported">已举报</span>' : ''}
           <span class="admin-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
+          ${deleteText ? `<span class="admin-status-badge deleting">${escapeHtml(deleteText)}</span>` : ''}
         </td>
         <td>${Number(post.replies || 0)} 评 / ${Number(post.likeCount || 0)} 赞 / ${Number(post.views || 0)} 浏览</td>
         <td>${escapeHtml(getRelativeActivity(post.updatedAt || post.createdAt))}</td>
@@ -511,7 +546,7 @@ const renderAdminPosts = () => {
             <button type="button" data-admin-open-id="${safeId}" title="打开帖子详情">查看</button>
             <button type="button" data-admin-status-id="${safeId}" data-status="open" ${status === 'open' ? 'disabled' : ''}>待处理</button>
             <button type="button" data-admin-status-id="${safeId}" data-status="resolved" ${status === 'resolved' ? 'disabled' : ''}>已处理</button>
-            <button type="button" data-admin-status-id="${safeId}" data-status="hidden" ${status === 'hidden' ? 'disabled' : ''}>隐藏</button>
+            <button type="button" data-admin-status-id="${safeId}" data-status="${status === 'deleted' ? 'open' : 'deleted'}">${status === 'deleted' ? '恢复' : '删除'}</button>
           </div>
         </td>
       </tr>
@@ -566,9 +601,13 @@ const renderAdminReport = (report = adminReports[0]) => {
     return;
   }
   const payload = report.payload || {};
-  const sourceText = payload.source === 'ai' ? 'AI 分析' : '系统分析';
+  const sourceText = payload.source === 'ai' ? 'AI 分析' : 'AI 请求失败，回退为本地总结链路';
   const postCountText = Array.isArray(payload.postIds) ? `，覆盖 ${payload.postIds.length} 条帖子` : '';
-  adminAiSummary.textContent = `${sourceText}${postCountText}：${report.summary || payload.summary || '暂无摘要'}`;
+  const failureText = payload.aiFailure?.message ? `（失败原因：${payload.aiFailure.message}）` : '';
+  const addedTagsText = Array.isArray(payload.addedTags) && payload.addedTags.length
+    ? `；已补充标签：${payload.addedTags.map((item) => `${item.category}/${item.tag}`).join('、')}`
+    : '';
+  adminAiSummary.textContent = `${sourceText}${postCountText}${failureText}：${report.summary || payload.summary || '暂无摘要'}${addedTagsText}`;
   adminSuggestionList.innerHTML = (payload.suggestions || [])
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join('');
@@ -668,6 +707,11 @@ const generateAdminReport = async () => {
   try {
     const { report } = await apiRequest('/api/posts/admin/reports', { method: 'POST' });
     adminReports = [report, ...adminReports.filter((item) => String(item.id) !== String(report.id))];
+    if (Array.isArray(report?.payload?.categoriesSnapshot)) {
+      applyCategories(report.payload.categoriesSnapshot);
+    } else if (Array.isArray(report?.payload?.addedTags) && report.payload.addedTags.length) {
+      await loadCategories();
+    }
     renderAdminReportList();
     showToast('报告已生成');
   } catch (error) {
@@ -1190,7 +1234,9 @@ renderHotBreakdown();
 
 const getFilteredTopics = (filter) => {
   if (filter === 'all') return topics;
-  if (filter === 'hot') return topics.filter((topic) => topic.hot);
+  if (filter === 'hot') return [...topics]
+    .filter((topic) => Number(topic.hotScore || 0) > 0)
+    .sort((a, b) => Number(b.hotScore || 0) - Number(a.hotScore || 0) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
   if (filter === 'mine') return currentUser ? topics.filter((topic) => topic.mine) : [];
   if (filter === 'resolved') return topics.filter((topic) => topic.resolved);
   if (filter === 'new') return topics;
@@ -1240,7 +1286,7 @@ const switchFilter = (filter, title, options = {}) => {
   renderTagMenu(filter);
   setActiveSidebar(filter);
   setActiveNav(filter);
-  renderTopics(filter, title);
+  loadPersistedTopics({ silent: true, reset: true });
 };
 
 const renderTopics = (filter = currentFilter, title = currentTitle) => {
@@ -1260,7 +1306,8 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   setAdminMode(false);
   const searchText = query ? `，搜索「${searchInput.value.trim()}」` : '';
   const tagText = currentTagKeyword ? `，标签「${currentTagKeyword}」` : '';
-  listHint.textContent = `${title}${searchText}${tagText}，共 ${data.length} 条帖子`;
+  const moreText = postPageHasMore ? '，向下滚动加载更多' : '';
+  listHint.textContent = `${title}${searchText}${tagText}，已加载 ${data.length} 条帖子${moreText}`;
 
   if (!data.length) {
     topicBody.innerHTML = `<tr><td colspan="6" class="empty-state">暂时没有符合条件的帖子</td></tr>`;
@@ -1299,6 +1346,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
             <span class="quick-like-thumb" aria-hidden="true">赞</span>
             <span class="quick-like-count">${Number(topic.likeCount || 0)}</span>
           </button>
+          <small>${Number(topic.favoriteCount || 0)} 藏</small>
         </td>
         <td class="num">${Number(topic.replies || 0)}<small>评论</small></td>
         <td class="num">${Number(topic.views || 0)}<small>浏览</small></td>
@@ -1367,6 +1415,12 @@ searchInput.addEventListener('keydown', (event) => {
     showToast('已清空搜索');
   }
 });
+
+window.addEventListener('scroll', () => {
+  if (currentFilter === 'admin' || !postPageHasMore || postPageLoading) return;
+  const remaining = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+  if (remaining < 360) loadPersistedTopics({ silent: true, reset: false });
+}, { passive: true });
 
 brandHome.addEventListener('click', (event) => {
   event.preventDefault();
@@ -1517,12 +1571,18 @@ if (adminPostBody) {
       const index = adminPosts.findIndex((item) => String(item.id) === String(post.id));
       if (index >= 0) adminPosts.splice(index, 1, post);
       else adminPosts.unshift(post);
-      updateTopicFromPost(post, { preserveState: true, prepend: false });
+      if (post.status === 'deleted') {
+        topics = topics.filter((topic) => !(topic.persisted && String(topic.id) === String(post.id)));
+      } else {
+        updateTopicFromPost(post, { preserveState: true, prepend: false });
+      }
       renderAdminPosts();
       await loadPersistedTopics({ silent: true });
       await loadAdminStats({ silent: true });
       await loadAdminPosts({ silent: true });
-      showToast('帖子状态已更新');
+      if (post.status === 'deleted') showToast('帖子已标记删除，5 分钟内可在此处恢复');
+      else if (statusButton.dataset.status === 'open') showToast('帖子已恢复');
+      else showToast('帖子状态已更新');
     } catch (error) {
       showToast(error.message || '状态更新失败');
     } finally {
@@ -1877,7 +1937,7 @@ const reportBtn = document.getElementById('reportBtn');
 const refreshDetailButtons = (topic) => {
   likeText.textContent = topic.liked ? `已点赞 ${topic.likeCount}` : `点赞 ${topic.likeCount}`;
   likeBtn.classList.toggle('liked', topic.liked);
-  favoriteBtn.textContent = topic.favorite ? '已收藏' : '收藏';
+  favoriteBtn.textContent = topic.favorite ? `已收藏 ${topic.favoriteCount || 0}` : `收藏 ${topic.favoriteCount || 0}`;
 };
 
 const renderComments = (comments = []) => {
@@ -1900,6 +1960,8 @@ const renderComments = (comments = []) => {
 const toggleTopicLike = (topic, sourceButton = null) => {
   topic.liked = !topic.liked;
   topic.likeCount = Math.max(0, (topic.likeCount || 0) + (topic.liked ? 1 : -1));
+  topic.hotScore = Number(topic.likeCount || 0) + Number(topic.favoriteCount || 0);
+  topic.hot = topic.hotScore > 0;
   if (sourceButton && topic.liked) {
     sourceButton.classList.remove('like-pop');
     void sourceButton.offsetWidth;
@@ -1974,6 +2036,7 @@ const openTopicDetail = async (topicId) => {
     <span>板块：${escapeHtml(latestTopic.category)}</span>
     <span>评论：${Number(latestTopic.replies || 0)}</span>
     <span>浏览：${Number(latestTopic.views || 0)}</span>
+    <span>收藏：${Number(latestTopic.favoriteCount || 0)}</span>
     <span>活动：${escapeHtml(latestTopic.activity)}</span>
     <span>发布人：${escapeHtml(latestTopic.authorName || latestTopic.posters[0] || '匿名')}</span>
   `;
@@ -2025,13 +2088,34 @@ likeBtn.addEventListener('click', async () => {
   const topic = getCurrentTopic();
   await toggleLikeForTopic(topic, likeBtn);
 });
-favoriteBtn.addEventListener('click', () => {
+favoriteBtn.addEventListener('click', async () => {
   const topic = getCurrentTopic();
   if (!topic) return;
-  topic.favorite = !topic.favorite;
-  refreshDetailButtons(topic);
-  renderCurrentTopicList();
-  showToast(topic.favorite ? '已加入收藏' : '已取消收藏');
+  if (!currentUser) {
+    showToast('请先登录后再收藏');
+    openLogin();
+    return;
+  }
+  if (!topic.persisted) {
+    topic.favorite = !topic.favorite;
+    topic.favoriteCount = Math.max(0, Number(topic.favoriteCount || 0) + (topic.favorite ? 1 : -1));
+    refreshDetailButtons(topic);
+    renderCurrentTopicList();
+    showToast(topic.favorite ? '已加入收藏' : '已取消收藏');
+    return;
+  }
+  favoriteBtn.disabled = true;
+  try {
+    const { post } = await apiRequest(`/api/posts/${encodeURIComponent(topic.id)}/favorite`, { method: 'POST' });
+    const updatedTopic = updateTopicFromPost(post, { preserveState: true, prepend: false }) || topic;
+    refreshDetailButtons(updatedTopic);
+    renderCurrentTopicList();
+    showToast(updatedTopic.favorite ? '已加入收藏' : '已取消收藏');
+  } catch (error) {
+    showToast(error.message || '收藏失败，请稍后重试');
+  } finally {
+    favoriteBtn.disabled = false;
+  }
 });
 reportBtn.addEventListener('click', () => {
   const topic = getCurrentTopic();
@@ -2500,6 +2584,11 @@ const bootstrapApp = async () => {
   await restoreAuthState();
 };
 bootstrapApp();
+setInterval(() => {
+  if (adminPanel && !adminPanel.hidden && adminPosts.some((post) => post.status === 'deleted')) {
+    renderAdminPosts();
+  }
+}, 30000);
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!loginModal.hidden) closeLogin();

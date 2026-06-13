@@ -7,12 +7,13 @@ const {
   listAdminPosts,
   listCommentsByPostId,
   listPosts,
+  togglePostFavorite,
   togglePostLike,
   updatePostStatus,
   updatePostsStatus,
 } = require('../repositories/postRepository');
-const { analyzeKeywords } = require('./aiService');
 const { getCategories } = require('./categoryService');
+const { listReports } = require('../repositories/reportRepository');
 
 const categoryConfig = [
   { category: '课程吐槽', label: '课程', keywords: ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'] },
@@ -22,7 +23,7 @@ const categoryConfig = [
   { category: '活动社团', label: '活动', keywords: ['报名', '通知', '场地', '时间', '社团', '活动', '志愿', '比赛', '讲座', '宣传', '排练', '签到'] },
 ];
 
-const allowedPostStatuses = new Set(['open', 'resolved', 'hidden']);
+const allowedPostStatuses = new Set(['open', 'resolved', 'deleted']);
 
 const normalizeText = (value) => String(value || '').trim().replace(/\s+/g, ' ');
 
@@ -39,6 +40,16 @@ const countKeyword = (text, keyword) => {
   return (text.match(new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
 };
 
+const getCommentText = (post) => {
+  const comments = Array.isArray(post.comments) ? post.comments : [];
+  return comments
+    .map((comment) => (typeof comment === 'string' ? comment : comment?.content))
+    .filter(Boolean)
+    .join(' ');
+};
+
+const getPostAnalysisText = (post) => `${post.title || ''} ${post.content || ''} ${getCommentText(post)}`;
+
 const inferTagsFromText = ({ title, content, allowedTags }) => {
   const normalizeForMatch = (value) => String(value || '').toLowerCase().replace(/\s+/g, '');
   const text = normalizeForMatch(`${title || ''} ${content || ''}`);
@@ -50,42 +61,152 @@ const inferTagsFromText = ({ title, content, allowedTags }) => {
 const keywordStopWords = new Set([
   '这个', '那个', '我们', '你们', '他们', '希望', '感觉', '现在', '最近', '已经', '可以', '不能', '没有', '不是', '还是', '一下',
   '一个', '一些', '很多', '比较', '真的', '时候', '问题', '建议', '同学', '老师', '学校', '校园', '吐槽', '反馈', '处理',
+  '一下子', '越来越', '管理员', '相关', '新增', '情况', '内容', '发布', '进行', '需要', '应该', '是否', '如果', '因为', '但是',
 ]);
 
-const extractDynamicKeywords = (posts, limit = 12) => {
-  const counts = new Map();
-
+const getKnownKeywords = (posts = []) => {
+  const keywords = new Set(categoryConfig.flatMap((config) => config.keywords));
   posts.forEach((post) => {
-    const rawText = `${post.title || ''} ${post.content || ''}`;
-    const compactText = rawText.replace(/[\s\p{P}\p{S}]+/gu, '');
-    const candidates = new Set();
+    (post.tags || post.tagNames || []).forEach((tag) => keywords.add(tag));
+  });
+  return [...keywords]
+    .map((keyword) => normalizeText(keyword))
+    .filter((keyword) => keyword.length >= 2 && !keywordStopWords.has(keyword))
+    .sort((a, b) => b.length - a.length);
+};
+
+const addKeywordHit = (postScores, postHits, postId, rawText, titleText, keyword) => {
+  if (!keyword || !countKeyword(rawText, keyword)) return;
+  const safePostId = String(postId);
+  const score = titleText.includes(keyword) ? 2 : 1;
+  if (!postHits.has(keyword)) postHits.set(keyword, new Set());
+  postHits.get(keyword).add(safePostId);
+  if (!postScores.has(keyword)) postScores.set(keyword, new Map());
+  const keywordScores = postScores.get(keyword);
+  keywordScores.set(safePostId, Math.max(keywordScores.get(safePostId) || 0, score));
+};
+
+const splitChinesePhrases = (text) => String(text || '')
+  .split(/[\s,，。.!！?？;；:：、\-—_()[\]【】《》"“”'‘’/\\]+/u)
+  .map((item) => item.trim())
+  .filter(Boolean);
+
+const cleanPhraseCandidate = (phrase) => phrase
+  .replace(/^(希望|建议|感觉|觉得|发现|反映|关于|这个|那个|最近|现在)+/u, '')
+  .replace(/(问题|情况|现象|建议|反馈|一下|一点|很多|比较|真的)+$/u, '')
+  .trim();
+
+const countKnownKeywordHits = (value, knownKeywords) => knownKeywords
+  .filter((keyword) => value.includes(keyword))
+  .length;
+
+const isUsefulKeyword = (keyword) => {
+  if (!keyword || keyword.length < 2 || keyword.length > 8) return false;
+  if (keywordStopWords.has(keyword)) return false;
+  if (/^[0-9]+$/.test(keyword)) return false;
+  if (!/[\u4e00-\u9fffA-Za-z]/.test(keyword)) return false;
+  return true;
+};
+
+const extractDynamicKeywords = (posts, limit = 12) => {
+  const postScores = new Map();
+  const postHits = new Map();
+  const knownKeywords = getKnownKeywords(posts);
+
+  posts.forEach((post, index) => {
+    const postId = post.id || `local-${index}`;
+    const rawText = getPostAnalysisText(post);
+    const titleText = String(post.title || '');
 
     (rawText.toLowerCase().match(/[a-z0-9]{2,}/g) || []).forEach((word) => {
-      if (!keywordStopWords.has(word)) candidates.add(word);
+      if (isUsefulKeyword(word)) addKeywordHit(postScores, postHits, postId, rawText.toLowerCase(), titleText.toLowerCase(), word);
     });
 
-    for (let size = 2; size <= 4; size += 1) {
-      for (let index = 0; index <= compactText.length - size; index += 1) {
-        const word = compactText.slice(index, index + size);
-        if (!/[\u4e00-\u9fff]/.test(word)) continue;
-        if (keywordStopWords.has(word)) continue;
-        candidates.add(word);
-      }
-    }
+    knownKeywords.forEach((keyword) => addKeywordHit(postScores, postHits, postId, rawText, titleText, keyword));
 
-    candidates.forEach((keyword) => {
-      counts.set(keyword, (counts.get(keyword) || 0) + countKeyword(rawText, keyword));
+    splitChinesePhrases(titleText).forEach((phrase) => {
+      const cleaned = cleanPhraseCandidate(phrase);
+      if (countKnownKeywordHits(cleaned, knownKeywords) > 0) return;
+      if (isUsefulKeyword(cleaned) && cleaned.length <= 4) addKeywordHit(postScores, postHits, postId, rawText, titleText, cleaned);
+    });
+
+    splitChinesePhrases(rawText).forEach((phrase) => {
+      const cleaned = cleanPhraseCandidate(phrase);
+      if (!isUsefulKeyword(cleaned)) return;
+      const knownHitCount = countKnownKeywordHits(cleaned, knownKeywords);
+      if (knownHitCount > 0) return;
+      if (cleaned.length <= 4) {
+        addKeywordHit(postScores, postHits, postId, rawText, titleText, cleaned);
+      }
     });
   });
 
-  return [...counts.entries()]
-    .map(([keyword, count]) => ({ keyword, count }))
-    .filter((item) => item.count > 0)
-    .sort((a, b) => b.count - a.count || a.keyword.length - b.keyword.length || a.keyword.localeCompare(b.keyword, 'zh-CN'))
+  return [...postHits.entries()]
+    .map(([keyword, ids]) => ({
+      keyword,
+      count: ids.size,
+      score: [...(postScores.get(keyword)?.values() || [])].reduce((total, value) => total + value, 0) || ids.size,
+    }))
+    .filter((item) => item.count > 0 && isUsefulKeyword(item.keyword))
+    .sort((a, b) => b.count - a.count || b.score - a.score || b.keyword.length - a.keyword.length || a.keyword.localeCompare(b.keyword, 'zh-CN'))
     .slice(0, limit);
 };
 
-const getPosts = async ({ currentUserId } = {}) => listPosts({ currentUserId });
+const getReportKeywordTrends = async (statCategories) => {
+  const reports = await listReports({ limit: 50 });
+  const trendMap = Object.fromEntries(statCategories.map((config) => [config.category, new Map()]));
+  const addKeywordCount = (category, keyword, count) => {
+    const normalizedKeyword = normalizeText(keyword);
+    const safeCount = Number(count || 0);
+    if (!trendMap[category] || !normalizedKeyword || safeCount <= 0) return;
+    trendMap[category].set(normalizedKeyword, (trendMap[category].get(normalizedKeyword) || 0) + safeCount);
+  };
+
+  reports.forEach((report) => {
+    const payload = report.payload || {};
+    const keywordTrends = payload.keywordTrends || {};
+    let hasTrendPayload = false;
+    Object.entries(keywordTrends).forEach(([category, trend]) => {
+      const labels = Array.isArray(trend.labels) ? trend.labels : [];
+      const points = Array.isArray(trend.points) ? trend.points : [];
+      labels.forEach((label, index) => {
+        if (label && Number(points[index] || 0) > 0) hasTrendPayload = true;
+        addKeywordCount(category, label, points[index]);
+      });
+    });
+
+    if (!hasTrendPayload && Array.isArray(payload.actionItems)) {
+      payload.actionItems.forEach((item) => {
+        addKeywordCount(item.category, item.keyword, item.postCount || item.postIds?.length || 0);
+      });
+    }
+  });
+
+  return Object.fromEntries(statCategories.map((config) => {
+    const items = [...(trendMap[config.category] || new Map()).entries()]
+      .map(([keyword, count]) => ({ keyword, count }))
+      .sort((a, b) => b.count - a.count || a.keyword.localeCompare(b.keyword, 'zh-CN'))
+      .slice(0, 8);
+    const topKeyword = items[0] || { keyword: '暂无', count: 0 };
+    return [config.category, {
+      keyword: topKeyword.keyword,
+      mentions: topKeyword.count,
+      labels: items.map((item) => item.keyword),
+      points: items.map((item) => item.count),
+    }];
+  }));
+};
+
+const normalizePostQuery = ({ limit = 30, offset = 0, sort = 'latest', category = '', status = '', scope = '' } = {}) => ({
+  limit: Math.max(1, Math.min(Number(limit) || 30, 30)),
+  offset: Math.max(0, Number(offset) || 0),
+  sort: sort === 'hot' ? 'hot' : 'latest',
+  category: normalizeText(category),
+  status: normalizeText(status),
+  scope: ['mine', 'liked', 'favorites'].includes(normalizeText(scope)) ? normalizeText(scope) : '',
+});
+
+const getPosts = async ({ currentUserId, query = {} } = {}) => listPosts({ currentUserId, ...normalizePostQuery(query) });
 
 const getAdminPosts = async ({ currentUserId, status = 'all' } = {}) => {
   const normalizedStatus = normalizeText(status || 'all');
@@ -110,7 +231,7 @@ const changePostStatus = async (postId, currentUserId, { status }) => {
 
 const changePostsStatus = async (currentUserId, { postIds, status }) => {
   const normalizedStatus = normalizeText(status);
-  if (!['open', 'resolved'].includes(normalizedStatus)) {
+  if (!['open', 'resolved', 'deleted'].includes(normalizedStatus)) {
     throw createHttpError('帖子状态无效');
   }
   const safePostIds = Array.isArray(postIds)
@@ -135,30 +256,7 @@ const getPostStats = async () => {
   const categoryCountMap = new Map(
     statsData.categories.map((row) => [row.category, Number(row.post_count || 0)])
   );
-
-  const trendMap = {};
-  for (const config of statCategories) {
-    const posts = statsData.recentPosts.filter((post) => post.category === config.category);
-    const localKeywordStats = extractDynamicKeywords(posts);
-    const aiKeywordResult = posts.length
-      ? await analyzeKeywords({ category: config.category, posts, localKeywords: localKeywordStats })
-      : null;
-    const aiKeywords = Array.isArray(aiKeywordResult?.keywords)
-      ? aiKeywordResult.keywords.map((item) => ({
-        keyword: String(item.word || item.keyword || '').trim(),
-        count: Number(item.count || 0),
-      })).filter((item) => item.keyword && item.count > 0)
-      : [];
-    const keywordStats = aiKeywords.length ? aiKeywords : localKeywordStats;
-
-    const topKeyword = keywordStats[0] || { keyword: '暂无', count: 0 };
-    trendMap[config.category] = {
-      keyword: topKeyword.keyword,
-      mentions: topKeyword.count,
-      labels: keywordStats.map((item) => item.keyword),
-      points: keywordStats.map((item) => item.count),
-    };
-  }
+  const trendMap = await getReportKeywordTrends(statCategories);
 
   const categoryStats = statCategories.map((config) => ({
     category: config.category,
@@ -173,7 +271,6 @@ const getPostStats = async () => {
     : Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 100);
 
   const hotCategory = [...categoryStats].sort((a, b) => b.value - a.value)[0]?.category || statCategories[0]?.category || categoryConfig[0].category;
-
   return {
     summary: {
       total: Number(statsData.summary.total_count || 0),
@@ -183,6 +280,7 @@ const getPostStats = async () => {
     },
     hotCategory,
     categories: categoryStats,
+    categoriesSnapshot: categories,
     trends: trendMap,
     updatedAt: new Date().toISOString(),
   };
@@ -231,6 +329,17 @@ const toggleLike = async (postId, userId) => {
     throw createHttpError('帖子不存在', 404);
   }
   const result = await togglePostLike({ postId, userId });
+  if (!result) {
+    throw createHttpError('帖子不存在', 404);
+  }
+  return result;
+};
+
+const toggleFavorite = async (postId, userId) => {
+  if (!postId || !/^\d+$/.test(String(postId))) {
+    throw createHttpError('帖子不存在', 404);
+  }
+  const result = await togglePostFavorite({ postId, userId });
   if (!result) {
     throw createHttpError('帖子不存在', 404);
   }
@@ -303,6 +412,7 @@ module.exports = {
   changePostStatus,
   changePostsStatus,
   extractDynamicKeywords,
+  getPostAnalysisText,
   getAdminPosts,
   getPost,
   getPostStats,
@@ -310,5 +420,6 @@ module.exports = {
   publishAnnouncement,
   publishComment,
   publishPost,
+  toggleFavorite,
   toggleLike,
 };
