@@ -125,6 +125,7 @@ const applyCategories = (categories = []) => {
   }
 
   renderTagMenu();
+  syncCategoryChip(currentFilter);
 
   if (categorySidebarSection) {
     categorySidebarSection.innerHTML = [
@@ -228,6 +229,8 @@ let trendAnimation = {
   to: null,
   progress: 1,
 };
+const isMacOS = /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.platform || '')
+  || /Mac OS X/.test(navigator.userAgent || '');
 
 const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3);
 
@@ -999,32 +1002,34 @@ const drawTrendChart = () => {
     ctx.stroke();
   });
 
-  const focusIndex = Math.max(0, Math.min(activeTrendIndex, points.length - 1));
-  const focus = points[focusIndex];
-  const focusValue = trendData.points[focusIndex] ?? Math.round(focus.value);
-  ctx.strokeStyle = theme.axis;
-  ctx.beginPath();
-  ctx.moveTo(focus.x, area.top);
-  ctx.lineTo(focus.x, area.bottom);
-  ctx.stroke();
+  if (!isMacOS) {
+    const focusIndex = Math.max(0, Math.min(activeTrendIndex, points.length - 1));
+    const focus = points[focusIndex];
+    const focusValue = trendData.points[focusIndex] ?? Math.round(focus.value);
+    ctx.strokeStyle = theme.axis;
+    ctx.beginPath();
+    ctx.moveTo(focus.x, area.top);
+    ctx.lineTo(focus.x, area.bottom);
+    ctx.stroke();
 
-  const tooltipWidth = 118;
-  const tooltipHeight = 46;
-  const tooltipX = Math.min(focus.x + 12, area.right - tooltipWidth);
-  const tooltipY = Math.max(focus.y + 20, area.top + 8);
-  ctx.fillStyle = theme.tooltipBg;
-  ctx.beginPath();
-  ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 7);
-  ctx.fill();
-  ctx.fillStyle = theme.tooltipText;
-  ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(trendLabels[focusIndex], tooltipX + 10, tooltipY + 15);
-  ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('提及次数', tooltipX + 10, tooltipY + 32);
-  ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(focusValue, tooltipX + tooltipWidth - 10, tooltipY + 32);
+    const tooltipWidth = 118;
+    const tooltipHeight = 46;
+    const tooltipX = Math.min(focus.x + 12, area.right - tooltipWidth);
+    const tooltipY = Math.max(focus.y + 20, area.top + 8);
+    ctx.fillStyle = theme.tooltipBg;
+    ctx.beginPath();
+    ctx.roundRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, 7);
+    ctx.fill();
+    ctx.fillStyle = theme.tooltipText;
+    ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(trendLabels[focusIndex], tooltipX + 10, tooltipY + 15);
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText('提及次数', tooltipX + 10, tooltipY + 32);
+    ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(focusValue, tooltipX + tooltipWidth - 10, tooltipY + 32);
+  }
 
   ctx.fillStyle = theme.line;
   ctx.font = '700 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -1032,7 +1037,7 @@ const drawTrendChart = () => {
   ctx.textBaseline = 'top';
   ctx.fillText(`${activeTrendCategory} · ${trendData.keyword} ${trendData.mentions}次`, area.left, area.top + 6);
 
-  complaintTrendChart.style.cursor = 'crosshair';
+  complaintTrendChart.style.cursor = isMacOS ? 'default' : 'crosshair';
 };
 
 const drawCategoryBarChart = () => {
@@ -1117,7 +1122,7 @@ const drawCategoryBarChart = () => {
     ctx.fillText(`板块吐槽 ${item.value}`, tooltipX + 10, tooltipY + 30);
   }
 
-  categoryBarChart.style.cursor = activeCategoryIndex >= 0 ? 'pointer' : 'default';
+  categoryBarChart.style.cursor = !isMacOS && activeCategoryIndex >= 0 ? 'pointer' : 'default';
 };
 
 const renderAdminCharts = () => {
@@ -1214,7 +1219,7 @@ const updateCategoryHover = (event) => {
   }
 };
 
-if (complaintTrendChart) {
+if (complaintTrendChart && !isMacOS) {
   complaintTrendChart.addEventListener('mousemove', updateTrendHover);
   complaintTrendChart.addEventListener('mouseleave', () => {
     activeTrendIndex = 0;
@@ -1222,7 +1227,7 @@ if (complaintTrendChart) {
   });
 }
 
-if (categoryBarChart) {
+if (categoryBarChart && !isMacOS) {
   categoryBarChart.addEventListener('mousemove', updateCategoryHover);
   categoryBarChart.addEventListener('mouseleave', () => {
     activeCategoryIndex = -1;
@@ -1264,6 +1269,16 @@ const resetChips = () => {
   renderTagMenu('all');
 };
 
+const syncCategoryChip = (filter = currentFilter) => {
+  if (!categoryChip || !categoryMenu) return;
+  const categoryNames = getVisibleCategories().map((category) => category.name);
+  const selectedCategory = categoryNames.includes(filter) ? filter : '全部';
+  categoryChip.textContent = `板块：${selectedCategory} ▸`;
+  categoryMenu.querySelectorAll('button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.category === selectedCategory);
+  });
+};
+
 const setAdminMode = (enabled) => {
   if (createPostBtn) createPostBtn.hidden = enabled;
 };
@@ -1283,6 +1298,7 @@ const switchFilter = (filter, title, options = {}) => {
   if (!options.keepSearch) searchInput.value = '';
   if (!options.keepTag) currentTagKeyword = '';
   if (!currentTagKeyword) tagChip.textContent = '标签：全部 ▸';
+  syncCategoryChip(filter);
   renderTagMenu(filter);
   setActiveSidebar(filter);
   setActiveNav(filter);
@@ -1304,6 +1320,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
   topicPanel.hidden = false;
   adminPanel.hidden = true;
   setAdminMode(false);
+  syncCategoryChip(filter);
   const searchText = query ? `，搜索「${searchInput.value.trim()}」` : '';
   const tagText = currentTagKeyword ? `，标签「${currentTagKeyword}」` : '';
   const moreText = postPageHasMore ? '，向下滚动加载更多' : '';
