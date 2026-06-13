@@ -189,6 +189,16 @@ const renderPostTagOptions = () => {
   `).join('');
 };
 
+const applyCreatePostDefaultCategory = () => {
+  const postCategorySelect = document.getElementById('postCategoryInput');
+  if (!postCategorySelect) return;
+  const visibleCategories = getVisibleCategories();
+  const isCategoryFilter = visibleCategories.some((category) => category.name === currentFilter);
+  if (isCategoryFilter) {
+    postCategorySelect.value = currentFilter;
+  }
+};
+
 const getCategoryStats = () => categoryStatOrder.map((item) => {
   const matched = adminStats.categories.find((stat) => stat.category === item.category);
   return { ...item, value: Number(matched?.value || 0) };
@@ -1742,6 +1752,7 @@ const openCreatePost = () => {
     openLogin();
     return;
   }
+  applyCreatePostDefaultCategory();
   renderPostTagOptions();
   createPostModal.hidden = false;
   setTimeout(() => postTitleInput.focus(), 60);
@@ -1749,7 +1760,7 @@ const openCreatePost = () => {
 const closeCreatePost = () => {
   createPostModal.hidden = true;
   createPostForm.reset();
-  postAnonymousInput.checked = true;
+  postAnonymousInput.checked = false;
   renderPostTagOptions();
 };
 

@@ -29,6 +29,7 @@ const callOpenAiJson = async ({ system, user }) => {
       headers: {
         Authorization: `Bearer ${ai.apiKey}`,
         'Content-Type': 'application/json',
+        'User-Agent': ai.userAgent,
       },
       body: JSON.stringify({
         model: ai.model,

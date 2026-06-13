@@ -15,44 +15,6 @@ const seedDefaultAdmin = async (pool) => {
   );
 };
 
-const seedDemoPosts = async (pool) => {
-  const passwordHash = await hashPassword('seed-only');
-  await pool.execute(
-    `INSERT INTO users (email, password_hash, role, nickname)
-     VALUES (?, ?, 'student', ?)
-     ON DUPLICATE KEY UPDATE nickname = VALUES(nickname)`,
-    ['seed@local.test', passwordHash, '演示同学']
-  );
-  const [userRows] = await pool.execute('SELECT id FROM users WHERE email = ? LIMIT 1', ['seed@local.test']);
-  const userId = userRows[0]?.id;
-  if (!userId) return;
-
-  await pool.execute('DELETE FROM posts WHERE user_id = ?', [userId]);
-
-  const demoPosts = [
-    ['现经管回声使用说明与公告留档规则', '这里是校园反馈社区的公告区。管理员发布的公告会按发布时间留档，普通吐槽会进入对应板块并显示待处理或已处理状态。请大家真实表达、理性反馈，尽量说明具体场景、影响和期望改进。', '公告', 0, 'resolved', 1260, 18, 72, ['社区规则']],
-    ['高数早八课程连续三周临时调课，希望提前通知', '高数早八最近连续三周临时调课，很多同学前一天晚上才知道，通勤和早起安排都被打乱了。希望后续调课能至少提前一天在统一渠道通知。', '课程吐槽', 1, 'open', 438, 24, 33, ['调课']],
-    ['食堂二楼晚饭排队太久，热门窗口能不能多开一个', '晚饭高峰期二楼热门窗口排队经常排到楼梯口，等到买完饭已经很晚。希望能根据高峰时段增加窗口或给出错峰提示。', '食堂吐槽', 1, 'open', 982, 46, 86, ['排队']],
-    ['宿舍热水晚上十点后不稳定，最近很多人遇到', '最近宿舍热水晚上十点后经常忽冷忽热，洗澡时间很尴尬。希望能检查热水供应设备，并提前公布维修安排。', '宿舍生活', 1, 'open', 756, 37, 68, ['热水']],
-    ['图书馆自习区插座数量不够，考试周特别明显', '图书馆自习区插座不够用，考试周大家都在找能充电的位置。希望增加插座，或开放更多带电源的自习区域。', '校园设施', 1, 'open', 502, 19, 41, ['插座']],
-    ['希望社团活动通知能集中展示，不要分散在多个群里', '社团活动通知分散在不同群里，报名时间很容易错过。希望能有统一入口集中展示活动、报名时间和场地信息。', '活动社团', 1, 'open', 241, 12, 24, ['通知', '报名']],
-    ['操场夜间照明有几盏灯坏了，跑步区域比较暗', '操场夜间照明最近有几盏灯不亮，跑步时部分区域比较暗。希望尽快安排维修，避免夜跑同学看不清路面。', '校园设施', 1, 'resolved', 198, 8, 18, ['照明', '维修']],
-    ['部分公共课作业截止时间集中，希望老师之间能协调', '这周好几门公共课作业都挤在同一天截止，考试复习压力很大。希望课程之间能协调一下截止时间，避免集中提交。', '课程吐槽', 1, 'open', 1118, 53, 92, ['作业']],
-    ['北门快递点雨天排队没有遮挡，取件不太方便', '北门快递点雨天排队没有遮挡，地面也容易积水，取件体验很差。希望能增加雨棚或优化排队区域。', '宿舍生活', 1, 'open', 326, 15, 29, ['维修']],
-  ];
-
-  for (const post of demoPosts) {
-    const [result] = await pool.execute(
-      `INSERT INTO posts (user_id, title, content, category, is_anonymous, status, view_count, reply_count, like_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, ...post.slice(0, 8)]
-    );
-    for (const tag of post[8]) {
-      await pool.execute('INSERT IGNORE INTO post_tags (post_id, tag_name) VALUES (?, ?)', [result.insertId, tag]);
-    }
-  }
-};
-
 const migrate = async () => {
   const serverPool = getServerPool();
   await serverPool.query(
@@ -237,7 +199,6 @@ const migrate = async () => {
   `);
 
   await seedDefaultAdmin(pool);
-  await seedDemoPosts(pool);
 
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');

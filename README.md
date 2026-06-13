@@ -1,31 +1,54 @@
 # 现经管回声
 
-校园吐槽/反馈社区原型，参考 Linux.do / Discourse 风格。当前版本已包含前端交互、登录/注册弹窗，以及基于本机 MySQL 的真实后端认证系统。
+现经管回声是一个校园吐槽和反馈社区原型，包含前端交互、登录注册、帖子发布、评论点赞收藏、管理员后台、公告留档、AI 辅助统计与报告生成。后端使用 Express + MySQL，前端为原生 HTML/CSS/JavaScript。
+
+## 功能概览
+
+- 帖子列表、搜索、板块筛选、标签筛选、本周活跃筛选
+- 帖子详情、评论、点赞、收藏、举报
+- 登录、注册、退出、修改资料、修改密码、头像本地预览
+- 管理员后台：统计图表、帖子状态管理、板块与标签管理、处理建议归档
+- 管理员公告：发布公告、公告留档、从公告列表进入详情
+- AI 能力：关键词分析、周期报告生成、Markdown/Word/PDF/HTML 导出
+- 黑夜/日光主题切换
+
+## 环境要求
+
+- Node.js 18 或更高版本
+- MySQL 8.x 或兼容版本
+- npm
 
 ## 本地运行
 
-首次运行先安装依赖：
+安装依赖：
 
 ```sh
 npm install
 ```
 
-复制环境变量配置：
+复制环境变量模板：
 
 ```sh
-cp .env.example .env
+copy .env.example .env
 ```
 
-根据本机 MySQL 修改 `.env`：
+按本机情况修改 `.env`：
 
 ```env
 PORT=5173
+
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_NAME=tt_talking_twice
 DB_USER=root
-DB_PASSWORD=
+DB_PASSWORD=your_mysql_password
 DB_CONNECTION_LIMIT=10
+
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_USER_AGENT=Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.71 Safari/537.36
+AI_TIMEOUT_MS=20000
 ```
 
 初始化数据库和表：
@@ -34,85 +57,105 @@ DB_CONNECTION_LIMIT=10
 npm run migrate
 ```
 
-启动前端与后端：
+启动服务：
 
 ```sh
 npm start
 ```
 
-打开：
+访问：
 
 ```text
 http://127.0.0.1:5173/
 ```
 
-## MySQL 数据库
+停止当前项目服务：
 
-后端启动/迁移时会自动创建数据库：
+```sh
+npm run stop
+```
+
+`npm run stop` 会读取项目根目录的 `.server.pid` 并停止对应的 Node 进程；如果没有运行中的服务，会提示未找到，不会报错。
+
+## 数据库
+
+迁移脚本会自动创建数据库：
 
 ```text
 tt_talking_twice
 ```
 
-当前认证相关表：
+主要数据表：
+
+- `users`：用户账号、角色、昵称
+- `sessions`：httpOnly Cookie 登录会话
+- `login_attempts`：登录失败限流记录
+- `posts`：帖子主体
+- `comments`：评论
+- `post_likes`：点赞关系
+- `categories`：板块
+- `category_tags`：板块标签
+- `post_tags`：帖子标签
+- `admin_reports` / `admin_report_posts`：管理员报告与关联帖子
+
+迁移脚本会保留默认管理员创建逻辑；不会再自动创建 `seed@local.test` 测试账号或 demo 帖子。
+
+默认管理员账号在没有任何管理员时创建：
 
 ```text
-users
-sessions
-login_attempts
+邮箱：root@root.root
+密码：123456
 ```
 
-登录失败限频写入 `login_attempts` 表，服务重启后不会丢失。
+首次登录后建议立即修改密码。
 
-## 登录注册
+## AI 配置
 
-当前登录注册已经接入真实后端：
+AI 请求配置集中在 `.env`，由 `server/config/env.js` 读取：
 
-- 注册：`POST /api/auth/register`
-- 登录：`POST /api/auth/login`
-- 当前用户：`GET /api/auth/me`
-- 退出登录：`POST /api/auth/logout`
+- `OPENAI_API_KEY`：接口密钥
+- `OPENAI_BASE_URL`：接口地址，默认 `https://api.openai.com/v1`
+- `OPENAI_MODEL`：模型名称
+- `OPENAI_USER_AGENT`：请求使用的 User-Agent
+- `AI_TIMEOUT_MS`：请求超时时间，单位毫秒
 
-密码使用 `bcryptjs` 加密存储，登录状态使用 httpOnly Cookie 会话。
+如果没有配置 `OPENAI_API_KEY`，AI 分析会自动跳过，系统仍可使用本地统计逻辑。
 
-## 后端结构
+## 常用命令
+
+```sh
+npm start      # 启动服务
+npm run dev    # 同 start
+npm run stop   # 停止当前项目服务
+npm run migrate # 创建/更新数据库结构
+```
+
+## 项目结构
 
 ```text
-server/
-├── app.js
-├── config/
-│   └── env.js
-├── database/
-│   ├── connection.js
-│   └── migrate.js
-├── middleware/
-│   └── authMiddleware.js
-├── repositories/
-│   ├── loginAttemptRepository.js
-│   ├── sessionRepository.js
-│   └── userRepository.js
-├── routes/
-│   └── authRoutes.js
-├── services/
-│   └── authService.js
-└── utils/
-    ├── password.js
-    └── sessionToken.js
+.
+├── index.html
+├── script.js
+├── styles.css
+├── assets/
+├── scripts/
+│   └── stop.js
+└── server/
+    ├── app.js
+    ├── config/
+    │   └── env.js
+    ├── database/
+    │   ├── connection.js
+    │   └── migrate.js
+    ├── middleware/
+    ├── repositories/
+    ├── routes/
+    ├── services/
+    └── utils/
 ```
 
-## 当前功能
+## 注意事项
 
-- 顶部导航栏
-- 左侧边栏
-- 分类/标签下拉筛选
-- 论坛式吐槽列表
-- 发布吐槽弹窗
-- 帖子详情弹窗
-- 点赞 / 收藏 / 举报 / 评论交互
-- 登录弹窗
-- 注册弹窗
-- 密码加密存储
-- httpOnly Cookie 登录会话
-- 登录失败 5 次持久化限频，15 分钟后恢复
-- 管理员后台占位页
-- 黑夜 / 白天模式
+- `.env` 包含数据库密码和 AI Key，不要提交到公开仓库。
+- 修改数据库结构后重新运行 `npm run migrate`。
+- 管理员报告导出依赖后端生成内容，不需要额外安装 Office 或 PDF 工具。

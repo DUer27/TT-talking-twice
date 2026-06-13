@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const { port, rootDir } = require('./config/env');
@@ -9,6 +10,21 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const postRoutes = require('./routes/postRoutes');
 
 const app = express();
+const pidFile = path.join(rootDir, '.server.pid');
+
+const cleanupPidFile = () => {
+  try {
+    if (fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8').trim() === String(process.pid)) {
+      fs.unlinkSync(pidFile);
+    }
+  } catch (_error) {
+    // Best-effort cleanup only.
+  }
+};
+
+process.on('exit', cleanupPidFile);
+process.on('SIGINT', () => { cleanupPidFile(); process.exit(0); });
+process.on('SIGTERM', () => { cleanupPidFile(); process.exit(0); });
 
 app.use(express.json());
 app.use(cookieParser());
@@ -34,8 +50,16 @@ app.use((error, _req, res, _next) => {
 
 const start = async () => {
   await migrate();
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
+    fs.writeFileSync(pidFile, String(process.pid));
     console.log(`TT-talking-twice is running at http://127.0.0.1:${port}`);
+  });
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use. Run "npm run stop" and then try again.`);
+      process.exit(1);
+    }
+    throw error;
   });
 };
 

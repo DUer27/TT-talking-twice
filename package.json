@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server/app.js",
     "dev": "node server/app.js",
-    "migrate": "node server/database/migrate.js"
+    "migrate": "node server/database/migrate.js",
+    "stop": "node scripts/stop.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
