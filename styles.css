@@ -211,8 +211,9 @@ body.dark-mode .quick-like-btn { border-color: #2d4266; color: #cbd5e1; backgrou
 .chart-heading p, .chart-heading span { margin: 0; color: var(--muted); font-size: 12px; }
 .chart-card canvas { display: block; width: 100%; max-width: 100%; min-height: 130px; user-select: none; touch-action: none; }
 .chart-card-compact canvas { min-height: 150px; margin-top: auto; }
-.admin-manage { position: relative; max-height: 430px; overflow: hidden; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.admin-manage, .admin-feedback-panel { position: relative; max-height: 430px; overflow: hidden; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .admin-manage.is-expanded { position: fixed; inset: 5vh 5vw; z-index: 120; max-height: none; overflow: auto; padding: 22px; box-shadow: 0 24px 80px rgba(15, 23, 42, .28); }
+.admin-feedback-panel .admin-table-wrap { max-height: 260px; }
 .admin-manage-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; padding-right: 42px; }
 .admin-manage-head h2 { margin: 0 0 4px; font-size: 18px; }
 .admin-manage-head p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -236,12 +237,16 @@ body.dark-mode .quick-like-btn { border-color: #2d4266; color: #cbd5e1; backgrou
 .admin-status-badge.open { color: #b45309; background: #fef3c7; }
 .admin-status-badge.resolved { color: #047857; background: #d1fae5; }
 .admin-status-badge.deleted { color: #b91c1c; background: #fee2e2; }
+.admin-status-badge.ignored { color: #475569; background: #e2e8f0; }
 .admin-status-badge.deleting { color: #991b1b; background: #fff1f2; }
 .admin-status-badge.reported { color: #b91c1c; background: #fee2e2; }
 .admin-action-group { display: flex; flex-wrap: wrap; gap: 6px; }
 .admin-action-group button { min-height: 30px; padding: 0 9px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-soft); font-size: 12px; font-weight: 700; cursor: pointer; }
 .admin-action-group button:hover { border-color: var(--border-dark); transform: translateY(-1px); }
 .admin-action-group button:disabled { opacity: .48; cursor: not-allowed; transform: none; }
+.admin-feedback-table .admin-post-title strong { white-space: normal; }
+.admin-feedback-meta { display: grid; gap: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.admin-feedback-page { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-empty { padding: 28px; border: 1px dashed var(--border-dark); border-radius: 8px; color: var(--muted); text-align: center; background: var(--surface-soft); }
 .admin-workbench { display: grid; grid-template-columns: 1.35fr .65fr; gap: 12px; }
 .admin-workbench article { position: relative; min-width: 0; max-height: 360px; overflow: hidden; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }

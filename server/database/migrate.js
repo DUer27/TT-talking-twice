@@ -226,6 +226,25 @@ const migrate = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_feedback (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NULL,
+      type VARCHAR(64) NOT NULL DEFAULT '其他',
+      content TEXT NOT NULL,
+      contact VARCHAR(120) NULL,
+      page_url VARCHAR(500) NULL,
+      user_agent VARCHAR(500) NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'open',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_site_feedback_status_created_at (status, created_at),
+      KEY idx_site_feedback_user_id (user_id),
+      CONSTRAINT fk_site_feedback_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_reports (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       user_id BIGINT UNSIGNED NOT NULL,

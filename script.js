@@ -1,4 +1,5 @@
-﻿const topics = [];
+﻿let topics = [];
+
 
 const tagClass = (tag) => {
   if (tag.includes('课程') || tag.includes('公告')) return 'blue';
@@ -59,6 +60,11 @@ const adminTagCategory = document.getElementById('adminTagCategory');
 const adminTagInput = document.getElementById('adminTagInput');
 const adminDeleteCategoryBtn = document.getElementById('adminDeleteCategoryBtn');
 const adminArchivedList = document.getElementById('adminArchivedList');
+const feedbackEntry = document.getElementById('feedbackEntry');
+const adminFeedbackStatusFilter = document.getElementById('adminFeedbackStatusFilter');
+const adminFeedbackRefresh = document.getElementById('adminFeedbackRefresh');
+const adminFeedbackBody = document.getElementById('adminFeedbackBody');
+const adminFeedbackEmpty = document.getElementById('adminFeedbackEmpty');
 let hotCategoryButtons = [];
 
 const defaultTrendLabels = ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'];
@@ -218,6 +224,8 @@ let latestSeenPostId = '';
 const postPageSize = 30;
 let adminPosts = [];
 let adminPostLoading = false;
+let adminFeedback = [];
+let adminFeedbackLoading = false;
 let adminReports = [];
 const reportedPostIds = new Set();
 const archivedActionItems = new Set();
@@ -535,6 +543,12 @@ const adminStatusLabels = {
   deleted: '待删除',
 };
 
+const feedbackStatusLabels = {
+  open: '待处理',
+  resolved: '已处理',
+  ignored: '已忽略',
+};
+
 const getDeleteRemainingText = (post) => {
   if (post?.status !== 'deleted' || !post.deleteExpiresAt) return '';
   const remainingMs = new Date(post.deleteExpiresAt).getTime() - Date.now();
@@ -629,6 +643,66 @@ const loadAdminPosts = async ({ silent = true } = {}) => {
   } finally {
     adminPostLoading = false;
     renderAdminPosts();
+  }
+};
+
+const renderAdminFeedback = () => {
+  if (!adminFeedbackBody) return;
+  if (adminFeedbackLoading) {
+    adminFeedbackBody.innerHTML = '<tr><td colspan="6" class="empty-state">正在读取问题反馈...</td></tr>';
+    if (adminFeedbackEmpty) adminFeedbackEmpty.hidden = true;
+    return;
+  }
+  adminFeedbackBody.innerHTML = adminFeedback.map((item) => {
+    const status = item.status || 'open';
+    const statusLabel = feedbackStatusLabels[status] || status;
+    const safeId = escapeHtml(item.id);
+    const authorText = item.author ? `${item.author.name || '用户'}${item.author.email ? ` / ${item.author.email}` : ''}` : '未登录用户';
+    return `
+      <tr>
+        <td>
+          <div class="admin-post-title">
+            <strong>${escapeHtml(item.content || '')}</strong>
+            <span>${escapeHtml(item.pageUrl || '未记录页面地址')}</span>
+          </div>
+        </td>
+        <td>${escapeHtml(item.type || '其他')}</td>
+        <td>
+          <div class="admin-feedback-meta">
+            <span>${escapeHtml(authorText)}</span>
+            ${item.contact ? `<span>联系：${escapeHtml(item.contact)}</span>` : ''}
+          </div>
+        </td>
+        <td><span class="admin-status-badge ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span></td>
+        <td>${escapeHtml(getRelativeActivity(item.createdAt))}</td>
+        <td>
+          <div class="admin-action-group">
+            <button type="button" data-feedback-status-id="${safeId}" data-status="open" ${status === 'open' ? 'disabled' : ''}>待处理</button>
+            <button type="button" data-feedback-status-id="${safeId}" data-status="resolved" ${status === 'resolved' ? 'disabled' : ''}>已处理</button>
+            <button type="button" data-feedback-status-id="${safeId}" data-status="ignored" ${status === 'ignored' ? 'disabled' : ''}>忽略</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  if (adminFeedbackEmpty) adminFeedbackEmpty.hidden = Boolean(adminFeedback.length);
+};
+
+const loadAdminFeedback = async ({ silent = true } = {}) => {
+  if (!adminFeedbackBody || currentUser?.role !== 'admin') return;
+  adminFeedbackLoading = true;
+  renderAdminFeedback();
+  try {
+    const status = adminFeedbackStatusFilter?.value || 'all';
+    const { feedback = [] } = await apiRequest(`/api/feedback/admin?status=${encodeURIComponent(status)}`);
+    adminFeedback = feedback;
+    if (!silent) showToast('问题反馈已刷新');
+  } catch (error) {
+    adminFeedback = [];
+    showToast(error.message || '问题反馈加载失败');
+  } finally {
+    adminFeedbackLoading = false;
+    renderAdminFeedback();
   }
 };
 
@@ -1455,6 +1529,7 @@ sidebarLinks.forEach((link) => {
       navLinks.forEach((item) => item.classList.remove('active'));
       loadAdminStats({ silent: true });
       loadAdminPosts({ silent: true });
+      loadAdminFeedback({ silent: true });
       loadAdminReports({ silent: true });
       showToast('已进入管理员后台');
       return;
@@ -1681,6 +1756,32 @@ if (adminPostBody) {
   });
 }
 
+if (adminFeedbackBody) {
+  adminFeedbackBody.addEventListener('click', async (event) => {
+    const statusButton = event.target.closest('[data-feedback-status-id]');
+    if (!statusButton) return;
+    statusButton.disabled = true;
+    try {
+      const { feedback } = await apiRequest(`/api/feedback/admin/${encodeURIComponent(statusButton.dataset.feedbackStatusId)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: statusButton.dataset.status }),
+      });
+      const index = adminFeedback.findIndex((item) => String(item.id) === String(feedback.id));
+      if (index >= 0) adminFeedback.splice(index, 1, feedback);
+      else adminFeedback.unshift(feedback);
+      renderAdminFeedback();
+      showToast('反馈状态已更新');
+    } catch (error) {
+      showToast(error.message || '反馈状态更新失败');
+    } finally {
+      statusButton.disabled = false;
+    }
+  });
+}
+
+adminFeedbackStatusFilter?.addEventListener('change', () => loadAdminFeedback({ silent: false }));
+adminFeedbackRefresh?.addEventListener('click', () => loadAdminFeedback({ silent: false }));
+
 if (adminActionList) {
   adminActionList.addEventListener('click', async (event) => {
     const actionCard = event.target.closest('[data-action-id][data-report-id]');
@@ -1836,6 +1937,25 @@ rulesClose.addEventListener('click', closeRules);
 rulesOk.addEventListener('click', closeRules);
 rulesModal.addEventListener('click', (event) => { if (event.target === rulesModal) closeRules(); });
 
+const feedbackModal = document.getElementById('feedbackModal');
+const feedbackClose = document.getElementById('feedbackClose');
+const feedbackCancel = document.getElementById('feedbackCancel');
+const feedbackForm = document.getElementById('feedbackForm');
+const feedbackTypeInput = document.getElementById('feedbackTypeInput');
+const feedbackContentInput = document.getElementById('feedbackContentInput');
+const feedbackContactInput = document.getElementById('feedbackContactInput');
+
+const openFeedback = () => {
+  feedbackForm.reset();
+  feedbackModal.hidden = false;
+  setTimeout(() => feedbackContentInput.focus(), 60);
+};
+
+const closeFeedback = () => {
+  feedbackModal.hidden = true;
+  feedbackForm.reset();
+};
+
 const createPostModal = document.getElementById('createPostModal');
 const createPostClose = document.getElementById('createPostClose');
 const createPostCancel = document.getElementById('createPostCancel');
@@ -1913,6 +2033,46 @@ const closeCreatePost = () => {
   postAnonymousInput.checked = false;
   renderPostTagOptions();
 };
+
+feedbackEntry?.addEventListener('click', (event) => {
+  event.preventDefault();
+  openFeedback();
+});
+feedbackClose?.addEventListener('click', closeFeedback);
+feedbackCancel?.addEventListener('click', closeFeedback);
+feedbackModal?.addEventListener('click', (event) => { if (event.target === feedbackModal) closeFeedback(); });
+feedbackForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const content = feedbackContentInput.value.trim();
+  if (!content) {
+    showToast('请先输入你遇到的问题');
+    feedbackContentInput.focus();
+    return;
+  }
+  const submitBtn = feedbackForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '提交中...';
+  try {
+    await apiRequest('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: feedbackTypeInput.value,
+        content,
+        contact: feedbackContactInput.value.trim(),
+        pageUrl: window.location.href,
+      }),
+    });
+    closeFeedback();
+    if (currentUser?.role === 'admin') await loadAdminFeedback({ silent: true });
+    showToast('问题反馈已提交，管理员会尽快查看');
+  } catch (error) {
+    showToast(error.message || '反馈提交失败');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
 
 createPostBtn.addEventListener('click', openCreatePost);
 createPostClose.addEventListener('click', closeCreatePost);
@@ -2353,6 +2513,12 @@ window.addEventListener('resize', () => {
   if (!adminPanel.hidden) renderAdminCharts();
 });
 
+setInterval(() => {
+  if (currentUser?.role === 'admin' && adminPanel && !adminPanel.hidden) {
+    loadAdminFeedback({ silent: true });
+  }
+}, 15000);
+
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   document.querySelectorAll('.admin-workbench article.is-expanded, .admin-manage.is-expanded').forEach((card) => {
@@ -2361,6 +2527,7 @@ document.addEventListener('keydown', (event) => {
     if (button) button.textContent = '＋';
   });
   if (!rulesModal.hidden) closeRules();
+  if (!feedbackModal.hidden) closeFeedback();
   if (!createPostModal.hidden) closeCreatePost();
   if (!announcementModal.hidden) closeAnnouncements();
   if (!announcementEditorModal.hidden) closeAnnouncementEditor();

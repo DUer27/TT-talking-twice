@@ -57,6 +57,7 @@
           <a class="sidebar-link" href="#" data-filter="hot" data-title="热门吐槽"><span>🔥</span> 热门吐槽</a>
           <a class="sidebar-link" href="#" data-filter="mine" data-title="我的吐槽"><span>✎</span> 我的吐槽</a>
           <a class="sidebar-link" href="#" data-filter="resolved" data-title="已处理"><span>✓</span> 已处理</a>
+          <a class="sidebar-link" href="#" id="feedbackEntry"><span>☞</span> 问题反馈</a>
         </section>
         <section class="sidebar-section" id="categorySidebarSection">
           <div class="sidebar-title">吐槽板块</div>
@@ -210,6 +211,40 @@
             </div>
             <div class="admin-empty" id="adminPostEmpty" hidden>暂无符合条件的帖子。</div>
           </section>
+          <section class="admin-feedback-panel" aria-label="问题反馈管理">
+            <div class="admin-manage-head">
+              <div>
+                <h2>问题反馈</h2>
+                <p>实时接收用户提交的网站使用问题，支持按状态处理。</p>
+              </div>
+              <div class="admin-tools">
+                <select id="adminFeedbackStatusFilter" aria-label="按状态筛选问题反馈">
+                  <option value="all">全部反馈</option>
+                  <option value="open">待处理</option>
+                  <option value="resolved">已处理</option>
+                  <option value="ignored">已忽略</option>
+                </select>
+                <button type="button" class="ghost-btn" id="adminFeedbackRefresh">刷新</button>
+              </div>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="admin-post-table admin-feedback-table">
+                <thead>
+                  <tr>
+                    <th>反馈内容</th>
+                    <th>类型</th>
+                    <th>提交人</th>
+                    <th>状态</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="adminFeedbackBody"></tbody>
+              </table>
+            </div>
+            <div class="admin-empty" id="adminFeedbackEmpty" hidden>暂无问题反馈。</div>
+          </section>
+
           <section class="admin-workbench" aria-label="总结与报告">
             <article class="admin-flow-card">
               <button type="button" class="admin-expand-btn" data-expand-card title="放大">＋</button>
@@ -283,6 +318,40 @@
         <span>一句话原则：可以尖锐，但要真实；可以吐槽，但要尊重。</span>
         <button class="primary-btn" id="rulesOk">我知道了</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="feedbackModal" hidden>
+    <div class="create-modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <button class="modal-close" id="feedbackClose" aria-label="关闭问题反馈弹窗">×</button>
+      <h2 id="feedbackTitle">问题反馈</h2>
+      <p class="create-intro">如果你在使用网站时遇到登录、发帖、显示或数据问题，可以在这里反馈给管理员。</p>
+      <form class="create-form" id="feedbackForm">
+        <label>
+          <span>问题类型</span>
+          <select id="feedbackTypeInput" required>
+            <option value="登录问题">登录问题</option>
+            <option value="发帖问题">发帖问题</option>
+            <option value="页面显示异常">页面显示异常</option>
+            <option value="管理员后台问题">管理员后台问题</option>
+            <option value="数据错误">数据错误</option>
+            <option value="功能建议">功能建议</option>
+            <option value="其他">其他</option>
+          </select>
+        </label>
+        <label>
+          <span>问题描述</span>
+          <textarea id="feedbackContentInput" rows="6" maxlength="2000" placeholder="请描述你遇到的问题、发生步骤、页面位置或期望改进..." required></textarea>
+        </label>
+        <label>
+          <span>联系方式（可选）</span>
+          <input id="feedbackContactInput" type="text" maxlength="120" placeholder="邮箱、QQ 或微信，方便管理员追问细节" />
+        </label>
+        <div class="create-actions">
+          <button type="button" class="ghost-btn" id="feedbackCancel">取消</button>
+          <button type="submit" class="primary-btn">提交反馈</button>
+        </div>
+      </form>
     </div>
   </div>
 

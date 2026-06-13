@@ -7,6 +7,7 @@ const { migrate } = require('./database/migrate');
 const { attachCurrentUser } = require('./middleware/authMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const feedbackRoutes = require('./routes/feedbackRoutes');
 const postRoutes = require('./routes/postRoutes');
 const { purgeExpiredDeletedPosts } = require('./repositories/postRepository');
 
@@ -34,6 +35,7 @@ app.use(attachCurrentUser);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/feedback', feedbackRoutes);
 app.use('/api/posts', postRoutes);
 
 app.use(express.static(rootDir));
