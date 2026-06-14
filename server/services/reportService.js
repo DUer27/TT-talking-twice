@@ -50,23 +50,69 @@ const normalizeKeywordItems = (items = []) => (Array.isArray(items) ? items : []
   })
   .filter((item) => item.word && item.count > 0);
 
-const normalizeAiKeywordTrends = (aiPayload = {}, statCategories = []) => {
+const getCategoryName = (item) => normalizeActionTitle(item?.category || item?.categoryName || item?.name || item?.label);
+
+const normalizeAiKeywordTrends = (aiPayload = {}, localPayload = {}) => {
+  const statCategories = Array.isArray(localPayload.categories) ? localPayload.categories : [];
   const trendMap = Object.fromEntries(statCategories.map((item) => [item.category, new Map()]));
+  const localKeywordCategoryMap = new Map();
+
+  Object.entries(localPayload.keywordTrends || {}).forEach(([category, trend]) => {
+    const labels = Array.isArray(trend?.labels) ? trend.labels : [];
+    labels.forEach((label) => {
+      const keyword = normalizeActionTitle(label);
+      if (!keyword) return;
+      if (!localKeywordCategoryMap.has(keyword)) localKeywordCategoryMap.set(keyword, new Set());
+      localKeywordCategoryMap.get(keyword).add(category);
+    });
+  });
+
+  const inferCategory = (item) => {
+    const category = getCategoryName(item);
+    if (trendMap[category]) return category;
+    const matchedCategories = localKeywordCategoryMap.get(item.word);
+    if (matchedCategories?.size === 1) return [...matchedCategories][0];
+    return statCategories.length === 1 ? statCategories[0].category : '';
+  };
+
   const addKeyword = (category, word, count) => {
     if (!trendMap[category] || !word || Number(count || 0) <= 0) return;
     trendMap[category].set(word, (trendMap[category].get(word) || 0) + Number(count));
   };
-
-  Object.entries(aiPayload.keywordTrends || {}).forEach(([category, trend]) => {
-    const labels = Array.isArray(trend?.labels) ? trend.labels : [];
-    const points = Array.isArray(trend?.points) ? trend.points : [];
+  const addKeywordItems = (items, fallbackCategory = '') => {
+    normalizeKeywordItems(items).forEach((item) => {
+      const category = trendMap[item.category] ? item.category : fallbackCategory || inferCategory(item);
+      addKeyword(category, item.word, item.count);
+    });
+  };
+  const addTrend = (category, trend) => {
+    if (!trend) return;
+    if (Array.isArray(trend)) {
+      addKeywordItems(trend, category);
+      return;
+    }
+    const labels = Array.isArray(trend.labels) ? trend.labels : [];
+    const points = Array.isArray(trend.points) ? trend.points : [];
     labels.forEach((label, index) => addKeyword(category, normalizeActionTitle(label), points[index] || 1));
-    normalizeKeywordItems(trend?.keywords || trend?.items).forEach((item) => addKeyword(category, item.word, item.count));
+    addKeywordItems(trend.keywords || trend.items, category);
+  };
+
+  if (Array.isArray(aiPayload.keywordTrends)) {
+    addKeywordItems(aiPayload.keywordTrends);
+  } else {
+    Object.entries(aiPayload.keywordTrends || {}).forEach(([category, trend]) => addTrend(category, trend));
+  }
+
+  Object.entries(aiPayload.trends || {}).forEach(([category, trend]) => addTrend(category, trend));
+
+  (Array.isArray(aiPayload.categories) ? aiPayload.categories : []).forEach((categoryItem) => {
+    const category = getCategoryName(categoryItem);
+    addKeywordItems(categoryItem?.keywords || categoryItem?.keywordItems || categoryItem?.tags, category);
+    addTrend(category, categoryItem?.keywordTrends || categoryItem?.trend);
   });
 
-  normalizeKeywordItems(aiPayload.keywords).forEach((item) => {
-    if (item.category) addKeyword(item.category, item.word, item.count);
-  });
+  addKeywordItems(aiPayload.keywords);
+  addKeywordItems(aiPayload.actionItems);
 
   return Object.fromEntries(statCategories.map((config) => {
     const items = [...(trendMap[config.category] || new Map()).entries()]
@@ -396,7 +442,7 @@ const generateAdminReport = async (userId) => {
   console.log(`[AI] admin report ${aiPayload ? 'completed' : 'fell back to local summary'} in ${Date.now() - startedAt}ms`);
   const aiFailure = aiPayload ? null : getLastAiFailure();
   if (aiFailure) console.warn(`[AI] admin report fallback reason: ${aiFailure.message}${aiFailure.detail ? `: ${aiFailure.detail}` : ''}`);
-  const aiKeywordTrends = aiPayload ? normalizeAiKeywordTrends(aiPayload, localPayload.categories) : null;
+  const aiKeywordTrends = aiPayload ? normalizeAiKeywordTrends(aiPayload, localPayload) : null;
   const keywordTags = aiKeywordTrends ? keywordTrendsToSuggestedTags(aiKeywordTrends) : [];
   const addedTags = aiPayload
     ? await addSuggestedTagsToCategories([...(aiPayload.suggestedTags || []), ...keywordTags])

@@ -782,8 +782,11 @@ const renderArchivedActionItems = () => {
   `).join('');
 };
 
-const normalizeChartPoints = (points = []) => (Array.isArray(points) ? points : [])
-  .map((value) => Math.max(0, Number(value) || 0));
+const normalizeChartPoints = (points = []) => {
+  const normalized = (Array.isArray(points) ? points : [])
+    .map((value) => Math.max(0, Number(value) || 0));
+  return normalized.length ? normalized : defaultTrendLabels.map(() => 0);
+};
 
 const alignChartPoints = (points = [], length = 0) => {
   const normalized = normalizeChartPoints(points);
@@ -839,6 +842,7 @@ const generateAdminReport = async () => {
       await loadCategories();
     }
     renderAdminReportList();
+    await loadAdminStats({ silent: true });
     showToast('报告已生成');
   } catch (error) {
     showToast(error.message || '报告生成失败');
@@ -1021,10 +1025,26 @@ const drawGrid = (ctx, area, ySteps, xSteps) => {
   ctx.restore();
 };
 
-const getTrendData = (category = activeTrendCategory) => categoryTrendMap[category]
+const normalizeTrendData = (trend = {}) => {
+  const rawLabels = Array.isArray(trend.labels) && trend.labels.length ? trend.labels : defaultTrendLabels;
+  const labels = rawLabels.length === 1 ? [rawLabels[0], ''] : rawLabels;
+  const points = normalizeChartPoints(trend.points);
+  const alignedPoints = alignChartPoints(points, labels.length);
+  if (rawLabels.length === 1) alignedPoints[1] = alignedPoints[0];
+  return {
+    keyword: trend.keyword || '暂无',
+    mentions: Number(trend.mentions || 0),
+    labels,
+    points: alignedPoints,
+  };
+};
+
+const getTrendData = (category = activeTrendCategory) => normalizeTrendData(
+  categoryTrendMap[category]
   || categoryTrendMap[adminStats.hotCategory]
   || categoryTrendMap[categoryStatOrder[0].category]
-  || { keyword: '暂无', mentions: 0, labels: defaultTrendLabels, points: defaultTrendLabels.map(() => 0) };
+  || {}
+);
 
 const drawTrendChart = () => {
   const canvasState = setupCanvas(complaintTrendChart);
@@ -1283,7 +1303,7 @@ const animateTrendTo = (previousPoints, nextPoints) => {
 };
 
 const updateHotCategory = (category) => {
-  const trendData = categoryTrendMap[category];
+  const trendData = getTrendData(category);
   if (!trendData) return;
   const previousCategory = activeTrendCategory;
   const previousPoints = normalizeChartPoints(getTrendData(previousCategory).points);
@@ -1316,6 +1336,7 @@ const getCanvasPointer = (canvas, event) => {
 const updateTrendHover = (event) => {
   const pointer = getCanvasPointer(complaintTrendChart, event);
   const trendPoints = getTrendData(activeTrendCategory).points;
+  if (trendPoints.length < 2) return;
   const area = { left: 48, right: pointer.width - 18, top: 16, bottom: pointer.height - 50 };
   if (pointer.x < area.left || pointer.x > area.right || pointer.y < area.top || pointer.y > area.bottom) {
     activeTrendIndex = 0;
