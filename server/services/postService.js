@@ -66,6 +66,12 @@ const keywordStopWords = new Set([
   '一下子', '越来越', '管理员', '相关', '新增', '情况', '内容', '发布', '进行', '需要', '应该', '是否', '如果', '因为', '但是',
 ]);
 
+const readableKeywordStopWords = new Set([
+  '这个', '那个', '我们', '你们', '他们', '希望', '感觉', '觉得', '发现', '现在', '最近', '已经', '可以', '不能', '没有', '不是', '还是',
+  '一个', '一些', '很多', '比较', '真的', '时候', '问题', '建议', '同学', '老师', '学校', '校园', '吐槽', '反馈', '处理', '相关', '新增', '情况', '内容', '发布', '进行', '需要', '应该',
+  '每次', '一点', '一点点', '不够', '吃得', '谁吃', '发错', '板块', '地方', '食堂', '阿姨', '课程', '宿舍', '设施', '活动', '社团', '只打', '只', '都', '点', '谁', '饱', '打', '就', '吃',
+]);
+
 const getKnownKeywords = (posts = []) => {
   const keywords = new Set(categoryConfig.flatMap((config) => config.keywords));
   posts.forEach((post) => {
@@ -77,8 +83,8 @@ const getKnownKeywords = (posts = []) => {
     .sort((a, b) => b.length - a.length);
 };
 
-const addKeywordHit = (postScores, postHits, postId, rawText, titleText, keyword) => {
-  if (!keyword || !countKeyword(rawText, keyword)) return;
+const addKeywordHit = (postScores, postHits, postId, rawText, titleText, keyword, { force = false } = {}) => {
+  if (!keyword || (!force && !countKeyword(rawText, keyword))) return;
   const safePostId = String(postId);
   const score = titleText.includes(keyword) ? 2 : 1;
   if (!postHits.has(keyword)) postHits.set(keyword, new Set());
@@ -101,6 +107,51 @@ const cleanPhraseCandidate = (phrase) => phrase
 const countKnownKeywordHits = (value, knownKeywords) => knownKeywords
   .filter((keyword) => value.includes(keyword))
   .length;
+
+const cleanDynamicKeyword = (keyword) => normalizeText(keyword)
+  .replace(/^[了的地得吗呢吧啊呀哦嘛啦]+/u, '')
+  .replace(/[很太真都又再还更挺]/gu, '')
+  .replace(/[了的地得吗呢吧啊呀哦嘛啦]+$/u, '')
+  .trim();
+
+const isUsefulDynamicKeyword = (keyword) => {
+  const normalized = cleanDynamicKeyword(keyword);
+  if (!isUsefulKeyword(normalized)) return false;
+  if (readableKeywordStopWords.has(normalized)) return false;
+  if ([...readableKeywordStopWords].some((word) => normalized.includes(word))) return false;
+  if (/^(不够|每次|一点|打点|只打|错板|发错|谁吃|打|就|吃)/u.test(normalized)) return false;
+  if (/(打|就|吃)$/.test(normalized)) return false;
+  return true;
+};
+
+const extractChineseKeywordCandidates = (post) => {
+  const candidates = new Set();
+  const addCandidate = (value) => {
+    const cleaned = cleanDynamicKeyword(value);
+    if (isUsefulDynamicKeyword(cleaned)) candidates.add(cleaned);
+  };
+  const addPatternCandidates = (text) => {
+    if (/菜不新鲜|不新鲜/u.test(text)) addCandidate(text.includes('菜不新鲜') ? '菜不新鲜' : '不新鲜');
+    if (/手\s*很?\s*抖|手抖/u.test(text)) addCandidate('手抖');
+    if (/不够吃|吃不饱|谁吃得饱|只打一点|打一点|分量少|量少/u.test(text)) addCandidate('分量少');
+    if (/价格|菜价|太贵|贵给谁/u.test(text)) addCandidate('价格');
+    if (/排队|等很久|等太久/u.test(text)) addCandidate('排队');
+  };
+  const stripStopWords = (text) => {
+    let result = normalizeText(text).replace(/[\s\p{P}\p{S}]+/gu, '');
+    readableKeywordStopWords.forEach((word) => {
+      result = result.replace(new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gu'), '');
+    });
+    return cleanDynamicKeyword(result);
+  };
+  [post.title, post.content, getCommentText(post)].filter(Boolean).forEach((value) => {
+    const text = String(value);
+    addPatternCandidates(text);
+    const stripped = stripStopWords(text);
+    if (stripped.length >= 2 && stripped.length <= 8) addCandidate(stripped);
+  });
+  return [...candidates];
+};
 
 const isUsefulKeyword = (keyword) => {
   if (!keyword || keyword.length < 2 || keyword.length > 8) return false;
@@ -125,6 +176,10 @@ const extractDynamicKeywords = (posts, limit = 12) => {
     });
 
     knownKeywords.forEach((keyword) => addKeywordHit(postScores, postHits, postId, rawText, titleText, keyword));
+
+    extractChineseKeywordCandidates(post).forEach((keyword) => {
+      addKeywordHit(postScores, postHits, postId, rawText, titleText, keyword, { force: true });
+    });
 
     splitChinesePhrases(titleText).forEach((phrase) => {
       const cleaned = cleanPhraseCandidate(phrase);
@@ -178,31 +233,17 @@ const buildCurrentKeywordCounts = (categoryPosts = [], allowedKeywords = new Set
   return counts;
 };
 
-const getReportKeywordTrends = async (statCategories, categories = [], recentPosts = []) => {
+const addTrendCount = (trendMap, category, keyword, count) => {
+  const normalizedKeyword = normalizeText(keyword);
+  const safeCount = Number(count || 0);
+  if (!trendMap[category] || !normalizedKeyword || safeCount <= 0) return;
+  if (!isUsefulKeyword(normalizedKeyword)) return;
+  trendMap[category].set(normalizedKeyword, (trendMap[category].get(normalizedKeyword) || 0) + safeCount);
+};
+
+const getReportKeywordTrends = async (statCategories) => {
   const reports = await listReports({ limit: 50 });
   const trendMap = Object.fromEntries(statCategories.map((config) => [config.category, new Map()]));
-  const allowedKeywordMap = buildAllowedKeywordMap(statCategories, categories);
-  const currentKeywordMap = new Map(statCategories.map((config) => {
-    const categoryPosts = recentPosts.filter((post) => post.category === config.category);
-    const currentKeywords = buildCurrentKeywordCounts(categoryPosts, allowedKeywordMap.get(config.category));
-    return [config.category, new Set(currentKeywords.keys())];
-  }));
-  const isAllowedTrendKeyword = (category, keyword) => {
-    const normalizedKeyword = normalizeText(keyword);
-    if (!isUsefulKeyword(normalizedKeyword)) return false;
-    const currentKeywords = currentKeywordMap.get(category);
-    if (!currentKeywords || !currentKeywords.has(normalizedKeyword)) return false;
-    const allowedKeywords = allowedKeywordMap.get(category);
-    if (!allowedKeywords || !allowedKeywords.size) return false;
-    return allowedKeywords.has(normalizedKeyword);
-  };
-  const addKeywordCount = (category, keyword, count) => {
-    const normalizedKeyword = normalizeText(keyword);
-    const safeCount = Number(count || 0);
-    if (!trendMap[category] || !normalizedKeyword || safeCount <= 0) return;
-    if (!isAllowedTrendKeyword(category, normalizedKeyword)) return;
-    trendMap[category].set(normalizedKeyword, (trendMap[category].get(normalizedKeyword) || 0) + safeCount);
-  };
 
   reports.forEach((report) => {
     const payload = report.payload || {};
@@ -211,15 +252,9 @@ const getReportKeywordTrends = async (statCategories, categories = [], recentPos
       const labels = Array.isArray(trend.labels) ? trend.labels : [];
       const points = Array.isArray(trend.points) ? trend.points : [];
       labels.forEach((label, index) => {
-        addKeywordCount(category, label, points[index]);
+        addTrendCount(trendMap, category, label, points[index]);
       });
     });
-
-    if (Array.isArray(payload.actionItems)) {
-      payload.actionItems.forEach((item) => {
-        addKeywordCount(item.category, item.keyword, item.postCount || item.postIds?.length || 0);
-      });
-    }
   });
 
   return Object.fromEntries(statCategories.map((config) => {
@@ -254,6 +289,13 @@ const buildKeywordTrendsFromPosts = (statCategories, recentPosts = [], categorie
     }];
   }));
 };
+
+const createEmptyKeywordTrends = (statCategories) => Object.fromEntries(statCategories.map((config) => [config.category, {
+  keyword: '暂无',
+  mentions: 0,
+  labels: [],
+  points: [],
+}]));
 
 const mergeKeywordTrendFallback = (primaryTrends, fallbackTrends) => Object.fromEntries(
   Object.entries(primaryTrends).map(([category, trend]) => {
@@ -321,9 +363,8 @@ const getPostStats = async () => {
   const categoryCountMap = new Map(
     statsData.categories.map((row) => [row.category, Number(row.post_count || 0)])
   );
-  const reportTrendMap = await getReportKeywordTrends(statCategories, categories, statsData.recentPosts);
-  const recentTrendMap = buildKeywordTrendsFromPosts(statCategories, statsData.recentPosts, categories);
-  const trendMap = mergeKeywordTrendFallback(recentTrendMap, reportTrendMap);
+  const reportTrendMap = await getReportKeywordTrends(statCategories);
+  const trendMap = mergeKeywordTrendFallback(reportTrendMap, createEmptyKeywordTrends(statCategories));
 
   const categoryStats = statCategories.map((config) => ({
     category: config.category,

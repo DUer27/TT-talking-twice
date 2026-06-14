@@ -126,7 +126,7 @@ const compactPostsForAi = (posts, limit = 80) => posts.slice(0, limit).map((post
   createdAt: post.createdAt,
 }));
 
-const generateReportPayload = async ({ posts, localPayload, existingCategories = [] }) => callOpenAiJson({
+const generateReportPayload = async ({ posts, localPayload, existingCategories = [], existingKeywordTrends = {} }) => callOpenAiJson({
   system: [
     '你是校园反馈系统的数据分析助手。',
     '只根据输入帖子生成周期性处理报告，不要编造未出现的信息。',
@@ -136,8 +136,11 @@ const generateReportPayload = async ({ posts, localPayload, existingCategories =
     'actionItems 使用数组，如 [{"category":"宿舍生活","title":"宿舍热水时段稳定性处理"}]，只生成标题和类别，不要编造帖子 id；同一类别同一问题只输出一条。',
     'suggestions 使用数组，每条建议应可执行。',
     '同时检查是否需要补充新标签，返回 suggestedTags 数组，如 [{"category":"校园设施","tag":"厕所","reason":"多条帖子反馈厕所卫生"}]。只建议具体、可复用的问题标签，不要输出“问题、建议、学校、同学”等泛词。必须先查看 existingCategories；如果当前板块已有更短、更通用的标签覆盖该问题，不要输出新标签，例如已有“场地”时不要输出“社团场地”“社团场地不足”。',
-  ].join('\n'),
-  user: JSON.stringify({ posts: compactPostsForAi(posts, 120), localPayload, existingCategories }),
+  ].concat([
+    '关键词统计要求：keywords 数组元素必须包含 category、word、count，例如 {"category":"食堂吐槽","word":"菜不新鲜","count":2}。count 是覆盖的帖子数，同一帖子重复出现只算 1 次。',
+    '同时返回 keywordTrends 对象，按板块输出 labels 和 points，例如 {"食堂吐槽":{"labels":["菜不新鲜"],"points":[2]}}。必须先查看 existingCategories 和 existingKeywordTrends，优先复用已有标签/关键词，避免同义重复；没有合适词时再新增，并同步放入 suggestedTags。',
+  ]).join('\n'),
+  user: JSON.stringify({ posts: compactPostsForAi(posts, 120), localPayload, existingCategories, existingKeywordTrends }),
 });
 
 module.exports = {

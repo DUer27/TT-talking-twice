@@ -2513,12 +2513,6 @@ window.addEventListener('resize', () => {
   if (!adminPanel.hidden) renderAdminCharts();
 });
 
-setInterval(() => {
-  if (currentUser?.role === 'admin' && adminPanel && !adminPanel.hidden) {
-    loadAdminFeedback({ silent: true });
-  }
-}, 15000);
-
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   document.querySelectorAll('.admin-workbench article.is-expanded, .admin-manage.is-expanded').forEach((card) => {

@@ -54,14 +54,13 @@ const listFeedback = async ({ status = 'all', limit = 100 } = {}) => {
     whereSql = 'WHERE site_feedback.status = ?';
     params.push(status);
   }
-  params.push(safeLimit);
   const [rows] = await getPool().execute(
     `SELECT site_feedback.*, users.email AS author_email, users.nickname AS author_nickname
      FROM site_feedback
      LEFT JOIN users ON users.id = site_feedback.user_id
      ${whereSql}
      ORDER BY site_feedback.created_at DESC, site_feedback.id DESC
-     LIMIT ?`,
+     LIMIT ${safeLimit}`,
     params
   );
   return rows.map(publicFeedbackFields);
