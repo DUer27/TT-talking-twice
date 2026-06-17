@@ -260,7 +260,18 @@
                   <p id="adminAiSummary">生成报告后会展示本次反馈摘要。</p>
                 </div>
               </div>
-              <button type="button" class="primary-btn admin-report-generate" id="generateReportBtn">生成报告</button>
+              <div class="admin-report-controls">
+                <label for="adminReportCategory">总结范围</label>
+                <select id="adminReportCategory" aria-label="选择智能总结范围">
+                  <option value="all">全部帖子</option>
+                  <option value="课程吐槽">课程吐槽</option>
+                  <option value="食堂吐槽">食堂吐槽</option>
+                  <option value="宿舍生活">宿舍生活</option>
+                  <option value="校园设施">校园设施</option>
+                  <option value="活动社团">活动社团</option>
+                </select>
+                <button type="button" class="primary-btn admin-report-generate" id="generateReportBtn">生成报告</button>
+              </div>
               <ul class="admin-suggestion-list" id="adminSuggestionList"></ul>
             </article>
             <article class="admin-category-card">

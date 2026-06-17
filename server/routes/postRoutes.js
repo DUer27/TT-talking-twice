@@ -57,7 +57,7 @@ router.get('/admin/reports', requireAdmin, async (_req, res, next) => {
 
 router.post('/admin/reports', requireAdmin, async (req, res, next) => {
   try {
-    const report = await generateAdminReport(req.currentUser.id);
+    const report = await generateAdminReport(req.currentUser.id, { category: req.body?.category });
     res.status(201).json({ report });
   } catch (error) {
     next(error);

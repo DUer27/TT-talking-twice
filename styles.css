@@ -270,7 +270,11 @@ body.dark-mode .quick-like-btn { border-color: #2d4266; color: #cbd5e1; backgrou
 .admin-action-buttons button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .admin-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .admin-ai-card .admin-card-heading { padding-right: 38px; }
-.admin-report-generate { margin: 16px 38px 2px 0; }
+.admin-report-controls { display: grid; grid-template-columns: auto minmax(150px, 1fr) auto; align-items: center; gap: 8px; margin: 16px 38px 2px 0; }
+.admin-report-controls label { color: var(--muted); font-size: 13px; font-weight: 800; }
+.admin-report-controls select { min-height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; color: var(--text); background: var(--surface-soft); outline: none; }
+.admin-report-controls select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47, 111, 237, .12); }
+.admin-report-generate { min-height: 38px; }
 .admin-suggestion-list { display: grid; gap: 8px; max-height: 190px; overflow: auto; margin: 14px 0 0; padding: 0 4px 0 0; list-style: none; }
 .admin-suggestion-list li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-soft); line-height: 1.6; }
 .admin-history-card { grid-column: 1 / -1; }
@@ -311,7 +315,7 @@ body.dark-mode .admin-status-badge.reported { color: #fecaca; background: rgba(1
 body.dark-mode .admin-post-table tr.is-reported td { background: rgba(127, 29, 29, .22); }
 @media (max-width: 1100px) { .admin-charts, .admin-workbench { grid-template-columns: 1fr; } }
 @media (max-width: 980px) { .admin-grid { grid-template-columns: 1fr; } .hot-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .hot-breakdown, .admin-flow-steps { grid-template-columns: 1fr; } .chart-heading, .admin-manage-head, .admin-card-heading, .admin-report-item { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; } .admin-tools, .admin-tools input { width: 100%; } }
+@media (max-width: 560px) { .hot-breakdown, .admin-flow-steps, .admin-report-controls { grid-template-columns: 1fr; } .chart-heading, .admin-manage-head, .admin-card-heading, .admin-report-item { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; } .admin-tools, .admin-tools input { width: 100%; } }
 
 .modal-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(15, 23, 42, .52); backdrop-filter: blur(6px); animation: overlayFadeIn .18s ease-out; }
 .modal-overlay[hidden] { display: none; }

@@ -29,6 +29,7 @@ const tagMenu = document.getElementById('tagMenu');
 const brandHome = document.getElementById('brandHome');
 const announcementBtn = document.getElementById('announcementBtn');
 const generateReportBtn = document.getElementById('generateReportBtn');
+const adminReportCategory = document.getElementById('adminReportCategory');
 const loginBtn = document.getElementById('loginBtn');
 const userMenuWrap = document.getElementById('userMenuWrap');
 const userMenu = document.getElementById('userMenu');
@@ -165,6 +166,17 @@ const applyCategories = (categories = []) => {
     if (previousValue && visibleCategories.some((category) => category.name === previousValue)) {
       adminTagCategory.value = previousValue;
     }
+  }
+
+  if (adminReportCategory) {
+    const previousValue = adminReportCategory.value || 'all';
+    adminReportCategory.innerHTML = [
+      '<option value="all">全部帖子</option>',
+      ...visibleCategories.map((category) => `<option value="${escapeHtml(category.name)}">${escapeHtml(category.name)}</option>`),
+    ].join('');
+    adminReportCategory.value = previousValue === 'all' || visibleCategories.some((category) => category.name === previousValue)
+      ? previousValue
+      : 'all';
   }
   renderPostTagOptions();
 };
@@ -834,7 +846,11 @@ const generateAdminReport = async () => {
   generateReportBtn.disabled = true;
   generateReportBtn.textContent = '生成中...';
   try {
-    const { report } = await apiRequest('/api/posts/admin/reports', { method: 'POST' });
+    const selectedCategory = adminReportCategory?.value || 'all';
+    const { report } = await apiRequest('/api/posts/admin/reports', {
+      method: 'POST',
+      body: JSON.stringify({ category: selectedCategory }),
+    });
     adminReports = [report, ...adminReports.filter((item) => String(item.id) !== String(report.id))];
     if (Array.isArray(report?.payload?.categoriesSnapshot)) {
       applyCategories(report.payload.categoriesSnapshot);
@@ -843,7 +859,7 @@ const generateAdminReport = async () => {
     }
     renderAdminReportList();
     await loadAdminStats({ silent: true });
-    showToast('报告已生成');
+    showToast(selectedCategory === 'all' ? '全部帖子报告已生成' : `${selectedCategory}板块报告已生成`);
   } catch (error) {
     showToast(error.message || '报告生成失败');
   } finally {

@@ -1,4 +1,4 @@
-const { createReport, findReportById, listReportedPostIds, listReports } = require('../repositories/reportRepository');
+const { createReport, findReportById, listReports } = require('../repositories/reportRepository');
 const { listAdminPosts } = require('../repositories/postRepository');
 const { addSuggestedTagsToCategories, getCategories } = require('./categoryService');
 const { extractDynamicKeywords, getPostAnalysisText } = require('./postService');
@@ -150,6 +150,11 @@ const collectExistingKeywordTrends = async () => {
 };
 
 const normalizeActionTitle = (value) => String(value || '').trim().replace(/\s+/g, ' ');
+
+const normalizeReportScope = (category) => {
+  const normalized = normalizeActionTitle(category);
+  return !normalized || normalized === 'all' || normalized === '全部' ? '' : normalized;
+};
 
 const normalizePostIds = (postIds = []) => [...new Set(postIds.map((id) => String(id)))].sort();
 
@@ -382,7 +387,7 @@ const buildSimplePdf = (title, body) => {
   return pdf;
 };
 
-const buildReportPayload = (posts, { source = 'local', aiFailure = null } = {}) => {
+const buildReportPayload = (posts, { source = 'local', aiFailure = null, scopeCategory = '' } = {}) => {
   const statusCounts = posts.reduce((map, post) => {
     map[post.status] = (map[post.status] || 0) + 1;
     return map;
@@ -396,9 +401,10 @@ const buildReportPayload = (posts, { source = 'local', aiFailure = null } = {}) 
   const deletedCount = statusCounts.deleted || 0;
   const total = posts.length;
 
+  const scopeText = scopeCategory ? `「${scopeCategory}」板块` : '全站';
   const summary = total
-    ? `本次共汇总 ${total} 条反馈，待处理 ${openCount} 条，已处理 ${resolvedCount} 条，待删除 ${deletedCount} 条。${topCategory ? `高频板块为「${topCategory.category}」，共 ${topCategory.count} 条。` : ''}`
-    : '当前暂无可汇总的反馈帖子。';
+    ? `本次针对${scopeText}共汇总 ${total} 条反馈，待处理 ${openCount} 条，已处理 ${resolvedCount} 条，待删除 ${deletedCount} 条。${topCategory ? `高频板块为「${topCategory.category}」，共 ${topCategory.count} 条。` : ''}`
+    : `当前${scopeText}暂无可汇总的反馈帖子。`;
 
   const suggestions = [];
   if (topCategory) suggestions.push(`优先跟进「${topCategory.category}」板块，集中处理仍待处理的 ${topCategory.open} 条反馈。`);
@@ -419,26 +425,30 @@ const buildReportPayload = (posts, { source = 'local', aiFailure = null } = {}) 
     aiStatus: source === 'ai' ? 'success' : 'fallback',
     aiFailure,
     postIds: posts.map((post) => String(post.id)),
+    reportScope: {
+      category: scopeCategory || '全部',
+      mode: scopeCategory ? 'category' : 'all',
+    },
     generatedAt: new Date().toISOString(),
   };
 };
 
-const generateAdminReport = async (userId) => {
+const generateAdminReport = async (userId, { category = '' } = {}) => {
+  const scopeCategory = normalizeReportScope(category);
   const posts = await listAdminPosts({ status: 'all', currentUserId: userId, limit: 500 });
-  const reportedPostIds = new Set(await listReportedPostIds());
-  const unusedPosts = posts.filter((post) => post.status !== 'deleted' && !reportedPostIds.has(String(post.id)));
-  if (!unusedPosts.length) {
-    const error = new Error('暂无新帖子可生成报告');
+  const scopedPosts = posts.filter((post) => post.status !== 'deleted' && (!scopeCategory || post.category === scopeCategory));
+  if (!scopedPosts.length) {
+    const error = new Error(scopeCategory ? `「${scopeCategory}」板块暂无帖子可生成报告` : '暂无帖子可生成报告');
     error.statusCode = 409;
     throw error;
   }
 
-  const localPayload = buildReportPayload(unusedPosts);
+  const localPayload = buildReportPayload(scopedPosts, { scopeCategory });
   const existingCategories = await getCategories();
   const startedAt = Date.now();
-  console.log(`[AI] generating admin report for ${unusedPosts.length} posts...`);
+  console.log(`[AI] generating admin report for ${scopedPosts.length} posts${scopeCategory ? ` in ${scopeCategory}` : ''}...`);
   const existingKeywordTrends = await collectExistingKeywordTrends();
-  const aiPayload = await generateReportPayload({ posts: unusedPosts, localPayload, existingCategories, existingKeywordTrends });
+  const aiPayload = await generateReportPayload({ posts: scopedPosts, localPayload, existingCategories, existingKeywordTrends });
   console.log(`[AI] admin report ${aiPayload ? 'completed' : 'fell back to local summary'} in ${Date.now() - startedAt}ms`);
   const aiFailure = aiPayload ? null : getLastAiFailure();
   if (aiFailure) console.warn(`[AI] admin report fallback reason: ${aiFailure.message}${aiFailure.detail ? `: ${aiFailure.detail}` : ''}`);
@@ -471,7 +481,11 @@ const generateAdminReport = async (userId) => {
   };
   payload.actionItems = dedupeActionItems(payload.actionItems);
   payload.categoriesSnapshot = await getCategories();
-  const title = `校园反馈处理报告 ${new Date().toLocaleDateString('zh-CN')}`;
+  payload.reportScope = {
+    category: scopeCategory || '全部',
+    mode: scopeCategory ? 'category' : 'all',
+  };
+  const title = `${scopeCategory ? `${scopeCategory}板块` : '全站'}反馈处理报告 ${new Date().toLocaleDateString('zh-CN')}`;
   return createReport({ userId, title, summary: payload.summary, payload, postIds: localPayload.postIds });
 };
 
@@ -503,6 +517,7 @@ const getReportExport = async (id, format = 'markdown') => {
     `# ${report.title}`,
     '',
     `生成时间：${new Date(report.createdAt).toLocaleString('zh-CN')}`,
+    `总结范围：${payload.reportScope?.category || '全部'}`,
     '',
     '## 总结',
     report.summary,
