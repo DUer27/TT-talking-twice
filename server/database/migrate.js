@@ -52,6 +52,43 @@ const migrate = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS invite_codes (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      code_hash CHAR(64) NOT NULL,
+      label VARCHAR(120) NULL,
+      max_uses INT UNSIGNED NOT NULL DEFAULT 1,
+      used_count INT UNSIGNED NOT NULL DEFAULT 0,
+      status VARCHAR(32) NOT NULL DEFAULT 'active',
+      expires_at DATETIME NULL,
+      created_by BIGINT UNSIGNED NULL,
+      last_used_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_invite_codes_code_hash (code_hash),
+      KEY idx_invite_codes_status_expires_at (status, expires_at),
+      KEY idx_invite_codes_created_by (created_by),
+      CONSTRAINT fk_invite_codes_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invite_code_redemptions (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      invite_code_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      first_used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_invite_redemptions_code_email (invite_code_id, email),
+      KEY idx_invite_redemptions_user_id (user_id),
+      CONSTRAINT fk_invite_redemptions_code_id FOREIGN KEY (invite_code_id) REFERENCES invite_codes(id) ON DELETE CASCADE,
+      CONSTRAINT fk_invite_redemptions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS login_attempts (
       attempt_key VARCHAR(512) NOT NULL,
       email VARCHAR(255) NOT NULL,

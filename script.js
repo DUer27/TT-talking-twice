@@ -2579,6 +2579,9 @@ const registerForm = document.getElementById('registerForm');
 const registerEmail = document.getElementById('registerEmail');
 const registerPassword = document.getElementById('registerPassword');
 const registerConfirmPassword = document.getElementById('registerConfirmPassword');
+const inviteLoginForm = document.getElementById('inviteLoginForm');
+const inviteEmail = document.getElementById('inviteEmail');
+const inviteCode = document.getElementById('inviteCode');
 const profileModal = document.getElementById('profileModal');
 const profileClose = document.getElementById('profileClose');
 const profileCancel = document.getElementById('profileCancel');
@@ -2756,7 +2759,8 @@ const openRegister = () => {
   loginModal.hidden = true;
   loginForm.reset();
   registerForm.reset();
-  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  inviteLoginForm.reset();
+  [registerEmail, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
   registerModal.hidden = false;
   setTimeout(() => registerEmail.focus(), 60);
 };
@@ -2764,7 +2768,8 @@ const openRegister = () => {
 const closeRegister = () => {
   registerModal.hidden = true;
   registerForm.reset();
-  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  inviteLoginForm.reset();
+  [registerEmail, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
 };
 
 const backToLogin = () => {
@@ -2779,6 +2784,10 @@ registerModal.addEventListener('click', (event) => {
   if (event.target === registerModal) closeRegister();
 });
 backToLoginBtn.addEventListener('click', backToLogin);
+[inviteEmail, inviteCode].forEach((input) => {
+  input.addEventListener('input', () => input.classList.remove('invalid'));
+});
+
 registerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
@@ -2816,6 +2825,45 @@ registerForm.addEventListener('submit', async (event) => {
     showToast(error.message);
   }
 });
+
+inviteLoginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  [inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
+  const email = inviteEmail.value.trim();
+  const inviteCodeValue = inviteCode.value.trim();
+  if (!email) {
+    inviteEmail.classList.add('invalid');
+    showToast('请输入邮箱');
+    return;
+  }
+  if (!inviteCodeValue) {
+    inviteCode.classList.add('invalid');
+    showToast('请输入邀请码');
+    return;
+  }
+
+  const submitBtn = inviteLoginForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '验证中...';
+  try {
+    const { user } = await apiRequest('/api/auth/invite-login', {
+      method: 'POST',
+      body: JSON.stringify({ email, inviteCode: inviteCodeValue }),
+    });
+    closeRegister();
+    updateAuthUI(user);
+    await loadPersistedTopics();
+    showToast('邀请码登录成功，欢迎加入');
+  } catch (error) {
+    inviteCode.classList.add('invalid');
+    showToast(error.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
+
 profileForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = profileEmail.value.trim();

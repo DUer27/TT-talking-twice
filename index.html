@@ -530,6 +530,19 @@
         </div>
         <p class="login-tip">注册成功后会自动返回登录弹窗。</p>
       </form>
+      <div class="auth-divider"><span>或使用邀请码</span></div>
+      <form class="login-form invite-login-form" id="inviteLoginForm">
+        <label>
+          <span>邮箱账号</span>
+          <input id="inviteEmail" type="email" placeholder="请输入邮箱，例如 name@example.com" required />
+        </label>
+        <label>
+          <span>邀请码</span>
+          <input id="inviteCode" type="text" maxlength="64" placeholder="请输入管理员提供的邀请码" autocomplete="one-time-code" required />
+        </label>
+        <button type="submit" class="primary-btn login-submit">邀请码登录</button>
+        <p class="login-tip">邀请码可用于快速登录；如果邮箱未注册，会自动创建账号。</p>
+      </form>
     </div>
   </div>
 

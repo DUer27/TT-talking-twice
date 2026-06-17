@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { sessionMaxAgeMs } = require('../config/env');
 const {
   createUser,
@@ -8,12 +9,15 @@ const {
   updateUserProfile,
 } = require('../repositories/userRepository');
 const { createSession, deleteSession, findSessionWithUser } = require('../repositories/sessionRepository');
+const { findInviteByCodeHash, redeemInviteCode } = require('../repositories/inviteRepository');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { createSessionToken, hashSessionToken } = require('../utils/sessionToken');
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
 const normalizeLoginIdentifier = (value) => String(value || '').trim().toLowerCase();
+const normalizeInviteCode = (value) => String(value || '').trim().replace(/\s+/g, '').toUpperCase();
+const hashInviteCode = (code) => crypto.createHash('sha256').update(normalizeInviteCode(code)).digest('hex');
 
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -67,6 +71,67 @@ const login = async ({ email, password }) => {
   const matched = await verifyPassword(password || '', user.password_hash);
   if (!matched) {
     const error = new Error('邮箱或密码错误');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const session = await createAuthSession(user);
+  return { user: publicUserFields(user), session };
+};
+
+const assertInviteCodeUsable = async (codeHash) => {
+  const invite = await findInviteByCodeHash(codeHash);
+  if (!invite) {
+    const error = new Error('邀请码不存在或已失效');
+    error.statusCode = 401;
+    throw error;
+  }
+  if (invite.status !== 'active') {
+    const error = new Error('邀请码已停用');
+    error.statusCode = 401;
+    throw error;
+  }
+  if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+    const error = new Error('邀请码已过期');
+    error.statusCode = 401;
+    throw error;
+  }
+  return invite;
+};
+
+const loginWithInvite = async ({ email, inviteCode }) => {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedCode = normalizeInviteCode(inviteCode);
+
+  if (!validateEmail(normalizedEmail)) {
+    const error = new Error('邮箱格式不正确');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!normalizedCode) {
+    const error = new Error('请输入邀请码');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const codeHash = hashInviteCode(normalizedCode);
+  await assertInviteCodeUsable(codeHash);
+
+  let user = await findUserByEmail(normalizedEmail);
+  if (!user) {
+    const passwordHash = await hashPassword(crypto.randomBytes(24).toString('hex'));
+    user = await createUser({ email: normalizedEmail, passwordHash });
+  }
+
+  const redeemed = await redeemInviteCode({ codeHash, email: normalizedEmail, userId: user.id });
+  if (!redeemed.ok) {
+    const messages = {
+      not_found: '邀请码不存在或已失效',
+      disabled: '邀请码已停用',
+      expired: '邀请码已过期',
+      used_up: '邀请码使用次数已用完',
+    };
+    const error = new Error(messages[redeemed.reason] || '邀请码验证失败');
     error.statusCode = 401;
     throw error;
   }
@@ -144,6 +209,7 @@ module.exports = {
   changePassword,
   getCurrentUser,
   login,
+  loginWithInvite,
   logout,
   register,
   updateProfile,
