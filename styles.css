@@ -440,6 +440,11 @@ body.dark-mode .login-modal { box-shadow: 0 24px 70px rgba(0, 0, 0, .5); }
 .login-form input.invalid { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(239, 68, 68, .14) !important; }
 
 .auth-switch-line { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 14px; }
+<<<<<<< Updated upstream
+=======
+.auth-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 14px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+>>>>>>> Stashed changes
 .register-modal { width: min(480px, 100%); }
 .account-modal { width: min(500px, 100%); }
 .account-form { gap: 15px; }
