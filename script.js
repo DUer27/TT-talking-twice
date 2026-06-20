@@ -1,4 +1,4 @@
-﻿let topics = [];
+﻿﻿let topics = [];
 
 
 const tagClass = (tag) => {
@@ -2537,13 +2537,11 @@ const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
 const backToLoginBtn = document.getElementById('backToLoginBtn');
 const registerForm = document.getElementById('registerForm');
 const registerEmail = document.getElementById('registerEmail');
+const registerInviteCode = document.getElementById('registerInviteCode');
 const registerCode = document.getElementById('registerCode');
 const sendRegisterCodeBtn = document.getElementById('sendRegisterCodeBtn');
 const registerPassword = document.getElementById('registerPassword');
 const registerConfirmPassword = document.getElementById('registerConfirmPassword');
-const inviteLoginForm = document.getElementById('inviteLoginForm');
-const inviteEmail = document.getElementById('inviteEmail');
-const inviteCode = document.getElementById('inviteCode');
 const resetPasswordModal = document.getElementById('resetPasswordModal');
 const resetPasswordClose = document.getElementById('resetPasswordClose');
 const resetPasswordForm = document.getElementById('resetPasswordForm');
@@ -2675,9 +2673,9 @@ const startCodeCountdown = (button, seconds = 60, restoreText = '发送验证码
   }, 1000);
 };
 
-const sendEmailCode = async ({ emailInput, purpose, button }) => {
+const sendEmailCode = async ({ emailInput, purpose, button, extraBody = {}, extraInputs = [] }) => {
   const email = emailInput.value.trim();
-  emailInput.classList.remove('invalid');
+  [emailInput, ...extraInputs].forEach((input) => input.classList.remove('invalid'));
   if (!isValidEmail(email)) {
     emailInput.classList.add('invalid');
     showToast('请输入有效邮箱');
@@ -2690,7 +2688,7 @@ const sendEmailCode = async ({ emailInput, purpose, button }) => {
   try {
     await apiRequest('/api/auth/email-code', {
       method: 'POST',
-      body: JSON.stringify({ email, purpose }),
+      body: JSON.stringify({ email, purpose, ...extraBody }),
     });
     showToast('验证码已发送，请查看邮箱');
     startCodeCountdown(button, 60, originalText);
@@ -2698,6 +2696,7 @@ const sendEmailCode = async ({ emailInput, purpose, button }) => {
     button.disabled = false;
     button.textContent = originalText;
     emailInput.classList.add('invalid');
+    extraInputs.forEach((input) => input.classList.add('invalid'));
     showToast(error.message);
   }
 };
@@ -2781,8 +2780,7 @@ const openRegister = () => {
   loginModal.hidden = true;
   loginForm.reset();
   registerForm.reset();
-  inviteLoginForm.reset();
-  [registerEmail, registerCode, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
+  [registerEmail, registerInviteCode, registerCode, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
   registerModal.hidden = false;
   setTimeout(() => registerEmail.focus(), 60);
 };
@@ -2790,8 +2788,7 @@ const openRegister = () => {
 const closeRegister = () => {
   registerModal.hidden = true;
   registerForm.reset();
-  inviteLoginForm.reset();
-  [registerEmail, registerCode, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
+  [registerEmail, registerInviteCode, registerCode, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
 };
 
 const openResetPassword = () => {
@@ -2822,9 +2819,6 @@ registerModal.addEventListener('click', (event) => {
   if (event.target === registerModal) closeRegister();
 });
 backToLoginBtn.addEventListener('click', backToLogin);
-[inviteEmail, inviteCode].forEach((input) => {
-  input.addEventListener('input', () => input.classList.remove('invalid'));
-});
 resetPasswordClose.addEventListener('click', closeResetPassword);
 resetPasswordModal.addEventListener('click', (event) => {
   if (event.target === resetPasswordModal) closeResetPassword();
@@ -2834,13 +2828,15 @@ sendRegisterCodeBtn.addEventListener('click', () => sendEmailCode({
   emailInput: registerEmail,
   purpose: 'register',
   button: sendRegisterCodeBtn,
+  extraBody: { inviteCode: registerInviteCode.value.trim() },
+  extraInputs: [registerInviteCode],
 }));
 sendResetCodeBtn.addEventListener('click', () => sendEmailCode({
   emailInput: resetEmail,
   purpose: 'reset_password',
   button: sendResetCodeBtn,
 }));
-[registerEmail, registerCode, registerPassword, registerConfirmPassword].forEach((input) => {
+[registerEmail, registerInviteCode, registerCode, registerPassword, registerConfirmPassword].forEach((input) => {
   input.addEventListener('input', () => input.classList.remove('invalid'));
 });
 [resetEmail, resetCode, resetPassword, resetConfirmPassword].forEach((input) => {
@@ -2848,14 +2844,20 @@ sendResetCodeBtn.addEventListener('click', () => sendEmailCode({
 });
 registerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  [registerEmail, registerCode, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  [registerEmail, registerInviteCode, registerCode, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
   const email = registerEmail.value.trim();
+  const inviteCodeValue = registerInviteCode.value.trim();
   const code = registerCode.value.trim();
   const password = registerPassword.value.trim();
   const confirmPassword = registerConfirmPassword.value.trim();
   if (!isValidEmail(email)) {
     registerEmail.classList.add('invalid');
     showToast('请输入有效注册邮箱');
+    return;
+  }
+  if (!inviteCodeValue) {
+    registerInviteCode.classList.add('invalid');
+    showToast('请先输入邀请码');
     return;
   }
   if (!/^\d{6}$/.test(code)) {
@@ -2878,7 +2880,7 @@ registerForm.addEventListener('submit', async (event) => {
   try {
     await apiRequest('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, code }),
+      body: JSON.stringify({ email, password, code, inviteCode: inviteCodeValue }),
     });
     closeRegister();
     loginModal.hidden = false;
@@ -2886,46 +2888,9 @@ registerForm.addEventListener('submit', async (event) => {
     setTimeout(() => loginPassword.focus(), 60);
     showToast('注册成功，请登录');
   } catch (error) {
+    registerInviteCode.classList.add('invalid');
     registerCode.classList.add('invalid');
     showToast(error.message);
-  }
-});
-
-inviteLoginForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  [inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
-  const email = inviteEmail.value.trim();
-  const inviteCodeValue = inviteCode.value.trim();
-  if (!email) {
-    inviteEmail.classList.add('invalid');
-    showToast('请输入邮箱');
-    return;
-  }
-  if (!inviteCodeValue) {
-    inviteCode.classList.add('invalid');
-    showToast('请输入邀请码');
-    return;
-  }
-
-  const submitBtn = inviteLoginForm.querySelector('button[type="submit"]');
-  const originalText = submitBtn.textContent;
-  submitBtn.disabled = true;
-  submitBtn.textContent = '验证中...';
-  try {
-    const { user } = await apiRequest('/api/auth/invite-login', {
-      method: 'POST',
-      body: JSON.stringify({ email, inviteCode: inviteCodeValue }),
-    });
-    closeRegister();
-    updateAuthUI(user);
-    await loadPersistedTopics();
-    showToast('邀请码登录成功，欢迎加入');
-  } catch (error) {
-    inviteCode.classList.add('invalid');
-    showToast(error.message);
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = originalText;
   }
 });
 

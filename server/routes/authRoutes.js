@@ -1,6 +1,6 @@
 const express = require('express');
 const { sessionCookieName, sessionMaxAgeMs } = require('../config/env');
-const { changePassword, login, loginWithInvite, logout, register, resetPassword, sendEmailCode, updateProfile } = require('../services/authService');
+const { changePassword, login, logout, register, resetPassword, sendEmailCode, updateProfile } = require('../services/authService');
 const { assertCanAttempt, recordFailure, recordSuccess } = require('../utils/loginRateLimiter');
 const { requireAuth } = require('../middleware/authMiddleware');
 
@@ -46,23 +46,6 @@ router.post('/login', async (req, res, next) => {
   try {
     await assertCanAttempt(attemptMeta);
     const { user, session } = await login(req.body);
-    await recordSuccess(attemptMeta);
-    res.cookie(sessionCookieName, session.token, cookieOptions);
-    res.json({ user });
-  } catch (error) {
-    if (error.statusCode === 401) {
-      error.remainingAttempts = await recordFailure(attemptMeta);
-      error.message = `${error.message}，还可尝试 ${error.remainingAttempts} 次`;
-    }
-    next(error);
-  }
-});
-
-router.post('/invite-login', async (req, res, next) => {
-  const attemptMeta = { email: req.body?.email, ip: req.ip };
-  try {
-    await assertCanAttempt(attemptMeta);
-    const { user, session } = await loginWithInvite(req.body);
     await recordSuccess(attemptMeta);
     res.cookie(sessionCookieName, session.token, cookieOptions);
     res.json({ user });

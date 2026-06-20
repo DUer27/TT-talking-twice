@@ -99,7 +99,7 @@ const assertValidEmailCode = async ({ email, purpose, code }) => {
   return verification;
 };
 
-const sendEmailCode = async ({ email, purpose }, { ip = '' } = {}) => {
+const sendEmailCode = async ({ email, purpose, inviteCode }, { ip = '' } = {}) => {
   const normalizedEmail = normalizeEmail(email);
   const normalizedPurpose = normalizePurpose(purpose);
 
@@ -119,6 +119,15 @@ const sendEmailCode = async ({ email, purpose }, { ip = '' } = {}) => {
     const error = new Error('该邮箱已注册');
     error.statusCode = 409;
     throw error;
+  }
+  if (normalizedPurpose === 'register') {
+    const normalizedInviteCode = normalizeInviteCode(inviteCode);
+    if (!normalizedInviteCode) {
+      const error = new Error('请先输入邀请码');
+      error.statusCode = 400;
+      throw error;
+    }
+    await assertInviteCodeUsable(hashInviteCode(normalizedInviteCode), { requireAvailableUse: true });
   }
   if (normalizedPurpose === 'reset_password' && !existingUser) {
     return { ok: true };
@@ -161,8 +170,9 @@ const sendEmailCode = async ({ email, purpose }, { ip = '' } = {}) => {
   return { ok: true };
 };
 
-const register = async ({ email, password, code }) => {
+const register = async ({ email, password, code, inviteCode }) => {
   const normalizedEmail = normalizeEmail(email);
+  const normalizedInviteCode = normalizeInviteCode(inviteCode);
 
   if (!validateEmail(normalizedEmail)) {
     const error = new Error('邮箱格式不正确');
@@ -175,6 +185,11 @@ const register = async ({ email, password, code }) => {
     error.statusCode = 400;
     throw error;
   }
+  if (!normalizedInviteCode) {
+    const error = new Error('请先输入邀请码');
+    error.statusCode = 400;
+    throw error;
+  }
 
   const existingUser = await findUserByEmail(normalizedEmail);
   if (existingUser) {
@@ -183,9 +198,23 @@ const register = async ({ email, password, code }) => {
     throw error;
   }
 
+  const codeHash = hashInviteCode(normalizedInviteCode);
+  await assertInviteCodeUsable(codeHash, { requireAvailableUse: true });
   const verification = await assertValidEmailCode({ email: normalizedEmail, purpose: 'register', code });
   const passwordHash = await hashPassword(password);
   const user = await createUser({ email: normalizedEmail, passwordHash });
+  const redeemed = await redeemInviteCode({ codeHash, email: normalizedEmail, userId: user.id });
+  if (!redeemed.ok) {
+    const messages = {
+      not_found: '邀请码不存在或已失效',
+      disabled: '邀请码已停用',
+      expired: '邀请码已过期',
+      used_up: '邀请码使用次数已用完',
+    };
+    const error = new Error(messages[redeemed.reason] || '邀请码验证失败');
+    error.statusCode = 401;
+    throw error;
+  }
   await markEmailVerificationUsed(verification.id);
   return publicUserFields(user);
 };
@@ -211,7 +240,7 @@ const login = async ({ email, password }) => {
   return { user: publicUserFields(user), session };
 };
 
-const assertInviteCodeUsable = async (codeHash) => {
+const assertInviteCodeUsable = async (codeHash, { requireAvailableUse = false } = {}) => {
   const invite = await findInviteByCodeHash(codeHash);
   if (!invite) {
     const error = new Error('邀请码不存在或已失效');
@@ -228,48 +257,12 @@ const assertInviteCodeUsable = async (codeHash) => {
     error.statusCode = 401;
     throw error;
   }
-  return invite;
-};
-
-const loginWithInvite = async ({ email, inviteCode }) => {
-  const normalizedEmail = normalizeEmail(email);
-  const normalizedCode = normalizeInviteCode(inviteCode);
-
-  if (!validateEmail(normalizedEmail)) {
-    const error = new Error('邮箱格式不正确');
-    error.statusCode = 400;
-    throw error;
-  }
-  if (!normalizedCode) {
-    const error = new Error('请输入邀请码');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const codeHash = hashInviteCode(normalizedCode);
-  await assertInviteCodeUsable(codeHash);
-
-  let user = await findUserByEmail(normalizedEmail);
-  if (!user) {
-    const passwordHash = await hashPassword(crypto.randomBytes(24).toString('hex'));
-    user = await createUser({ email: normalizedEmail, passwordHash });
-  }
-
-  const redeemed = await redeemInviteCode({ codeHash, email: normalizedEmail, userId: user.id });
-  if (!redeemed.ok) {
-    const messages = {
-      not_found: '邀请码不存在或已失效',
-      disabled: '邀请码已停用',
-      expired: '邀请码已过期',
-      used_up: '邀请码使用次数已用完',
-    };
-    const error = new Error(messages[redeemed.reason] || '邀请码验证失败');
+  if (requireAvailableUse && Number(invite.used_count || 0) >= Number(invite.max_uses || 1)) {
+    const error = new Error('邀请码使用次数已用完');
     error.statusCode = 401;
     throw error;
   }
-
-  const session = await createAuthSession(user);
-  return { user: publicUserFields(user), session };
+  return invite;
 };
 
 const getCurrentUser = async (token) => {
@@ -375,7 +368,6 @@ module.exports = {
   changePassword,
   getCurrentUser,
   login,
-  loginWithInvite,
   logout,
   register,
   resetPassword,
