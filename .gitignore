@@ -8,3 +8,4 @@ build/
 server/data/
 !.env.example
 *.server
+*.pid
