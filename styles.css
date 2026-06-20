@@ -429,6 +429,9 @@ body.dark-mode .toast { background: #1f2a44; border-color: #3a4764; }
 .login-options { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .link-btn { border: 0; background: transparent; color: var(--blue); cursor: pointer; font-weight: 700; }
 .link-btn:hover { text-decoration: underline; }
+.code-field { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 8px; align-items: center; }
+.code-field .code-btn { height: 48px; padding: 0 10px; white-space: nowrap; }
+.code-field .code-btn:disabled { transform: none; }
 .login-submit { width: 100%; justify-content: center; height: 46px; }
 .login-tip { margin: 0; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.6; }
 body.dark-mode .login-logo { background: linear-gradient(135deg, #2563eb, #22d3ee); box-shadow: 0 8px 18px rgba(34, 211, 238, .18); }
@@ -451,7 +454,7 @@ body.dark-mode .login-modal { box-shadow: 0 24px 70px rgba(0, 0, 0, .5); }
 .account-actions .primary-btn, .account-actions .ghost-btn { min-width: 96px; text-align: center; }
 .account-actions .primary-btn { box-shadow: none; }
 body.dark-mode input[readonly] { background: rgba(15, 23, 42, .62) !important; }
-@media (max-width: 560px) { .account-actions { flex-direction: column-reverse; } .account-actions .primary-btn, .account-actions .ghost-btn { width: 100%; } }
+@media (max-width: 560px) { .account-actions { flex-direction: column-reverse; } .account-actions .primary-btn, .account-actions .ghost-btn { width: 100%; } .code-field { grid-template-columns: 1fr; } .code-field .code-btn { width: 100%; } }
 
 .brand-mark img, .login-logo img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .brand-mark, .login-logo { overflow: hidden; background: transparent !important; box-shadow: none !important; }

@@ -122,6 +122,25 @@ const migrate = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_verifications (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      email VARCHAR(255) NOT NULL,
+      purpose VARCHAR(32) NOT NULL,
+      code_hash CHAR(64) NOT NULL,
+      ip VARCHAR(80) NULL,
+      attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_email_verifications_email_purpose_created_at (email, purpose, created_at),
+      KEY idx_email_verifications_expires_at (expires_at),
+      KEY idx_email_verifications_used_at (used_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS posts (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       user_id BIGINT UNSIGNED NOT NULL,
@@ -329,6 +348,7 @@ const migrate = async () => {
 
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');
+  await pool.query("DELETE FROM email_verifications WHERE expires_at <= UTC_TIMESTAMP() OR used_at IS NOT NULL");
   await pool.query("DELETE FROM posts WHERE status = 'deleted' AND delete_marked_at <= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)");
 };
 

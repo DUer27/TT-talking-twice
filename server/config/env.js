@@ -22,6 +22,15 @@ module.exports = {
     maxTokens: Number(process.env.AI_MAX_TOKENS || 1200),
     userAgent: process.env.OPENAI_USER_AGENT || 'TT-talking-twice/1.0 (Codex-integrated client)',
   },
+  email: {
+    host: process.env.SMTP_HOST || '',
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: String(process.env.SMTP_SECURE || 'true') !== 'false',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
+  },
+  verificationCodeSecret: process.env.VERIFICATION_CODE_SECRET || process.env.SMTP_PASS || 'tt-talking-twice-local-secret',
   sessionCookieName: 'campus_voice_session',
   sessionMaxAgeMs: 1000 * 60 * 60 * 24 * 7,
 };

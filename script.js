@@ -2533,14 +2533,26 @@ const loginForm = document.getElementById('loginForm');
 const loginEmail = document.getElementById('loginEmail');
 const loginPassword = document.getElementById('loginPassword');
 const showRegisterBtn = document.getElementById('showRegisterBtn');
+const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
 const backToLoginBtn = document.getElementById('backToLoginBtn');
 const registerForm = document.getElementById('registerForm');
 const registerEmail = document.getElementById('registerEmail');
+const registerCode = document.getElementById('registerCode');
+const sendRegisterCodeBtn = document.getElementById('sendRegisterCodeBtn');
 const registerPassword = document.getElementById('registerPassword');
 const registerConfirmPassword = document.getElementById('registerConfirmPassword');
 const inviteLoginForm = document.getElementById('inviteLoginForm');
 const inviteEmail = document.getElementById('inviteEmail');
 const inviteCode = document.getElementById('inviteCode');
+const resetPasswordModal = document.getElementById('resetPasswordModal');
+const resetPasswordClose = document.getElementById('resetPasswordClose');
+const resetPasswordForm = document.getElementById('resetPasswordForm');
+const resetEmail = document.getElementById('resetEmail');
+const resetCode = document.getElementById('resetCode');
+const sendResetCodeBtn = document.getElementById('sendResetCodeBtn');
+const resetPassword = document.getElementById('resetPassword');
+const resetConfirmPassword = document.getElementById('resetConfirmPassword');
+const backToLoginFromResetBtn = document.getElementById('backToLoginFromResetBtn');
 const profileModal = document.getElementById('profileModal');
 const profileClose = document.getElementById('profileClose');
 const profileCancel = document.getElementById('profileCancel');
@@ -2645,6 +2657,51 @@ const closeLogin = () => {
   clearLoginError();
 };
 
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const startCodeCountdown = (button, seconds = 60, restoreText = '发送验证码') => {
+  let remaining = seconds;
+  button.disabled = true;
+  button.textContent = `${remaining}s`;
+  const timer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearInterval(timer);
+      button.disabled = false;
+      button.textContent = restoreText;
+      return;
+    }
+    button.textContent = `${remaining}s`;
+  }, 1000);
+};
+
+const sendEmailCode = async ({ emailInput, purpose, button }) => {
+  const email = emailInput.value.trim();
+  emailInput.classList.remove('invalid');
+  if (!isValidEmail(email)) {
+    emailInput.classList.add('invalid');
+    showToast('请输入有效邮箱');
+    return;
+  }
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = '发送中...';
+  try {
+    await apiRequest('/api/auth/email-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, purpose }),
+    });
+    showToast('验证码已发送，请查看邮箱');
+    startCodeCountdown(button, 60, originalText);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = originalText;
+    emailInput.classList.add('invalid');
+    showToast(error.message);
+  }
+};
+
 loginBtn.addEventListener('click', openLogin);
 userMenuWrap.addEventListener('mouseenter', () => {
   if (!currentUser) return;
@@ -2725,7 +2782,7 @@ const openRegister = () => {
   loginForm.reset();
   registerForm.reset();
   inviteLoginForm.reset();
-  [registerEmail, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
+  [registerEmail, registerCode, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
   registerModal.hidden = false;
   setTimeout(() => registerEmail.focus(), 60);
 };
@@ -2734,16 +2791,32 @@ const closeRegister = () => {
   registerModal.hidden = true;
   registerForm.reset();
   inviteLoginForm.reset();
-  [registerEmail, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
+  [registerEmail, registerCode, registerPassword, registerConfirmPassword, inviteEmail, inviteCode].forEach((input) => input.classList.remove('invalid'));
+};
+
+const openResetPassword = () => {
+  loginModal.hidden = true;
+  resetPasswordForm.reset();
+  [resetEmail, resetCode, resetPassword, resetConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  resetPasswordModal.hidden = false;
+  setTimeout(() => resetEmail.focus(), 60);
+};
+
+const closeResetPassword = () => {
+  resetPasswordModal.hidden = true;
+  resetPasswordForm.reset();
+  [resetEmail, resetCode, resetPassword, resetConfirmPassword].forEach((input) => input.classList.remove('invalid'));
 };
 
 const backToLogin = () => {
   closeRegister();
+  closeResetPassword();
   loginModal.hidden = false;
   setTimeout(() => loginEmail.focus(), 60);
 };
 
 showRegisterBtn.addEventListener('click', openRegister);
+forgotPasswordBtn.addEventListener('click', openResetPassword);
 registerClose.addEventListener('click', closeRegister);
 registerModal.addEventListener('click', (event) => {
   if (event.target === registerModal) closeRegister();
@@ -2752,16 +2825,42 @@ backToLoginBtn.addEventListener('click', backToLogin);
 [inviteEmail, inviteCode].forEach((input) => {
   input.addEventListener('input', () => input.classList.remove('invalid'));
 });
-
+resetPasswordClose.addEventListener('click', closeResetPassword);
+resetPasswordModal.addEventListener('click', (event) => {
+  if (event.target === resetPasswordModal) closeResetPassword();
+});
+backToLoginFromResetBtn.addEventListener('click', backToLogin);
+sendRegisterCodeBtn.addEventListener('click', () => sendEmailCode({
+  emailInput: registerEmail,
+  purpose: 'register',
+  button: sendRegisterCodeBtn,
+}));
+sendResetCodeBtn.addEventListener('click', () => sendEmailCode({
+  emailInput: resetEmail,
+  purpose: 'reset_password',
+  button: sendResetCodeBtn,
+}));
+[registerEmail, registerCode, registerPassword, registerConfirmPassword].forEach((input) => {
+  input.addEventListener('input', () => input.classList.remove('invalid'));
+});
+[resetEmail, resetCode, resetPassword, resetConfirmPassword].forEach((input) => {
+  input.addEventListener('input', () => input.classList.remove('invalid'));
+});
 registerForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  [registerEmail, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  [registerEmail, registerCode, registerPassword, registerConfirmPassword].forEach((input) => input.classList.remove('invalid'));
   const email = registerEmail.value.trim();
+  const code = registerCode.value.trim();
   const password = registerPassword.value.trim();
   const confirmPassword = registerConfirmPassword.value.trim();
-  if (!email) {
+  if (!isValidEmail(email)) {
     registerEmail.classList.add('invalid');
-    showToast('请输入注册邮箱');
+    showToast('请输入有效注册邮箱');
+    return;
+  }
+  if (!/^\d{6}$/.test(code)) {
+    registerCode.classList.add('invalid');
+    showToast('请输入 6 位邮箱验证码');
     return;
   }
   if (password.length < 6) {
@@ -2779,7 +2878,7 @@ registerForm.addEventListener('submit', async (event) => {
   try {
     await apiRequest('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, code }),
     });
     closeRegister();
     loginModal.hidden = false;
@@ -2787,6 +2886,7 @@ registerForm.addEventListener('submit', async (event) => {
     setTimeout(() => loginPassword.focus(), 60);
     showToast('注册成功，请登录');
   } catch (error) {
+    registerCode.classList.add('invalid');
     showToast(error.message);
   }
 });
@@ -2829,6 +2929,59 @@ inviteLoginForm.addEventListener('submit', async (event) => {
   }
 });
 
+resetPasswordForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  [resetEmail, resetCode, resetPassword, resetConfirmPassword].forEach((input) => input.classList.remove('invalid'));
+  const email = resetEmail.value.trim();
+  const code = resetCode.value.trim();
+  const newPasswordValue = resetPassword.value.trim();
+  const confirmPasswordValue = resetConfirmPassword.value.trim();
+
+  if (!isValidEmail(email)) {
+    resetEmail.classList.add('invalid');
+    showToast('请输入有效邮箱');
+    return;
+  }
+  if (!/^\d{6}$/.test(code)) {
+    resetCode.classList.add('invalid');
+    showToast('请输入 6 位邮箱验证码');
+    return;
+  }
+  if (newPasswordValue.length < 6) {
+    resetPassword.classList.add('invalid');
+    showToast('新密码至少需要 6 位');
+    return;
+  }
+  if (newPasswordValue !== confirmPasswordValue) {
+    resetPassword.classList.add('invalid');
+    resetConfirmPassword.classList.add('invalid');
+    showToast('两次输入的新密码不一致');
+    return;
+  }
+
+  const submitBtn = resetPasswordForm.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = '重置中...';
+  try {
+    await apiRequest('/api/auth/password-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email, code, newPassword: newPasswordValue }),
+    });
+    closeResetPassword();
+    loginModal.hidden = false;
+    loginEmail.value = email;
+    loginPassword.value = '';
+    setTimeout(() => loginPassword.focus(), 60);
+    showToast('密码已重置，请使用新密码登录');
+  } catch (error) {
+    resetCode.classList.add('invalid');
+    showToast(error.message);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
+});
 profileForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = profileEmail.value.trim();
@@ -2985,6 +3138,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!loginModal.hidden) closeLogin();
   if (!registerModal.hidden) closeRegister();
+  if (!resetPasswordModal.hidden) closeResetPassword();
   if (!profileModal.hidden) closeProfile();
   if (!securityModal.hidden) closeSecurity();
   if (!announcementModal.hidden) closeAnnouncements();

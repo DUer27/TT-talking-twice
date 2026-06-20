@@ -16,6 +16,7 @@
 
 - Node.js 18 或更高版本
 - MySQL 8.x 或兼容版本
+- 可发送邮件的邮箱 SMTP 授权码（用于注册验证码和找回密码）
 - npm
 
 ## 本地运行
@@ -49,6 +50,14 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_USER_AGENT=Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.71 Safari/537.36
 AI_TIMEOUT_MS=20000
+
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your_email@qq.com
+SMTP_PASS=your_email_smtp_authorization_code
+SMTP_FROM=现经管回声 <your_email@qq.com>
+VERIFICATION_CODE_SECRET=change_this_to_a_long_random_string
 ```
 
 初始化数据库和表：
