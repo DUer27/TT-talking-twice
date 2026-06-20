@@ -1,4 +1,4 @@
-﻿let topics = [];
+﻿﻿let topics = [];
 
 
 const tagClass = (tag) => {
