@@ -1,6 +1,6 @@
 const express = require('express');
 const { sessionCookieName, sessionMaxAgeMs } = require('../config/env');
-const { changePassword, login, logout, register, updateProfile } = require('../services/authService');
+const { changePassword, login, logout, register, resetPassword, sendEmailCode, updateProfile } = require('../services/authService');
 const { assertCanAttempt, recordFailure, recordSuccess } = require('../utils/loginRateLimiter');
 const { requireAuth } = require('../middleware/authMiddleware');
 
@@ -14,10 +14,28 @@ const cookieOptions = {
   path: '/',
 };
 
+router.post('/email-code', async (req, res, next) => {
+  try {
+    await sendEmailCode(req.body, { ip: req.ip });
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/register', async (req, res, next) => {
   try {
     const user = await register(req.body);
     res.status(201).json({ user });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/password-reset', async (req, res, next) => {
+  try {
+    await resetPassword(req.body);
+    res.json({ ok: true });
   } catch (error) {
     next(error);
   }
