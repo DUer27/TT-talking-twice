@@ -33,6 +33,7 @@ const publicPostFields = (post, currentUserId = null) => {
       id: isAnonymous ? null : String(post.user_id),
       name: authorName,
       initial: isAnonymous ? '匿' : authorName.slice(0, 1).toUpperCase(),
+      qq: isAnonymous ? '' : (post.author_qq || ''),
     },
     mine: isMine,
     resolved: post.status === 'resolved',
@@ -56,6 +57,7 @@ const publicCommentFields = (comment, currentUserId = null) => {
       id: String(comment.user_id),
       name: authorName,
       initial: authorName.slice(0, 1).toUpperCase(),
+      qq: comment.author_qq || '',
     },
     mine: isMine,
     createdAt: toIsoString(comment.created_at),
@@ -68,6 +70,7 @@ const selectPostSql = (currentUserId = null) => `
     posts.*,
     users.email AS author_email,
     users.nickname AS author_nickname,
+    users.qq AS author_qq,
     (
       SELECT GROUP_CONCAT(post_tags.tag_name ORDER BY post_tags.tag_name SEPARATOR ',')
       FROM post_tags
@@ -213,6 +216,7 @@ const selectCommentSql = (currentUserId = null) => `
     comments.*,
     users.email AS author_email,
     users.nickname AS author_nickname,
+    users.qq AS author_qq,
     ${currentUserId ? 'EXISTS(SELECT 1 FROM comment_likes WHERE comment_likes.comment_id = comments.id AND comment_likes.user_id = ?)' : '0'} AS liked_by_current_user
   FROM comments
   INNER JOIN users ON users.id = comments.user_id

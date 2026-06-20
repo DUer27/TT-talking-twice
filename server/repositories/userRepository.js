@@ -7,6 +7,7 @@ const publicUserFields = (user) => {
     email: user.email,
     role: user.role,
     nickname: user.nickname,
+    qq: user.qq || '',
     createdAt: user.created_at,
   };
 };
@@ -21,13 +22,13 @@ const findUserById = async (id) => {
   return rows[0] || null;
 };
 
-const createUser = async ({ email, passwordHash, role = 'student', nickname }) => {
+const createUser = async ({ email, passwordHash, role = 'student', nickname, qq = '' }) => {
   const normalizedEmail = email.toLowerCase();
   try {
     const [result] = await getPool().execute(
-      `INSERT INTO users (email, password_hash, role, nickname)
-       VALUES (?, ?, ?, ?)`,
-      [normalizedEmail, passwordHash, role, nickname || normalizedEmail.split('@')[0]]
+      `INSERT INTO users (email, password_hash, role, nickname, qq)
+       VALUES (?, ?, ?, ?, ?)`,
+      [normalizedEmail, passwordHash, role, nickname || normalizedEmail.split('@')[0], qq]
     );
     return findUserById(result.insertId);
   } catch (error) {
@@ -40,9 +41,12 @@ const createUser = async ({ email, passwordHash, role = 'student', nickname }) =
   }
 };
 
-const updateUserProfile = async (id, { email, nickname }) => {
+const updateUserProfile = async (id, { email, nickname, qq = '' }) => {
   try {
-    await getPool().execute('UPDATE users SET email = ?, nickname = ? WHERE id = ?', [email.toLowerCase(), nickname, id]);
+    await getPool().execute(
+      'UPDATE users SET email = ?, nickname = ?, qq = ? WHERE id = ?',
+      [email.toLowerCase(), nickname, qq, id]
+    );
     return findUserById(id);
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {

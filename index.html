@@ -30,7 +30,7 @@
           <button class="login-btn" id="loginBtn" aria-haspopup="true" aria-expanded="false">登录</button>
           <div class="user-menu" id="userMenu" hidden>
             <div class="user-menu-head">
-              <button type="button" class="user-menu-avatar" id="userMenuAvatar" aria-label="点击更换头像" title="点击更换头像">我</button>
+              <button type="button" class="user-menu-avatar" id="userMenuAvatar" aria-label="用户头像">我</button>
               <div>
                 <strong id="userMenuName">未登录</strong>
                 <small id="userMenuEmail">请先登录</small>
@@ -44,7 +44,6 @@
             <button type="button" data-user-action="security">🔒 账号安全</button>
             <button type="button" class="logout-menu-btn" data-user-action="logout">退出登录</button>
           </div>
-          <input id="avatarFileInput" class="avatar-file-input" type="file" accept="image/*" hidden />
         </div>
       </div>
     </header>
@@ -130,7 +129,7 @@
                 <th class="likes-col">点赞</th>
                 <th>评论</th>
                 <th>浏览</th>
-                <th>活动</th>
+                <th class="time-col">时间</th>
               </tr>
             </thead>
             <tbody id="topicBody"></tbody>
@@ -553,7 +552,7 @@
         <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
         <div>
           <h2 id="profileTitle">修改个人信息</h2>
-          <p>可以修改登录邮箱和用户名，保存后立即生效。</p>
+          <p>可以修改登录邮箱、用户名和 QQ 号，保存后立即生效。</p>
         </div>
       </div>
       <form class="login-form account-form" id="profileForm">
@@ -564,6 +563,10 @@
         <label>
           <span>用户名</span>
           <input id="profileNickname" type="text" maxlength="24" placeholder="请输入 1-24 个字符的用户名" required />
+        </label>
+        <label>
+          <span>QQ 号</span>
+          <input id="profileQq" type="text" inputmode="numeric" maxlength="12" placeholder="请输入 QQ 号，可留空" />
         </label>
         <div class="account-actions">
           <button type="button" class="ghost-btn" id="profileCancel">取消</button>
