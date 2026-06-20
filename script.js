@@ -33,7 +33,6 @@ const loginBtn = document.getElementById('loginBtn');
 const userMenuWrap = document.getElementById('userMenuWrap');
 const userMenu = document.getElementById('userMenu');
 const userMenuAvatar = document.getElementById('userMenuAvatar');
-const avatarFileInput = document.getElementById('avatarFileInput');
 const userMenuName = document.getElementById('userMenuName');
 const userMenuEmail = document.getElementById('userMenuEmail');
 const announcementMenuBtn = document.querySelector('[data-user-action="announcement"]');
@@ -349,6 +348,7 @@ const normalizePostTopic = (post) => {
   if (!post) return null;
   const authorInitial = post.author?.initial || (post.isAnonymous ? '?' : '?');
   const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
+  const authorQq = post.author?.qq || '';
   const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : [])];
   if (post.resolved || post.status === 'resolved') tags.push('已处理');
   else tags.push('待回应');
@@ -367,6 +367,7 @@ const normalizePostTopic = (post) => {
     activity: getRelativeActivity(post.updatedAt || post.createdAt),
     posters: [authorInitial],
     authorName,
+    authorQq,
     hotScore: Number(post.likeCount || 0) + Number(post.favoriteCount || 0),
     hot: Number(post.likeCount || 0) + Number(post.favoriteCount || 0) > 0,
     mine: Boolean(post.mine),
@@ -852,105 +853,35 @@ const generateAdminReport = async () => {
   }
 };
 
-const getAvatarStorageKey = (user = currentUser) => {
-  if (!user) return '';
-  return `campusVoiceAvatar:${user.id || user.email}`;
+const getQqAvatarUrl = (qq) => {
+  const normalizedQq = String(qq || '').trim();
+  return normalizedQq ? `http://q1.qlogo.cn/g?b=qq&nk=${encodeURIComponent(normalizedQq)}&s=100` : '';
 };
 
-const getStoredAvatar = (user = currentUser) => {
-  try {
-    const storageKey = getAvatarStorageKey(user);
-    return storageKey ? localStorage.getItem(storageKey) : '';
-  } catch (_error) {
-    return '';
+const renderAvatar = ({ className = 'mini-avatar', initial = '?', name = '用户', qq = '', color = '#64748b' } = {}) => {
+  const avatarUrl = getQqAvatarUrl(qq);
+  const safeName = escapeHtml(name || '用户');
+  if (avatarUrl) {
+    return `<span class="${className} has-image" aria-label="${safeName}的头像"><img src="${escapeHtml(avatarUrl)}" alt="" /></span>`;
   }
+
+  return `<span class="${className}" style="background:${escapeHtml(color)}" aria-label="${safeName}的头像">${escapeHtml(initial || '?')}</span>`;
 };
 
-const setAvatarPreview = (imageDataUrl, displayName = '?') => {
+const setAvatarPreview = (displayName = '?', qq = '') => {
   const initial = (displayName || '?').trim().slice(0, 1).toUpperCase() || '?';
-  if (imageDataUrl) {
-    userMenuAvatar.textContent = '';
-    userMenuAvatar.style.backgroundImage = `url(${JSON.stringify(imageDataUrl)})`;
+  const avatarUrl = getQqAvatarUrl(qq);
+  if (avatarUrl) {
+    userMenuAvatar.innerHTML = `<img src="${escapeHtml(avatarUrl)}" alt="" />`;
     userMenuAvatar.classList.add('has-image');
-    userMenuAvatar.setAttribute('aria-label', '当前头像，点击更换');
+    userMenuAvatar.setAttribute('aria-label', 'QQ 头像');
     return;
   }
 
-  userMenuAvatar.style.backgroundImage = '';
+  userMenuAvatar.innerHTML = '';
   userMenuAvatar.classList.remove('has-image');
   userMenuAvatar.textContent = initial;
   userMenuAvatar.setAttribute('aria-label', '默认头像');
-};
-
-const resizeAvatarFile = (file) => new Promise((resolve, reject) => {
-  const image = new Image();
-  const objectUrl = URL.createObjectURL(file);
-  image.onload = () => {
-    URL.revokeObjectURL(objectUrl);
-    const canvasSize = 320;
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    const sourceSize = Math.min(image.naturalWidth || image.width, image.naturalHeight || image.height);
-    const sourceX = ((image.naturalWidth || image.width) - sourceSize) / 2;
-    const sourceY = ((image.naturalHeight || image.height) - sourceSize) / 2;
-
-    canvas.width = canvasSize;
-    canvas.height = canvasSize;
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvasSize, canvasSize);
-    context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvasSize, canvasSize);
-    resolve(canvas.toDataURL('image/jpeg', 0.88));
-  };
-  image.onerror = () => {
-    URL.revokeObjectURL(objectUrl);
-    reject(new Error('头像图片读取失败，请重试'));
-  };
-  image.src = objectUrl;
-});
-
-const openAvatarPicker = () => {
-  if (!currentUser) {
-    showToast('请先登录后再更换头像');
-    openLogin();
-    return;
-  }
-  avatarFileInput.value = '';
-  avatarFileInput.click();
-};
-
-const handleAvatarFileChange = async () => {
-  const file = avatarFileInput.files?.[0];
-  if (!file) return;
-
-  if (!file.type.startsWith('image/')) {
-    avatarFileInput.value = '';
-    showToast('请选择图片文件');
-    return;
-  }
-
-  if (file.size > 12 * 1024 * 1024) {
-    avatarFileInput.value = '';
-    showToast('头像图片不能超过 12MB');
-    return;
-  }
-
-  try {
-    const avatarDataUrl = await resizeAvatarFile(file);
-    const storageKey = getAvatarStorageKey();
-    if (!storageKey) {
-      showToast('请先登录后再更换头像');
-      return;
-    }
-
-    localStorage.setItem(storageKey, avatarDataUrl);
-    const displayName = currentUser.nickname || currentUser.email.split('@')[0];
-    setAvatarPreview(avatarDataUrl, displayName);
-    showToast('头像已更新');
-  } catch (error) {
-    showToast(error.message || '头像更新失败，请稍后重试');
-  } finally {
-    avatarFileInput.value = '';
-  }
 };
 
 const updateAuthUI = (user) => {
@@ -969,8 +900,8 @@ const updateAuthUI = (user) => {
     userMenu.hidden = false;
     userMenuWrap.classList.add('is-logged-in');
     userMenuAvatar.disabled = false;
-    userMenuAvatar.title = '更换头像';
-    setAvatarPreview(getStoredAvatar(user), displayName);
+    userMenuAvatar.removeAttribute('title');
+    setAvatarPreview(displayName, user.qq);
     userMenuName.textContent = displayName;
     userMenuEmail.textContent = user.email;
   } else {
@@ -982,8 +913,8 @@ const updateAuthUI = (user) => {
     userMenu.classList.remove('open');
     userMenuWrap.classList.remove('is-logged-in');
     userMenuAvatar.disabled = true;
-    userMenuAvatar.title = '请先登录';
-    setAvatarPreview('', '?');
+    userMenuAvatar.removeAttribute('title');
+    setAvatarPreview('?');
     userMenuName.textContent = '未登录';
     userMenuEmail.textContent = '欢迎回来';
   }
@@ -1485,10 +1416,16 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
     const safeId = escapeHtml(topic.id);
     const safeTitle = escapeHtml(topic.title);
     const safeAuthor = escapeHtml(topic.authorName || topic.posters[0] || '?');
-    const safePoster = escapeHtml(topic.posters[0] || '?');
+    const posterInitial = topic.posters[0] || '?';
     const safeActivity = escapeHtml(topic.activity);
     const safeColor = colors[index % colors.length];
     const safeLikeLabel = escapeHtml(`${topic.liked ? '取消点赞' : '点赞'}：${topic.title}`);
+    const authorAvatar = renderAvatar({
+      initial: posterInitial,
+      name: topic.authorName || topic.posters[0] || '?',
+      qq: topic.authorQq,
+      color: safeColor,
+    });
 
     return `
       <tr class="topic-row" data-topic-row-id="${safeId}" tabindex="0">
@@ -1504,8 +1441,8 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
           </div>
         </td>
         <td class="posters-cell">
-          <div class="posters author-posters" title="发布人：${safeAuthor}">
-            <span class="mini-avatar" style="background:${safeColor}" title="${safeAuthor}">${safePoster}</span>
+          <div class="posters author-posters" aria-label="发布人：${safeAuthor}">
+            ${authorAvatar}
           </div>
         </td>
         <td class="like-cell">
@@ -1517,7 +1454,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
         </td>
         <td class="num">${Number(topic.replies || 0)}<small>评论</small></td>
         <td class="num">${Number(topic.views || 0)}<small>浏览</small></td>
-        <td class="num activity">${safeActivity}<small>活动</small></td>
+        <td class="num activity">${safeActivity}<small>时间</small></td>
       </tr>
     `;
   }).join('');
@@ -2217,9 +2154,17 @@ const renderComments = (comments = []) => {
     commentList.innerHTML = '<div class="comment-empty">还没有评论，来写下第一条吧。</div>';
     return;
   }
-  commentList.innerHTML = comments.map((comment) => {
+  commentList.innerHTML = comments.map((comment, index) => {
     const canDelete = Boolean(currentUser && (currentUser.role === 'admin' || comment.mine || String(comment.author?.id) === String(currentUser.id)));
     const canLike = Boolean(currentUser && currentUser.role !== 'admin' && !canDelete);
+    const authorName = comment.author?.name || '同学';
+    const authorAvatar = renderAvatar({
+      className: 'comment-avatar',
+      initial: comment.author?.initial || authorName.slice(0, 1).toUpperCase(),
+      name: authorName,
+      qq: comment.author?.qq,
+      color: colors[index % colors.length],
+    });
     const actionHtml = canDelete
       ? `<button type="button" class="comment-action-btn" data-comment-delete-id="${escapeHtml(comment.id)}">删除</button>`
       : `<button type="button" class="comment-action-btn ${comment.liked ? 'liked' : ''}" data-comment-like-id="${escapeHtml(comment.id)}" ${canLike ? '' : 'disabled'}>${comment.liked ? '已点赞' : '点赞'} ${Number(comment.likeCount || 0)}</button>`;
@@ -2227,7 +2172,8 @@ const renderComments = (comments = []) => {
     <article class="comment-item" data-comment-id="${escapeHtml(comment.id)}">
       <div class="comment-meta">
         <div>
-          <strong>${escapeHtml(comment.author?.name || '同学')}</strong>
+          ${authorAvatar}
+          <strong>${escapeHtml(authorName)}</strong>
           <span>${escapeHtml(getRelativeActivity(comment.createdAt))}</span>
         </div>
         ${actionHtml}
@@ -2326,6 +2272,14 @@ const openTopicDetail = async (topicId) => {
 
   const latestTopic = topics.find((item) => item.id === topicId) || topic;
   latestTopic.unread = false;
+  const detailAuthorName = latestTopic.authorName || latestTopic.posters[0] || '匿名';
+  const detailAuthorAvatar = renderAvatar({
+    className: 'detail-author-avatar',
+    initial: latestTopic.posters[0] || '?',
+    name: detailAuthorName,
+    qq: latestTopic.authorQq,
+    color: colors[0],
+  });
   detailTitle.textContent = latestTopic.title;
   detailTags.innerHTML = latestTopic.tags.map((tag) => `<span class="tag ${tagClass(tag)}">${escapeHtml(tag)}</span>`).join('');
   detailMeta.innerHTML = `
@@ -2333,8 +2287,8 @@ const openTopicDetail = async (topicId) => {
     <span>评论：${Number(latestTopic.replies || 0)}</span>
     <span>浏览：${Number(latestTopic.views || 0)}</span>
     <span>收藏：${Number(latestTopic.favoriteCount || 0)}</span>
-    <span>活动：${escapeHtml(latestTopic.activity)}</span>
-    <span>发布人：${escapeHtml(latestTopic.authorName || latestTopic.posters[0] || '匿名')}</span>
+    <span>时间：${escapeHtml(latestTopic.activity)}</span>
+    <span class="detail-author">发布人：${detailAuthorAvatar}${escapeHtml(detailAuthorName)}</span>
   `;
   detailContent.textContent = latestTopic.content;
   renderComments(latestTopic.comments || []);
@@ -2507,7 +2461,12 @@ replySubmitBtn.addEventListener('click', async () => {
       topic.comments = [...(topic.comments || []), {
         id: `local-comment-${Date.now()}`,
         content,
-        author: { id: currentUser.id, name: currentUser.nickname || currentUser.email?.split('@')[0] || '我' },
+        author: {
+          id: currentUser.id,
+          name: currentUser.nickname || currentUser.email?.split('@')[0] || '我',
+          initial: (currentUser.nickname || currentUser.email?.split('@')[0] || '我').slice(0, 1).toUpperCase(),
+          qq: currentUser.qq || '',
+        },
         likeCount: 0,
         liked: false,
         mine: true,
@@ -2569,6 +2528,7 @@ const profileCancel = document.getElementById('profileCancel');
 const profileForm = document.getElementById('profileForm');
 const profileEmail = document.getElementById('profileEmail');
 const profileNickname = document.getElementById('profileNickname');
+const profileQq = document.getElementById('profileQq');
 const securityModal = document.getElementById('securityModal');
 const securityClose = document.getElementById('securityClose');
 const securityCancel = document.getElementById('securityCancel');
@@ -2582,6 +2542,7 @@ const closeProfile = () => {
   profileForm.reset();
   profileEmail.classList.remove('invalid');
   profileNickname.classList.remove('invalid');
+  profileQq.classList.remove('invalid');
 };
 
 const openProfile = () => {
@@ -2591,8 +2552,10 @@ const openProfile = () => {
   }
   profileEmail.value = currentUser.email || '';
   profileNickname.value = currentUser.nickname || currentUser.email.split('@')[0];
+  profileQq.value = currentUser.qq || '';
   profileEmail.classList.remove('invalid');
   profileNickname.classList.remove('invalid');
+  profileQq.classList.remove('invalid');
   profileModal.hidden = false;
   setTimeout(() => profileEmail.focus(), 60);
 };
@@ -2676,9 +2639,10 @@ userMenuWrap.addEventListener('mouseleave', () => {
 userMenuAvatar.addEventListener('click', (event) => {
   event.preventDefault();
   event.stopPropagation();
-  openAvatarPicker();
+  userMenu.classList.remove('open');
+  loginBtn.setAttribute('aria-expanded', 'false');
+  openProfile();
 });
-avatarFileInput.addEventListener('change', handleAvatarFileChange);
 userMenu.addEventListener('click', async (event) => {
   const menuItem = event.target.closest('button');
   if (!menuItem) return;
@@ -2727,6 +2691,7 @@ profileModal.addEventListener('click', (event) => {
 });
 profileEmail.addEventListener('input', () => profileEmail.classList.remove('invalid'));
 profileNickname.addEventListener('input', () => profileNickname.classList.remove('invalid'));
+profileQq.addEventListener('input', () => profileQq.classList.remove('invalid'));
 securityClose.addEventListener('click', closeSecurity);
 securityCancel.addEventListener('click', closeSecurity);
 securityModal.addEventListener('click', (event) => {
@@ -2804,8 +2769,10 @@ profileForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const email = profileEmail.value.trim();
   const nickname = profileNickname.value.trim();
+  const qq = profileQq.value.trim();
   profileEmail.classList.remove('invalid');
   profileNickname.classList.remove('invalid');
+  profileQq.classList.remove('invalid');
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     profileEmail.classList.add('invalid');
@@ -2822,6 +2789,11 @@ profileForm.addEventListener('submit', async (event) => {
     showToast('用户名不能超过 24 个字符');
     return;
   }
+  if (qq && !/^\d{5,12}$/.test(qq)) {
+    profileQq.classList.add('invalid');
+    showToast('请输入 5-12 位数字 QQ 号');
+    return;
+  }
 
   const submitBtn = profileForm.querySelector('button[type="submit"]');
   const originalText = submitBtn.textContent;
@@ -2830,14 +2802,15 @@ profileForm.addEventListener('submit', async (event) => {
   try {
     const { user } = await apiRequest('/api/auth/me', {
       method: 'PATCH',
-      body: JSON.stringify({ email, nickname }),
+      body: JSON.stringify({ email, nickname, qq }),
     });
     updateAuthUI(user);
     await loadPersistedTopics();
     closeProfile();
-    showToast('用户名已更新');
+    showToast('个人信息已更新');
   } catch (error) {
-    profileNickname.classList.add('invalid');
+    profileEmail.classList.add('invalid');
+    profileQq.classList.add('invalid');
     showToast(error.message);
   } finally {
     submitBtn.disabled = false;

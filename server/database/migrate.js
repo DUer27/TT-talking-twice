@@ -2,6 +2,21 @@ const { db } = require('../config/env');
 const { getPool, getServerPool } = require('./connection');
 const { hashPassword } = require('../utils/password');
 
+const ensureUserQqColumn = async (pool) => {
+  const [rows] = await pool.execute(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = ?
+       AND TABLE_NAME = 'users'
+       AND COLUMN_NAME = 'qq'
+     LIMIT 1`,
+    [db.database]
+  );
+  if (rows.length) return;
+
+  await pool.query("ALTER TABLE users ADD COLUMN qq VARCHAR(20) NOT NULL DEFAULT '' AFTER nickname");
+};
+
 const seedDefaultAdmin = async (pool) => {
   const [adminRows] = await pool.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
   if (adminRows.length) return;
@@ -29,12 +44,15 @@ const migrate = async () => {
       password_hash VARCHAR(255) NOT NULL,
       role VARCHAR(32) NOT NULL DEFAULT 'student',
       nickname VARCHAR(80) NULL,
+      qq VARCHAR(20) NOT NULL DEFAULT '',
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
       UNIQUE KEY uk_users_email (email)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await ensureUserQqColumn(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (

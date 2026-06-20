@@ -15,7 +15,11 @@ const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
 const normalizeLoginIdentifier = (value) => String(value || '').trim().toLowerCase();
 
+const normalizeQq = (value) => String(value || '').trim();
+
 const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const validateQq = (qq) => !qq || /^\d{5,12}$/.test(qq);
 
 const createAuthSession = async (user) => {
   const token = createSessionToken();
@@ -86,9 +90,10 @@ const logout = async (token) => {
   await deleteSession(hashSessionToken(token));
 };
 
-const updateProfile = async (userId, { email, nickname }) => {
+const updateProfile = async (userId, { email, nickname, qq }) => {
   const normalizedEmail = normalizeEmail(email);
   const normalizedNickname = String(nickname || '').trim();
+  const normalizedQq = normalizeQq(qq);
   if (!validateEmail(normalizedEmail)) {
     const error = new Error('Email format is invalid');
     error.statusCode = 400;
@@ -104,7 +109,12 @@ const updateProfile = async (userId, { email, nickname }) => {
     error.statusCode = 400;
     throw error;
   }
-  const user = await updateUserProfile(userId, { email: normalizedEmail, nickname: normalizedNickname });
+  if (!validateQq(normalizedQq)) {
+    const error = new Error('QQ 号必须是 5-12 位数字');
+    error.statusCode = 400;
+    throw error;
+  }
+  const user = await updateUserProfile(userId, { email: normalizedEmail, nickname: normalizedNickname, qq: normalizedQq });
   return publicUserFields(user);
 };
 

@@ -17,6 +17,7 @@ const findSessionWithUser = async (tokenHash) => {
        users.email,
        users.role,
        users.nickname,
+       users.qq,
        users.created_at
      FROM sessions
      JOIN users ON users.id = sessions.user_id
