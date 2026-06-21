@@ -154,18 +154,27 @@ const findPostById = async (id, currentUserId = null, { includeHidden = false, i
   return publicPostFields(rows[0], currentUserId);
 };
 
-const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = null } = {}) => {
+const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = null, startAt = null, endAt = null } = {}) => {
   await purgeExpiredDeletedPosts();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 500));
   const params = currentUserId ? [currentUserId, currentUserId] : [];
-  let statusSql = '';
+  const where = [];
   if (status && status !== 'all') {
-    statusSql = 'WHERE posts.status = ?';
+    where.push('posts.status = ?');
     params.push(status);
   }
+  if (startAt) {
+    where.push('posts.created_at >= ?');
+    params.push(startAt);
+  }
+  if (endAt) {
+    where.push('posts.created_at <= ?');
+    params.push(endAt);
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const [rows] = await getPool().execute(
     `${selectPostSql(currentUserId)}
-     ${statusSql}
+     ${whereSql}
      ORDER BY posts.created_at DESC, posts.id DESC
      LIMIT ${safeLimit}`,
     params

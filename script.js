@@ -30,6 +30,8 @@ const brandHome = document.getElementById('brandHome');
 const announcementBtn = document.getElementById('announcementBtn');
 const generateReportBtn = document.getElementById('generateReportBtn');
 const adminReportCategory = document.getElementById('adminReportCategory');
+const adminReportStartDate = document.getElementById('adminReportStartDate');
+const adminReportEndDate = document.getElementById('adminReportEndDate');
 const loginBtn = document.getElementById('loginBtn');
 const userMenuWrap = document.getElementById('userMenuWrap');
 const userMenu = document.getElementById('userMenu');
@@ -59,6 +61,15 @@ const adminTagForm = document.getElementById('adminTagForm');
 const adminTagCategory = document.getElementById('adminTagCategory');
 const adminTagInput = document.getElementById('adminTagInput');
 const adminDeleteCategoryBtn = document.getElementById('adminDeleteCategoryBtn');
+const adminInviteForm = document.getElementById('adminInviteForm');
+const adminInviteLabel = document.getElementById('adminInviteLabel');
+const adminInviteCount = document.getElementById('adminInviteCount');
+const adminInviteMaxUses = document.getElementById('adminInviteMaxUses');
+const adminInviteDays = document.getElementById('adminInviteDays');
+const adminInviteResult = document.getElementById('adminInviteResult');
+const adminArchivedOpenBtn = document.getElementById('adminArchivedOpenBtn');
+const adminArchivedCloseBtn = document.getElementById('adminArchivedCloseBtn');
+const adminArchivedPanel = document.getElementById('adminArchivedPanel');
 const adminArchivedList = document.getElementById('adminArchivedList');
 const feedbackEntry = document.getElementById('feedbackEntry');
 const adminFeedbackStatusFilter = document.getElementById('adminFeedbackStatusFilter');
@@ -70,6 +81,9 @@ let hotCategoryButtons = [];
 const defaultTrendLabels = ['调课', '作业', '早八', '考试', '签到', '实验', '课件', '进度', '答疑', '分组', '成绩', '选课'];
 let categoryTrendMap = {};
 let appCategories = [];
+let createdInviteBatches = [];
+let inviteLiveChecked = false;
+const ADMIN_INVITE_STORAGE_KEY = 'tt-admin-invite-batches';
 let categoryStatOrder = [
   { category: '课程吐槽', label: '课程' },
   { category: '食堂吐槽', label: '食堂' },
@@ -240,6 +254,9 @@ let adminFeedbackLoading = false;
 let adminReports = [];
 const reportedPostIds = new Set();
 const archivedActionItems = new Set();
+const retainedResolvedActionItems = new Set();
+const clearedActionItems = new Set();
+const ADMIN_ACTION_STATE_STORAGE_KEY = 'tt-admin-action-state';
 let toastTimer = null;
 let activeTrendIndex = 0;
 let activeCategoryIndex = -1;
@@ -743,6 +760,49 @@ const renderAdminReport = (report = adminReports[0]) => {
   renderArchivedActionItems();
 };
 
+const saveAdminActionState = () => {
+  try {
+    localStorage.setItem(ADMIN_ACTION_STATE_STORAGE_KEY, JSON.stringify({
+      archived: [...archivedActionItems],
+      retainedResolved: [...retainedResolvedActionItems],
+      cleared: [...clearedActionItems],
+    }));
+  } catch (_error) {
+    // Best-effort browser persistence for admin workflow state.
+  }
+};
+
+const restoreAdminActionState = () => {
+  try {
+    const state = JSON.parse(localStorage.getItem(ADMIN_ACTION_STATE_STORAGE_KEY) || '{}');
+    (state.archived || []).forEach((key) => archivedActionItems.add(String(key)));
+    (state.retainedResolved || []).forEach((key) => retainedResolvedActionItems.add(String(key)));
+    (state.cleared || []).forEach((key) => clearedActionItems.add(String(key)));
+  } catch (_error) {
+    archivedActionItems.clear();
+    retainedResolvedActionItems.clear();
+    clearedActionItems.clear();
+  }
+};
+
+const getActionKey = (reportId, actionId) => `${reportId}:${actionId}`;
+
+const getActionPostIds = (item = {}) => new Set((item.postIds || []).map((id) => String(id)));
+
+const clearSiblingActionItemsForPosts = (selectedReportId, selectedActionItem) => {
+  const selectedKey = getActionKey(selectedReportId, selectedActionItem.id);
+  const selectedPostIds = getActionPostIds(selectedActionItem);
+  if (!selectedPostIds.size) return;
+  adminReports.forEach((reportItem) => {
+    (reportItem?.payload?.actionItems || []).forEach((item) => {
+      const key = getActionKey(reportItem.id, item.id);
+      if (key === selectedKey) return;
+      const hasSharedPost = [...getActionPostIds(item)].some((postId) => selectedPostIds.has(postId));
+      if (hasSharedPost) clearedActionItems.add(key);
+    });
+  });
+};
+
 const renderAdminActionItems = (report = adminReports[0]) => {
   if (!adminActionList) return;
   if (!adminReports.length) {
@@ -752,7 +812,11 @@ const renderAdminActionItems = (report = adminReports[0]) => {
   const actionItems = adminReports.flatMap((reportItem) => (
     reportItem?.payload?.actionItems || []
   ).map((item) => ({ ...item, reportId: reportItem.id })))
-    .filter((item) => !archivedActionItems.has(`${item.reportId}:${item.id}`) && item.status !== 'resolved');
+    .filter((item) => {
+      const key = getActionKey(item.reportId, item.id);
+      if (clearedActionItems.has(key) || archivedActionItems.has(key)) return false;
+      return item.status !== 'resolved' || retainedResolvedActionItems.has(key);
+    });
   if (!actionItems.length) {
     adminActionList.innerHTML = '<div class="admin-empty">暂无待处理建议</div>';
     return;
@@ -795,6 +859,19 @@ const renderArchivedActionItems = () => {
   `).join('');
 };
 
+const openArchivedPanel = () => {
+  if (!adminArchivedPanel) return;
+  renderArchivedActionItems();
+  adminArchivedPanel.hidden = false;
+  adminArchivedPanel.classList.add('is-expanded');
+};
+
+const closeArchivedPanel = () => {
+  if (!adminArchivedPanel) return;
+  adminArchivedPanel.classList.remove('is-expanded');
+  adminArchivedPanel.hidden = true;
+};
+
 const normalizeChartPoints = (points = []) => {
   const normalized = (Array.isArray(points) ? points : [])
     .map((value) => Math.max(0, Number(value) || 0));
@@ -804,6 +881,13 @@ const normalizeChartPoints = (points = []) => {
 const alignChartPoints = (points = [], length = 0) => {
   const normalized = normalizeChartPoints(points);
   return Array.from({ length }, (_item, index) => normalized[index] || 0);
+};
+
+const initAdminReportDates = () => {
+  if (!adminReportStartDate || !adminReportEndDate) return;
+  const today = new Date().toISOString().slice(0, 10);
+  if (!adminReportStartDate.value) adminReportStartDate.value = today;
+  if (!adminReportEndDate.value) adminReportEndDate.value = today;
 };
 
 const renderAdminReportList = () => {
@@ -835,6 +919,7 @@ const loadAdminReports = async ({ silent = true } = {}) => {
   try {
     const { reports = [] } = await apiRequest('/api/posts/admin/reports');
     adminReports = reports;
+    restoreAdminActionState();
     renderAdminReportList();
   } catch (error) {
     if (!silent) showToast(error.message || '报告历史加载失败');
@@ -848,9 +933,15 @@ const generateAdminReport = async () => {
   generateReportBtn.textContent = '生成中...';
   try {
     const selectedCategory = adminReportCategory?.value || 'all';
+    const startDate = adminReportStartDate?.value || '';
+    const endDate = adminReportEndDate?.value || '';
+    if (startDate && endDate && startDate > endDate) {
+      showToast('开始日期不能晚于结束日期');
+      return;
+    }
     const { report } = await apiRequest('/api/posts/admin/reports', {
       method: 'POST',
-      body: JSON.stringify({ category: selectedCategory }),
+      body: JSON.stringify({ category: selectedCategory, startDate, endDate }),
     });
     adminReports = [report, ...adminReports.filter((item) => String(item.id) !== String(report.id))];
     if (Array.isArray(report?.payload?.categoriesSnapshot)) {
@@ -1505,6 +1596,7 @@ sidebarLinks.forEach((link) => {
       loadAdminPosts({ silent: true });
       loadAdminFeedback({ silent: true });
       loadAdminReports({ silent: true });
+      if (!inviteLiveChecked) checkCreatedInvitesLiveStatus({ silent: true });
       showToast('已进入管理员后台');
       return;
     }
@@ -1671,6 +1763,236 @@ if (adminDeleteCategoryBtn) {
   });
 }
 
+const pruneEmptyInviteBatches = () => {
+  createdInviteBatches = createdInviteBatches.filter((batch) => batch.invites.length);
+};
+
+const getActiveCreatedInvites = () => createdInviteBatches.flatMap((batch) => batch.invites).filter((invite) => !invite.deleted);
+
+const saveCreatedInvites = () => {
+  try {
+    localStorage.setItem(ADMIN_INVITE_STORAGE_KEY, JSON.stringify(createdInviteBatches));
+  } catch (_error) {
+    // Local persistence is best-effort; the server still owns validity.
+  }
+};
+
+const restoreCreatedInvites = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem(ADMIN_INVITE_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) return;
+    createdInviteBatches = stored.map((batch, batchIndex) => ({
+      id: String(batch.id || `restored-${batchIndex}`),
+      createdAt: String(batch.createdAt || '本地记录'),
+      invites: (Array.isArray(batch.invites) ? batch.invites : [])
+        .map((invite) => ({
+          ...invite,
+          code: String(invite.code || ''),
+          deleted: Boolean(invite.deleted),
+          live: invite.live !== false && !invite.deleted,
+          reason: invite.reason || (invite.deleted ? '已删除' : ''),
+        }))
+        .filter((invite) => invite.code),
+    })).filter((batch) => batch.invites.length);
+  } catch (_error) {
+    createdInviteBatches = [];
+  }
+};
+
+const getInviteLabel = (invite) => {
+  if (invite.deleted) return '已删除';
+  if (invite.live === false) return invite.reason || '不可用';
+  return invite.reason || '可用';
+};
+
+const renderCreatedInvites = (newInvites = []) => {
+  if (!adminInviteResult) return;
+  if (newInvites.length) {
+    createdInviteBatches.unshift({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      createdAt: new Date().toLocaleString('zh-CN'),
+      invites: newInvites.map((invite) => ({ ...invite, deleted: false, live: true, reason: '可用' })),
+    });
+    saveCreatedInvites();
+  }
+
+  if (!createdInviteBatches.length) {
+    adminInviteResult.hidden = true;
+    adminInviteResult.innerHTML = '';
+    return;
+  }
+
+  const activeInvites = getActiveCreatedInvites().filter((invite) => invite.live !== false);
+  adminInviteResult.hidden = false;
+  adminInviteResult.innerHTML = `
+    <div class="admin-invite-result-head">
+      <strong>已保留 ${activeInvites.length} 个可用邀请码</strong>
+      <button type="button" class="ghost-btn admin-invite-export" data-admin-invite-export ${activeInvites.length ? '' : 'disabled'}>导出 txt</button>
+    </div>
+    <div class="admin-invite-code-list">
+      ${createdInviteBatches.map((batch, batchIndex) => `
+        <section class="admin-invite-batch">
+          <div class="admin-invite-batch-title">第 ${createdInviteBatches.length - batchIndex} 轮 · ${escapeHtml(batch.createdAt)} · ${batch.invites.filter((invite) => !invite.deleted && invite.live !== false).length}/${batch.invites.length} 可用</div>
+          ${batch.invites.map((invite, inviteIndex) => {
+            const code = String(invite.code || '');
+            return `
+              <div class="admin-invite-code-item ${invite.deleted || invite.live === false ? 'is-deleted' : ''}">
+                <code>${escapeHtml(code)}</code>
+                <span>${escapeHtml(getInviteLabel(invite))}</span>
+                <button type="button" data-admin-invite-delete data-batch-id="${escapeHtml(batch.id)}" data-invite-index="${inviteIndex}">${invite.deleted || invite.live === false ? '移除记录' : '删除'}</button>
+              </div>
+            `;
+          }).join('')}
+        </section>
+      `).join('')}
+    </div>
+  `;
+};
+
+const downloadCreatedInvites = () => {
+  const codes = getActiveCreatedInvites().filter((invite) => invite.live !== false).map((invite) => String(invite.code || '')).filter(Boolean);
+  if (!codes.length) {
+    showToast('暂无可导出的邀请码');
+    return;
+  }
+  const label = (adminInviteLabel?.value || 'invite-codes').trim().replace(/[\\/:*?"<>|]+/g, '-').slice(0, 40) || 'invite-codes';
+  const createdAt = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([`${codes.join('\n')}\n`], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${label}-${createdAt}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  showToast('邀请码 txt 已导出');
+};
+
+const deleteCreatedInvite = async (button) => {
+  const batch = createdInviteBatches.find((item) => item.id === button.dataset.batchId);
+  const inviteIndex = Number(button.dataset.inviteIndex);
+  const invite = batch?.invites[inviteIndex];
+  if (!batch || !invite) return;
+
+  if (invite.deleted || invite.live === false) {
+    batch.invites.splice(inviteIndex, 1);
+    pruneEmptyInviteBatches();
+    saveCreatedInvites();
+    renderCreatedInvites();
+    showToast('邀请码记录已移除');
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await apiRequest('/api/auth/admin/invites', {
+      method: 'DELETE',
+      body: JSON.stringify({ code: invite.code }),
+    });
+    invite.deleted = true;
+    invite.live = false;
+    invite.reason = '已删除';
+    saveCreatedInvites();
+    renderCreatedInvites();
+    showToast('邀请码已删除，无法继续使用');
+  } catch (error) {
+    button.disabled = false;
+    showToast(error.message || '邀请码删除失败');
+  }
+};
+
+const checkCreatedInvitesLiveStatus = async ({ silent = true } = {}) => {
+  if (currentUser?.role !== 'admin') return;
+  if (!createdInviteBatches.length) restoreCreatedInvites();
+  if (!createdInviteBatches.length) {
+    renderCreatedInvites();
+    inviteLiveChecked = true;
+    return;
+  }
+
+  renderCreatedInvites();
+  const codes = [...new Set(createdInviteBatches.flatMap((batch) => batch.invites.map((invite) => invite.code)).filter(Boolean))];
+  if (!codes.length) return;
+
+  try {
+    const { statuses = [] } = await apiRequest('/api/auth/admin/invites/live-status', {
+      method: 'POST',
+      body: JSON.stringify({ codes }),
+    });
+    const statusMap = new Map(statuses.map((status) => [String(status.code || '').toUpperCase(), status]));
+    createdInviteBatches.forEach((batch) => {
+      batch.invites.forEach((invite) => {
+        const status = statusMap.get(String(invite.code || '').trim().replace(/\s+/g, '').toUpperCase());
+        if (!status) return;
+        invite.live = Boolean(status.live);
+        invite.deleted = status.status === 'disabled' || status.reason === '已删除';
+        invite.reason = status.reason || (status.live ? '可用' : '不可用');
+        invite.usedCount = status.usedCount;
+        invite.maxUses = status.maxUses;
+        invite.expiresAt = status.expiresAt;
+      });
+    });
+    inviteLiveChecked = true;
+    saveCreatedInvites();
+    renderCreatedInvites();
+    if (!silent) showToast('邀请码测活完成');
+  } catch (error) {
+    if (!silent) showToast(error.message || '邀请码测活失败');
+  }
+};
+
+adminInviteResult?.addEventListener('click', (event) => {
+  if (event.target.closest('[data-admin-invite-export]')) {
+    downloadCreatedInvites();
+    return;
+  }
+  const deleteButton = event.target.closest('[data-admin-invite-delete]');
+  if (deleteButton) {
+    deleteCreatedInvite(deleteButton);
+  }
+});
+
+if (adminInviteForm) {
+  adminInviteForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (currentUser?.role !== 'admin') {
+      showToast('当前账号没有管理员权限');
+      return;
+    }
+    const count = Number(adminInviteCount.value || 1);
+    const maxUses = Number(adminInviteMaxUses.value || 1);
+    const expiresInDays = Number(adminInviteDays.value || 0);
+    if (count < 1 || count > 100) {
+      showToast('邀请码数量需在 1-100 之间');
+      return;
+    }
+    if (maxUses < 1 || maxUses > 1000) {
+      showToast('每码使用次数需在 1-1000 之间');
+      return;
+    }
+    const submitBtn = adminInviteForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      const { invites = [] } = await apiRequest('/api/auth/admin/invites', {
+        method: 'POST',
+        body: JSON.stringify({
+          count,
+          maxUses,
+          expiresInDays,
+          label: adminInviteLabel.value.trim(),
+        }),
+      });
+      renderCreatedInvites(invites);
+      showToast(`已创建 ${invites.length} 个邀请码`);
+    } catch (error) {
+      showToast(error.message || '邀请码创建失败');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 if (adminPostBody) {
   adminPostBody.addEventListener('click', async (event) => {
     const dismissReportButton = event.target.closest('[data-admin-dismiss-report-id]');
@@ -1767,6 +2089,7 @@ if (adminActionList) {
     const archiveButton = event.target.closest('[data-action-archive]');
     if (archiveButton) {
       archivedActionItems.add(`${report.id}:${actionItem.id}`);
+      saveAdminActionState();
       renderAdminActionItems(report);
       renderArchivedActionItems();
       showToast('处理项已归档');
@@ -1783,6 +2106,15 @@ if (adminActionList) {
         body: JSON.stringify({ postIds: actionItem.postIds || [], status: nextStatus }),
       });
       actionItem.status = nextStatus;
+      const actionKey = getActionKey(report.id, actionItem.id);
+      if (nextStatus === 'resolved') {
+        retainedResolvedActionItems.add(actionKey);
+        clearedActionItems.delete(actionKey);
+        clearSiblingActionItemsForPosts(report.id, actionItem);
+      } else {
+        retainedResolvedActionItems.delete(actionKey);
+      }
+      saveAdminActionState();
       posts.forEach((post) => updateTopicFromPost(post, { preserveState: true, prepend: false }));
       renderAdminActionItems(report);
       await loadPersistedTopics({ silent: true });
@@ -1804,12 +2136,16 @@ if (adminArchivedList) {
     const item = event.target.closest('[data-archived-key][data-report-id]');
     if (!item) return;
     archivedActionItems.delete(item.dataset.archivedKey);
+    saveAdminActionState();
     const report = adminReports.find((reportItem) => String(reportItem.id) === String(item.dataset.reportId)) || adminReports[0];
     renderAdminActionItems(report);
     renderArchivedActionItems();
     showToast('已恢复建议处理项');
   });
 }
+
+adminArchivedOpenBtn?.addEventListener('click', openArchivedPanel);
+adminArchivedCloseBtn?.addEventListener('click', closeArchivedPanel);
 
 document.querySelectorAll('[data-expand-card]').forEach((button) => {
   button.addEventListener('click', (event) => {
@@ -2511,6 +2847,7 @@ window.addEventListener('resize', () => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  closeArchivedPanel();
   document.querySelectorAll('.admin-workbench article.is-expanded, .admin-manage.is-expanded').forEach((card) => {
     card.classList.remove('is-expanded');
     const button = card.querySelector('[data-expand-card]');
@@ -3076,6 +3413,7 @@ const restoreAuthState = async () => {
     const { user } = await apiRequest('/api/auth/me');
     updateAuthUI(user);
     await loadPersistedTopics();
+    if (user?.role === 'admin') await checkCreatedInvitesLiveStatus({ silent: true });
   } catch (_error) {
     updateAuthUI(null);
     await loadPersistedTopics();
@@ -3089,6 +3427,7 @@ document.addEventListener('click', (event) => {
   }
 });
 const bootstrapApp = async () => {
+  initAdminReportDates();
   await loadCategories();
   await restoreAuthState();
 };

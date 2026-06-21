@@ -17,7 +17,7 @@ const {
   markEmailVerificationUsed,
 } = require('../repositories/emailVerificationRepository');
 const { createSession, deleteSession, findSessionWithUser } = require('../repositories/sessionRepository');
-const { findInviteByCodeHash, redeemInviteCode } = require('../repositories/inviteRepository');
+const { createInviteCodes, disableInviteByCodeHash, findInviteByCodeHash, redeemInviteCode } = require('../repositories/inviteRepository');
 const { sendVerificationCodeEmail } = require('./emailService');
 const { hashPassword, verifyPassword } = require('../utils/password');
 const { createSessionToken, hashSessionToken } = require('../utils/sessionToken');
@@ -43,6 +43,8 @@ const validateQq = (qq) => !qq || /^\d{5,12}$/.test(qq);
 const normalizePurpose = (purpose) => String(purpose || '').trim();
 
 const createVerificationCode = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+
+const createInviteCode = () => crypto.randomBytes(9).toString('base64url').toUpperCase();
 
 const hashVerificationCode = ({ email, purpose, code }) => crypto
   .createHmac('sha256', verificationCodeSecret)
@@ -364,8 +366,87 @@ const resetPassword = async ({ email, code, newPassword }) => {
   return { ok: true };
 };
 
+const createAdminInviteCodes = async (adminUserId, { count = 1, maxUses = 1, expiresInDays = 0, label = '' } = {}) => {
+  const safeCount = Math.max(1, Math.min(Number(count) || 1, 100));
+  const safeMaxUses = Math.max(1, Math.min(Number(maxUses) || 1, 1000));
+  const safeExpiresInDays = Math.max(0, Math.min(Number(expiresInDays) || 0, 365));
+  const normalizedLabel = String(label || '').trim().slice(0, 120);
+  const expiresAt = safeExpiresInDays
+    ? new Date(Date.now() + safeExpiresInDays * 24 * 60 * 60 * 1000)
+    : null;
+  const codeSet = new Set();
+  while (codeSet.size < safeCount) {
+    codeSet.add(createInviteCode());
+  }
+  const invites = [...codeSet].map((code) => ({
+    code,
+    codeHash: hashInviteCode(code),
+    label: normalizedLabel,
+    maxUses: safeMaxUses,
+    expiresAt,
+  }));
+
+  await createInviteCodes({ invites, createdBy: adminUserId });
+  return invites.map(({ code, label, maxUses, expiresAt }) => ({
+    code,
+    label,
+    maxUses,
+    expiresAt: expiresAt ? expiresAt.toISOString() : null,
+  }));
+};
+
+const getInviteLiveStatus = async ({ codes = [] } = {}) => {
+  const normalizedCodes = [...new Set((Array.isArray(codes) ? codes : [])
+    .map((code) => normalizeInviteCode(code))
+    .filter(Boolean))].slice(0, 500);
+
+  const statuses = await Promise.all(normalizedCodes.map(async (code) => {
+    const invite = await findInviteByCodeHash(hashInviteCode(code));
+    if (!invite) return { code, live: false, status: 'not_found', reason: '不存在' };
+    if (invite.status !== 'active') return { code, live: false, status: invite.status, reason: '已删除' };
+    if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+      return { code, live: false, status: 'expired', reason: '已过期' };
+    }
+    if (Number(invite.used_count || 0) >= Number(invite.max_uses || 1)) {
+      return { code, live: false, status: 'used_up', reason: '次数已用完' };
+    }
+    return {
+      code,
+      live: true,
+      status: 'active',
+      reason: '可用',
+      usedCount: Number(invite.used_count || 0),
+      maxUses: Number(invite.max_uses || 1),
+      expiresAt: invite.expires_at ? new Date(invite.expires_at).toISOString() : null,
+    };
+  }));
+
+  return statuses;
+};
+
+const deleteAdminInviteCode = async ({ code } = {}) => {
+  const normalizedCode = normalizeInviteCode(code);
+  if (!normalizedCode) {
+    const error = new Error('请先选择要删除的邀请码');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const deleted = await disableInviteByCodeHash(hashInviteCode(normalizedCode));
+  if (!deleted) {
+    const error = new Error('邀请码不存在或已删除');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return { ok: true };
+};
+
 module.exports = {
   changePassword,
+  createAdminInviteCodes,
+  deleteAdminInviteCode,
+  getInviteLiveStatus,
   getCurrentUser,
   login,
   logout,

@@ -18,8 +18,8 @@ module.exports = {
     apiKey: process.env.OPENAI_API_KEY || '',
     baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-    timeoutMs: Number(process.env.AI_TIMEOUT_MS || 20000),
-    maxTokens: Number(process.env.AI_MAX_TOKENS || 1200),
+    timeoutMs: Number(process.env.AI_TIMEOUT_MS || 180000),
+    maxTokens: Number(process.env.AI_MAX_TOKENS || 10240),
     userAgent: process.env.OPENAI_USER_AGENT || 'TT-talking-twice/1.0 (Codex-integrated client)',
   },
   email: {

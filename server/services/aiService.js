@@ -126,22 +126,41 @@ const compactPostsForAi = (posts, limit = 80) => posts.slice(0, limit).map((post
   createdAt: post.createdAt,
 }));
 
-const generateReportPayload = async ({ posts, localPayload, existingCategories = [], existingKeywordTrends = {} }) => callOpenAiJson({
+const generateReportPayload = async ({ posts, localPayload, existingCategories = [], existingKeywordTrends = {} }) => {
+  const categoryCatalog = existingCategories.map((category) => ({
+    name: category.name,
+    label: category.label || category.name,
+    tags: Array.isArray(category.tags) ? category.tags : [],
+  })).filter((category) => category.name);
+  const allowedCategoryNames = categoryCatalog.map((category) => category.name);
+
+  return callOpenAiJson({
   system: [
     '你是校园反馈系统的数据分析助手。',
     '只根据输入帖子生成周期性处理报告，不要编造未出现的信息。',
     '同一帖子内标题、正文或评论重复出现同一句话，只能算作该帖子的一次信号。不要因为标题和内容相同而生成两个相同建议。',
+    '板块归类必须严格使用 allowedCategoryNames 中的现有板块名称，所有 category 字段、keywordTrends 的对象键、suggestedTags.category、actionItems.category 都必须是白名单中的原文名称；禁止自创、改写或缩写板块名。',
+    'posts[].category 是用户发帖时选择的原始板块，可能选错。分析每条帖子的 title、content、comments 后自行判断真实板块；如果内容明显属于另一个 allowedCategoryNames 中的板块，必须按真实板块统计关键词、keywordTrends、suggestedTags 和 actionItems，不要沿用错误原始板块。',
+    '如果无法确信发错板块，保留原始 category；如果原始 category 不在 allowedCategoryNames 中，选择语义最接近的现有板块。不要把“论坛发错板块”本身当作关键词。',
     '返回严格 JSON，包含 summary、keywords、categories、risks、suggestions、actionItems、正文段落。内容要精炼，summary 不超过 120 字，suggestions 不超过 4 条，正文段落不超过 180 字。',
-    'keywords 使用数组，如 [{"word":"热水","count":3,"reason":"..."}]。',
+    'keywords 使用数组，如 [{"category":"宿舍生活","word":"热水","count":3,"reason":"..."}]。每个关键词必须放到你判断后的真实板块。',
     'actionItems 使用数组，如 [{"category":"宿舍生活","title":"宿舍热水时段稳定性处理"}]，只生成标题和类别，不要编造帖子 id；同一类别同一问题只输出一条。',
     'suggestions 使用数组，每条建议应可执行。',
     '同时检查是否需要补充新标签，返回 suggestedTags 数组，如 [{"category":"校园设施","tag":"厕所","reason":"多条帖子反馈厕所卫生"}]。只建议具体、可复用的问题标签，不要输出“问题、建议、学校、同学”等泛词。必须先查看 existingCategories；如果当前板块已有更短、更通用的标签覆盖该问题，不要输出新标签，例如已有“场地”时不要输出“社团场地”“社团场地不足”。',
   ].concat([
     '关键词统计要求：keywords 数组元素必须包含 category、word、count，例如 {"category":"食堂吐槽","word":"菜不新鲜","count":2}。count 是覆盖的帖子数，同一帖子重复出现只算 1 次。',
-    '同时返回 keywordTrends 对象，按板块输出 labels 和 points，例如 {"食堂吐槽":{"labels":["菜不新鲜"],"points":[2]}}。必须先查看 existingCategories 和 existingKeywordTrends，优先复用已有标签/关键词，避免同义重复；没有合适词时再新增，并同步放入 suggestedTags。',
+    '同时返回 keywordTrends 对象，按真实板块输出 labels 和 points，例如 {"食堂吐槽":{"labels":["菜不新鲜"],"points":[2]}}。keywordTrends 只能包含 allowedCategoryNames 中的键；如果帖子原来发错板块，必须把该帖子的关键词计入修正后的真实板块。必须先查看 categoryCatalog、existingCategories 和 existingKeywordTrends，优先复用已有标签/关键词，避免同义重复；没有合适词时再新增，并同步放入 suggestedTags。',
   ]).join('\n'),
-  user: JSON.stringify({ posts: compactPostsForAi(posts, 120), localPayload, existingCategories, existingKeywordTrends }),
+  user: JSON.stringify({
+    posts: compactPostsForAi(posts, 120),
+    localPayload,
+    allowedCategoryNames,
+    categoryCatalog,
+    existingCategories,
+    existingKeywordTrends,
+  }),
 });
+};
 
 module.exports = {
   getLastAiFailure,

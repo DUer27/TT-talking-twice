@@ -1,8 +1,8 @@
 const express = require('express');
 const { sessionCookieName, sessionMaxAgeMs } = require('../config/env');
-const { changePassword, login, logout, register, resetPassword, sendEmailCode, updateProfile } = require('../services/authService');
+const { changePassword, createAdminInviteCodes, deleteAdminInviteCode, getInviteLiveStatus, login, logout, register, resetPassword, sendEmailCode, updateProfile } = require('../services/authService');
 const { assertCanAttempt, recordFailure, recordSuccess } = require('../utils/loginRateLimiter');
-const { requireAuth } = require('../middleware/authMiddleware');
+const { requireAdmin, requireAuth } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -36,6 +36,33 @@ router.post('/password-reset', async (req, res, next) => {
   try {
     await resetPassword(req.body);
     res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admin/invites', requireAdmin, async (req, res, next) => {
+  try {
+    const invites = await createAdminInviteCodes(req.currentUser.id, req.body);
+    res.status(201).json({ invites });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/admin/invites', requireAdmin, async (req, res, next) => {
+  try {
+    await deleteAdminInviteCode(req.body);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admin/invites/live-status', requireAdmin, async (req, res, next) => {
+  try {
+    const statuses = await getInviteLiveStatus(req.body);
+    res.json({ statuses });
   } catch (error) {
     next(error);
   }

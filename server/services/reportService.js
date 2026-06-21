@@ -52,9 +52,15 @@ const normalizeKeywordItems = (items = []) => (Array.isArray(items) ? items : []
 
 const getCategoryName = (item) => normalizeActionTitle(item?.category || item?.categoryName || item?.name || item?.label);
 
-const normalizeAiKeywordTrends = (aiPayload = {}, localPayload = {}) => {
+const normalizeAiKeywordTrends = (aiPayload = {}, localPayload = {}, allowedCategories = []) => {
   const statCategories = Array.isArray(localPayload.categories) ? localPayload.categories : [];
-  const trendMap = Object.fromEntries(statCategories.map((item) => [item.category, new Map()]));
+  const localCategoryNames = statCategories.map((item) => item.category).filter(Boolean);
+  const allowedCategoryNames = (Array.isArray(allowedCategories) ? allowedCategories : [])
+    .map((item) => normalizeActionTitle(item?.name || item?.category || item?.label || item))
+    .filter(Boolean);
+  const categoryNames = [...new Set([...localCategoryNames, ...allowedCategoryNames])];
+  const localCategorySet = new Set(localCategoryNames);
+  const trendMap = Object.fromEntries(categoryNames.map((category) => [category, new Map()]));
   const localKeywordCategoryMap = new Map();
 
   Object.entries(localPayload.keywordTrends || {}).forEach(([category, trend]) => {
@@ -72,7 +78,7 @@ const normalizeAiKeywordTrends = (aiPayload = {}, localPayload = {}) => {
     if (trendMap[category]) return category;
     const matchedCategories = localKeywordCategoryMap.get(item.word);
     if (matchedCategories?.size === 1) return [...matchedCategories][0];
-    return statCategories.length === 1 ? statCategories[0].category : '';
+    return categoryNames.length === 1 ? categoryNames[0] : '';
   };
 
   const addKeyword = (category, word, count) => {
@@ -114,19 +120,20 @@ const normalizeAiKeywordTrends = (aiPayload = {}, localPayload = {}) => {
   addKeywordItems(aiPayload.keywords);
   addKeywordItems(aiPayload.actionItems);
 
-  return Object.fromEntries(statCategories.map((config) => {
-    const items = [...(trendMap[config.category] || new Map()).entries()]
+  return Object.fromEntries(categoryNames.map((category) => {
+    const items = [...(trendMap[category] || new Map()).entries()]
       .map(([keyword, count]) => ({ keyword, count }))
       .sort((a, b) => b.count - a.count || a.keyword.localeCompare(b.keyword, 'zh-CN'))
       .slice(0, 8);
     const topKeyword = items[0] || { keyword: '暂无', count: 0 };
-    return [config.category, {
+    if (!localCategorySet.has(category) && !items.length) return null;
+    return [category, {
       keyword: topKeyword.keyword,
       mentions: topKeyword.count,
       labels: items.map((item) => item.keyword),
       points: items.map((item) => item.count),
     }];
-  }));
+  }).filter(Boolean));
 };
 
 const keywordTrendsToSuggestedTags = (keywordTrends = {}) => Object.entries(keywordTrends).flatMap(([category, trend]) => (
@@ -150,6 +157,13 @@ const collectExistingKeywordTrends = async () => {
 };
 
 const normalizeActionTitle = (value) => String(value || '').trim().replace(/\s+/g, ' ');
+
+const parseDateBoundary = (value, { endOfDay = false } = {}) => {
+  const normalized = normalizeActionTitle(value);
+  if (!normalized) return null;
+  const date = new Date(endOfDay ? `${normalized}T23:59:59.999` : `${normalized}T00:00:00.000`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 
 const normalizeReportScope = (category) => {
   const normalized = normalizeActionTitle(category);
@@ -433,10 +447,30 @@ const buildReportPayload = (posts, { source = 'local', aiFailure = null, scopeCa
   };
 };
 
-const generateAdminReport = async (userId, { category = '' } = {}) => {
+const generateAdminReport = async (userId, { category = '', startDate = '', endDate = '' } = {}) => {
   const scopeCategory = normalizeReportScope(category);
-  const posts = await listAdminPosts({ status: 'all', currentUserId: userId, limit: 500 });
-  const scopedPosts = posts.filter((post) => post.status !== 'deleted' && (!scopeCategory || post.category === scopeCategory));
+  const startAt = parseDateBoundary(startDate);
+  const endAt = parseDateBoundary(endDate, { endOfDay: true });
+  if (startAt && endAt && startAt.getTime() > endAt.getTime()) {
+    const error = new Error('开始时间不能晚于结束时间');
+    error.statusCode = 400;
+    throw error;
+  }
+  const posts = await listAdminPosts({
+    status: 'all',
+    currentUserId: userId,
+    limit: 500,
+    startAt: startAt ? startAt.toISOString().slice(0, 19).replace('T', ' ') : null,
+    endAt: endAt ? endAt.toISOString().slice(0, 19).replace('T', ' ') : null,
+  });
+  const scopedPosts = posts.filter((post) => {
+    if (post.status === 'deleted') return false;
+    if (scopeCategory && post.category !== scopeCategory) return false;
+    const createdAt = new Date(post.createdAt || 0).getTime();
+    if (startAt && createdAt < startAt.getTime()) return false;
+    if (endAt && createdAt > endAt.getTime()) return false;
+    return true;
+  });
   if (!scopedPosts.length) {
     const error = new Error(scopeCategory ? `「${scopeCategory}」板块暂无帖子可生成报告` : '暂无帖子可生成报告');
     error.statusCode = 409;
@@ -452,7 +486,7 @@ const generateAdminReport = async (userId, { category = '' } = {}) => {
   console.log(`[AI] admin report ${aiPayload ? 'completed' : 'fell back to local summary'} in ${Date.now() - startedAt}ms`);
   const aiFailure = aiPayload ? null : getLastAiFailure();
   if (aiFailure) console.warn(`[AI] admin report fallback reason: ${aiFailure.message}${aiFailure.detail ? `: ${aiFailure.detail}` : ''}`);
-  const aiKeywordTrends = aiPayload ? normalizeAiKeywordTrends(aiPayload, localPayload) : null;
+  const aiKeywordTrends = aiPayload ? normalizeAiKeywordTrends(aiPayload, localPayload, existingCategories) : null;
   const keywordTags = aiKeywordTrends ? keywordTrendsToSuggestedTags(aiKeywordTrends) : [];
   const addedTags = aiPayload
     ? await addSuggestedTagsToCategories([...(aiPayload.suggestedTags || []), ...keywordTags])
@@ -484,6 +518,8 @@ const generateAdminReport = async (userId, { category = '' } = {}) => {
   payload.reportScope = {
     category: scopeCategory || '全部',
     mode: scopeCategory ? 'category' : 'all',
+    startDate: startAt ? startAt.toISOString() : null,
+    endDate: endAt ? endAt.toISOString() : null,
   };
   const title = `${scopeCategory ? `${scopeCategory}板块` : '全站'}反馈处理报告 ${new Date().toLocaleDateString('zh-CN')}`;
   return createReport({ userId, title, summary: payload.summary, payload, postIds: localPayload.postIds });
