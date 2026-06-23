@@ -54,6 +54,16 @@ cp .env.example .env
 
 ## 部署步骤
 
+一键启动 Debian 12 / Ubuntu 服务：
+
+```sh
+bash scripts/start-service-debian.sh
+```
+
+脚本只负责安装 Node 依赖、创建 systemd 服务并启动应用。数据库需要你提前安装并配置好；如需更新表结构，再手动运行 `npm run migrate`。
+
+手动部署：
+
 ```sh
 npm ci
 npm run migrate

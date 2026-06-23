@@ -23,6 +23,12 @@
 
 上线前请先看 [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)。服务器必须安装并启动 MySQL 8.x 或兼容版本，再配置 `.env`、运行 `npm run migrate` 和启动服务。
 
+Debian 12 / Ubuntu 可以在仓库目录运行一键部署脚本：
+
+```sh
+bash scripts/start-service-debian.sh
+```
+
 ## 本地运行
 
 安装依赖：
