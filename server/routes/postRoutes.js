@@ -103,6 +103,7 @@ router.get('/:id', async (req, res, next) => {
       currentUserId: req.currentUser?.id,
       increaseViews: true,
       includeHidden: req.currentUser?.role === 'admin',
+      includePrivateAuthorFields: req.currentUser?.role === 'admin',
     });
     res.json({ post });
   } catch (error) {

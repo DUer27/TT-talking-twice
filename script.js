@@ -377,7 +377,7 @@ const normalizePostTopic = (post) => {
   if (!post) return null;
   const authorInitial = post.author?.initial || (post.isAnonymous ? '?' : '?');
   const authorName = post.author?.name || (post.isAnonymous ? '匿名同学' : '同学');
-  const authorQq = post.author?.qq || '';
+  const authorAvatarUrl = post.author?.avatarUrl || '';
   const tags = [post.category, ...(Array.isArray(post.tags) ? post.tags : [])];
   if (post.resolved || post.status === 'resolved') tags.push('已处理');
   else tags.push('待回应');
@@ -396,7 +396,7 @@ const normalizePostTopic = (post) => {
     activity: getRelativeActivity(post.updatedAt || post.createdAt),
     posters: [authorInitial],
     authorName,
-    authorQq,
+    authorAvatarUrl,
     hotScore: Number(post.likeCount || 0) + Number(post.favoriteCount || 0),
     hot: Number(post.likeCount || 0) + Number(post.favoriteCount || 0) > 0,
     mine: Boolean(post.mine),
@@ -962,18 +962,30 @@ const generateAdminReport = async () => {
 
 const getQqAvatarUrl = (qq) => {
   const normalizedQq = String(qq || '').trim();
-  return normalizedQq ? `http://q1.qlogo.cn/g?b=qq&nk=${encodeURIComponent(normalizedQq)}&s=100` : '';
+  return normalizedQq ? `https://q1.qlogo.cn/g?b=qq&nk=${encodeURIComponent(normalizedQq)}&s=100` : '';
 };
 
-const renderAvatar = ({ className = 'mini-avatar', initial = '?', name = '用户', qq = '', color = '#64748b' } = {}) => {
-  const avatarUrl = getQqAvatarUrl(qq);
+const renderAvatar = ({ className = 'mini-avatar', initial = '?', name = '用户', qq = '', avatarUrl = '', color = '#64748b' } = {}) => {
+  const avatarUrlValue = avatarUrl || getQqAvatarUrl(qq);
   const safeName = escapeHtml(name || '用户');
-  if (avatarUrl) {
-    return `<span class="${className} has-image" aria-label="${safeName}的头像"><img src="${escapeHtml(avatarUrl)}" alt="" /></span>`;
+  const safeInitial = escapeHtml(initial || '?');
+  const safeColor = escapeHtml(color);
+  if (avatarUrlValue) {
+    return `<span class="${className} has-image" data-avatar-fallback="${safeInitial}" data-avatar-color="${safeColor}" aria-label="${safeName}的头像"><img src="${escapeHtml(avatarUrlValue)}" alt="" /></span>`;
   }
 
-  return `<span class="${className}" style="background:${escapeHtml(color)}" aria-label="${safeName}的头像">${escapeHtml(initial || '?')}</span>`;
+  return `<span class="${className}" style="background:${safeColor}" aria-label="${safeName}的头像">${safeInitial}</span>`;
 };
+
+document.addEventListener('error', (event) => {
+  const image = event.target;
+  if (!(image instanceof HTMLImageElement)) return;
+  const avatar = image.closest('[data-avatar-fallback]');
+  if (!avatar) return;
+  avatar.classList.remove('has-image');
+  avatar.style.background = avatar.dataset.avatarColor || '#64748b';
+  avatar.textContent = avatar.dataset.avatarFallback || '?';
+}, true);
 
 const setAvatarPreview = (displayName = '?', qq = '') => {
   const initial = (displayName || '?').trim().slice(0, 1).toUpperCase() || '?';
@@ -1530,7 +1542,7 @@ const renderTopics = (filter = currentFilter, title = currentTitle) => {
     const authorAvatar = renderAvatar({
       initial: posterInitial,
       name: topic.authorName || topic.posters[0] || '?',
-      qq: topic.authorQq,
+      avatarUrl: topic.authorAvatarUrl,
       color: safeColor,
     });
 
@@ -2514,7 +2526,7 @@ const renderComments = (comments = []) => {
       className: 'comment-avatar',
       initial: comment.author?.initial || authorName.slice(0, 1).toUpperCase(),
       name: authorName,
-      qq: comment.author?.qq,
+      avatarUrl: comment.author?.avatarUrl,
       color: colors[index % colors.length],
     });
     const actionHtml = canDelete
@@ -2629,7 +2641,7 @@ const openTopicDetail = async (topicId) => {
     className: 'detail-author-avatar',
     initial: latestTopic.posters[0] || '?',
     name: detailAuthorName,
-    qq: latestTopic.authorQq,
+    avatarUrl: latestTopic.authorAvatarUrl,
     color: colors[0],
   });
   detailTitle.textContent = latestTopic.title;

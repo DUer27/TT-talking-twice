@@ -460,6 +460,7 @@ const generateAdminReport = async (userId, { category = '', startDate = '', endD
     status: 'all',
     currentUserId: userId,
     limit: 500,
+    includePrivateAuthorFields: false,
     startAt: startAt ? startAt.toISOString().slice(0, 19).replace('T', ' ') : null,
     endAt: endAt ? endAt.toISOString().slice(0, 19).replace('T', ' ') : null,
   });

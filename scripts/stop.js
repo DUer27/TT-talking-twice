@@ -13,9 +13,9 @@ const runPowerShell = (script) => execFileSync(
 );
 
 const readPort = () => {
-  if (!fs.existsSync(envFile)) return 5173;
+  if (!fs.existsSync(envFile)) return 6999;
   const matched = fs.readFileSync(envFile, 'utf8').match(/^PORT=(\d+)/m);
-  return matched ? Number(matched[1]) : 5173;
+  return matched ? Number(matched[1]) : 6999;
 };
 
 const stopByPid = (pid) => `

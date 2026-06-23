@@ -4,8 +4,9 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const rootDir = path.join(__dirname, '..', '..');
 
 module.exports = {
-  port: Number(process.env.PORT || 5173),
+  port: Number(process.env.PORT || 6999),
   rootDir,
+  isProduction: process.env.NODE_ENV === 'production',
   db: {
     host: process.env.DB_HOST || '127.0.0.1',
     port: Number(process.env.DB_PORT || 3306),
@@ -31,6 +32,11 @@ module.exports = {
     from: process.env.SMTP_FROM || process.env.SMTP_USER || '',
   },
   verificationCodeSecret: process.env.VERIFICATION_CODE_SECRET || process.env.SMTP_PASS || 'tt-talking-twice-local-secret',
+  defaultAdmin: {
+    email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com',
+    password: process.env.DEFAULT_ADMIN_PASSWORD || '',
+    nickname: process.env.DEFAULT_ADMIN_NICKNAME || 'admin',
+  },
   sessionCookieName: 'campus_voice_session',
   sessionMaxAgeMs: 1000 * 60 * 60 * 24 * 7,
 };

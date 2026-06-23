@@ -329,7 +329,7 @@ const changePostStatus = async (postId, currentUserId, { status }) => {
   if (!allowedPostStatuses.has(normalizedStatus)) {
     throw createHttpError('帖子状态无效');
   }
-  const post = await updatePostStatus({ postId, status: normalizedStatus, currentUserId });
+  const post = await updatePostStatus({ postId, status: normalizedStatus, currentUserId, includePrivateAuthorFields: true });
   if (!post) {
     throw createHttpError('帖子不存在', 404);
   }
@@ -394,20 +394,20 @@ const getPostStats = async () => {
   };
 };
 
-const getPost = async (id, { currentUserId, increaseViews = false, includeHidden = false } = {}) => {
+const getPost = async (id, { currentUserId, increaseViews = false, includeHidden = false, includePrivateAuthorFields = false } = {}) => {
   if (!id || !/^\d+$/.test(String(id))) {
     throw createHttpError('帖子不存在', 404);
   }
 
   const post = increaseViews
-    ? await incrementPostViews(id, currentUserId, { includeHidden })
-    : await findPostById(id, currentUserId, { includeHidden });
+    ? await incrementPostViews(id, currentUserId, { includeHidden, includePrivateAuthorFields })
+    : await findPostById(id, currentUserId, { includeHidden, includePrivateAuthorFields });
 
   if (!post) {
     throw createHttpError('帖子不存在', 404);
   }
 
-  const comments = await listCommentsByPostId(id, currentUserId);
+  const comments = await listCommentsByPostId(id, currentUserId, { includePrivateAuthorFields });
   return { ...post, comments };
 };
 

@@ -1,4 +1,5 @@
-const { db } = require('../config/env');
+const crypto = require('crypto');
+const { db, defaultAdmin } = require('../config/env');
 const { getPool, getServerPool } = require('./connection');
 const { hashPassword } = require('../utils/password');
 
@@ -21,13 +22,24 @@ const seedDefaultAdmin = async (pool) => {
   const [adminRows] = await pool.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
   if (adminRows.length) return;
 
-  const passwordHash = await hashPassword('123456');
+  if (defaultAdmin.password && defaultAdmin.password.length < 12) {
+    throw new Error('DEFAULT_ADMIN_PASSWORD must be at least 12 characters.');
+  }
+
+  const generatedPassword = defaultAdmin.password || crypto.randomBytes(18).toString('base64url');
+  const passwordHash = await hashPassword(generatedPassword);
   await pool.execute(
     `INSERT INTO users (email, password_hash, role, nickname)
      VALUES (?, ?, 'admin', ?)
      ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), role = 'admin', nickname = VALUES(nickname)`,
-    ['root@root.root', passwordHash, 'root']
+    [defaultAdmin.email, passwordHash, defaultAdmin.nickname]
   );
+
+  console.warn(`Created initial admin account: ${defaultAdmin.email}`);
+  if (!defaultAdmin.password) {
+    console.warn(`Temporary initial admin password: ${generatedPassword}`);
+    console.warn('Change this password immediately after first login.');
+  }
 };
 
 const migrate = async () => {

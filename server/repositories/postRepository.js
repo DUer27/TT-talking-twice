@@ -7,11 +7,11 @@ const toIsoString = (value) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-const publicPostFields = (post, currentUserId = null) => {
+const publicPostFields = (post, currentUserId = null, { includePrivateAuthorFields = false } = {}) => {
   if (!post) return null;
   const isAnonymous = Number(post.is_anonymous) === 1 || post.is_anonymous === true;
   const isMine = Boolean(currentUserId && String(post.user_id) === String(currentUserId));
-  const authorName = isAnonymous ? '匿名同学' : (post.author_nickname || post.author_email?.split('@')[0] || '同学');
+  const authorName = isAnonymous ? '匿名同学' : (post.author_nickname || (includePrivateAuthorFields ? post.author_email?.split('@')[0] : '') || '同学');
 
   return {
     id: String(post.id),
@@ -33,7 +33,11 @@ const publicPostFields = (post, currentUserId = null) => {
       id: isAnonymous ? null : String(post.user_id),
       name: authorName,
       initial: isAnonymous ? '匿' : authorName.slice(0, 1).toUpperCase(),
-      qq: isAnonymous ? '' : (post.author_qq || ''),
+      avatarUrl: !isAnonymous && post.author_qq ? `/api/avatars/${encodeURIComponent(String(post.user_id))}` : '',
+      ...(includePrivateAuthorFields && !isAnonymous ? {
+        email: post.author_email || '',
+        qq: post.author_qq || '',
+      } : {}),
     },
     mine: isMine,
     resolved: post.status === 'resolved',
@@ -43,9 +47,9 @@ const publicPostFields = (post, currentUserId = null) => {
   };
 };
 
-const publicCommentFields = (comment, currentUserId = null) => {
+const publicCommentFields = (comment, currentUserId = null, { includePrivateAuthorFields = false } = {}) => {
   if (!comment) return null;
-  const authorName = comment.author_nickname || comment.author_email?.split('@')[0] || '同学';
+  const authorName = comment.author_nickname || (includePrivateAuthorFields ? comment.author_email?.split('@')[0] : '') || '同学';
   const isMine = Boolean(currentUserId && String(comment.user_id) === String(currentUserId));
   return {
     id: String(comment.id),
@@ -57,7 +61,11 @@ const publicCommentFields = (comment, currentUserId = null) => {
       id: String(comment.user_id),
       name: authorName,
       initial: authorName.slice(0, 1).toUpperCase(),
-      qq: comment.author_qq || '',
+      avatarUrl: comment.author_qq ? `/api/avatars/${encodeURIComponent(String(comment.user_id))}` : '',
+      ...(includePrivateAuthorFields ? {
+        email: comment.author_email || '',
+        qq: comment.author_qq || '',
+      } : {}),
     },
     mine: isMine,
     createdAt: toIsoString(comment.created_at),
@@ -138,7 +146,7 @@ const listPosts = async ({ limit = 30, offset = 0, currentUserId = null, include
   return rows.map((row) => publicPostFields(row, currentUserId));
 };
 
-const findPostById = async (id, currentUserId = null, { includeHidden = false, includeDeleted = false } = {}) => {
+const findPostById = async (id, currentUserId = null, { includeHidden = false, includeDeleted = false, includePrivateAuthorFields = false } = {}) => {
   await purgeExpiredDeletedPosts();
   const params = currentUserId ? [currentUserId, currentUserId, id] : [id];
   const visibilitySql = includeDeleted
@@ -151,10 +159,10 @@ const findPostById = async (id, currentUserId = null, { includeHidden = false, i
      LIMIT 1`,
     params
   );
-  return publicPostFields(rows[0], currentUserId);
+  return publicPostFields(rows[0], currentUserId, { includePrivateAuthorFields });
 };
 
-const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = null, startAt = null, endAt = null } = {}) => {
+const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = null, startAt = null, endAt = null, includePrivateAuthorFields = true } = {}) => {
   await purgeExpiredDeletedPosts();
   const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 500));
   const params = currentUserId ? [currentUserId, currentUserId] : [];
@@ -179,10 +187,10 @@ const listAdminPosts = async ({ limit = 200, status = 'all', currentUserId = nul
      LIMIT ${safeLimit}`,
     params
   );
-  return rows.map((row) => publicPostFields(row, currentUserId));
+  return rows.map((row) => publicPostFields(row, currentUserId, { includePrivateAuthorFields }));
 };
 
-const updatePostStatus = async ({ postId, status, currentUserId = null }) => {
+const updatePostStatus = async ({ postId, status, currentUserId = null, includePrivateAuthorFields = false }) => {
   await purgeExpiredDeletedPosts();
   if (status === 'deleted') {
     await getPool().execute(
@@ -192,7 +200,7 @@ const updatePostStatus = async ({ postId, status, currentUserId = null }) => {
   } else {
     await getPool().execute('UPDATE posts SET status = ?, delete_marked_at = NULL WHERE id = ?', [status, postId]);
   }
-  return findPostById(postId, currentUserId, { includeHidden: true, includeDeleted: true });
+  return findPostById(postId, currentUserId, { includeHidden: true, includeDeleted: true, includePrivateAuthorFields });
 };
 
 const updatePostsStatus = async ({ postIds, status, currentUserId = null }) => {
@@ -217,7 +225,7 @@ const updatePostsStatus = async ({ postIds, status, currentUserId = null }) => {
      ORDER BY posts.created_at DESC, posts.id DESC`,
     currentUserId ? [currentUserId, currentUserId, ...safeIds] : safeIds
   );
-  return rows.map((row) => publicPostFields(row, currentUserId));
+  return rows.map((row) => publicPostFields(row, currentUserId, { includePrivateAuthorFields: true }));
 };
 
 const selectCommentSql = (currentUserId = null) => `
@@ -231,7 +239,7 @@ const selectCommentSql = (currentUserId = null) => `
   INNER JOIN users ON users.id = comments.user_id
 `;
 
-const listCommentsByPostId = async (postId, currentUserId = null) => {
+const listCommentsByPostId = async (postId, currentUserId = null, { includePrivateAuthorFields = false } = {}) => {
   const params = currentUserId ? [currentUserId, postId] : [postId];
   const [rows] = await getPool().execute(
     `${selectCommentSql(currentUserId)}
@@ -239,7 +247,7 @@ const listCommentsByPostId = async (postId, currentUserId = null) => {
      ORDER BY comments.created_at ASC, comments.id ASC`,
     params
   );
-  return rows.map((row) => publicCommentFields(row, currentUserId));
+  return rows.map((row) => publicCommentFields(row, currentUserId, { includePrivateAuthorFields }));
 };
 
 const createPost = async ({ userId, title, content, category, isAnonymous, tagNames = [] }) => {
@@ -268,14 +276,14 @@ const createPost = async ({ userId, title, content, category, isAnonymous, tagNa
   }
 };
 
-const incrementPostViews = async (id, currentUserId = null, { includeHidden = false } = {}) => {
+const incrementPostViews = async (id, currentUserId = null, { includeHidden = false, includePrivateAuthorFields = false } = {}) => {
   await purgeExpiredDeletedPosts();
   const visibilitySql = includeHidden ? "AND status <> 'deleted'" : "AND status NOT IN ('hidden', 'deleted')";
   await getPool().execute(
     `UPDATE posts SET view_count = view_count + 1, updated_at = updated_at WHERE id = ? ${visibilitySql}`,
     [id]
   );
-  return findPostById(id, currentUserId, { includeHidden });
+  return findPostById(id, currentUserId, { includeHidden, includePrivateAuthorFields });
 };
 
 const createComment = async ({ postId, userId, content }) => {

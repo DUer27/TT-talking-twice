@@ -19,6 +19,10 @@
 - 可发送邮件的邮箱 SMTP 授权码（用于注册验证码和找回密码）
 - npm
 
+## 上线清单
+
+上线前请先看 [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)。服务器必须安装并启动 MySQL 8.x 或兼容版本，再配置 `.env`、运行 `npm run migrate` 和启动服务。
+
 ## 本地运行
 
 安装依赖：
@@ -36,7 +40,7 @@ copy .env.example .env
 按本机情况修改 `.env`：
 
 ```env
-PORT=5173
+PORT=6999
 
 DB_HOST=127.0.0.1
 DB_PORT=3306
@@ -75,7 +79,7 @@ npm start
 访问：
 
 ```text
-http://127.0.0.1:5173/
+http://127.0.0.1:6999/
 ```
 
 停止当前项目服务：
@@ -107,16 +111,9 @@ tt_talking_twice
 - `post_tags`：帖子标签
 - `admin_reports` / `admin_report_posts`：管理员报告与关联帖子
 
-迁移脚本会保留默认管理员创建逻辑；不会再自动创建 `seed@local.test` 测试账号或 demo 帖子。
+迁移脚本不会自动创建测试账号或 demo 帖子。
 
-默认管理员账号在没有任何管理员时创建：
-
-```text
-邮箱：root@root.root
-密码：123456
-```
-
-首次登录后建议立即修改密码。
+如果数据库里没有任何管理员，迁移脚本会自动创建初始管理员。可通过 `DEFAULT_ADMIN_EMAIL`、`DEFAULT_ADMIN_PASSWORD` 和 `DEFAULT_ADMIN_NICKNAME` 配置；如果不设置 `DEFAULT_ADMIN_PASSWORD`，系统会生成一次性临时强密码并打印到服务日志里，首次登录后请立即修改。
 
 ## AI 配置
 
