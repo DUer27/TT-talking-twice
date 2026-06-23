@@ -9,3 +9,4 @@ server/data/
 !.env.example
 *.server
 *.pid
+.server*
