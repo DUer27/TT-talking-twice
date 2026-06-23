@@ -29,6 +29,18 @@ Debian 12 / Ubuntu 可以在仓库目录运行一键部署脚本：
 bash scripts/start-service-debian.sh
 ```
 
+停止服务：
+
+```sh
+bash scripts/stop-service-debian.sh
+```
+
+清理 systemd 服务和运行日志：
+
+```sh
+bash scripts/cleanup-service-debian.sh
+```
+
 ## 本地运行
 
 安装依赖：

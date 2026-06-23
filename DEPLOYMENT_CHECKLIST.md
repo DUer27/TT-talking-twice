@@ -62,6 +62,20 @@ bash scripts/start-service-debian.sh
 
 脚本只负责安装 Node 依赖、创建 systemd 服务并启动应用。数据库需要你提前安装并配置好；如需更新表结构，再手动运行 `npm run migrate`。
 
+停止服务：
+
+```sh
+bash scripts/stop-service-debian.sh
+```
+
+清理 systemd 服务和本地运行日志：
+
+```sh
+bash scripts/cleanup-service-debian.sh
+```
+
+清理脚本不会删除 `.env`、`node_modules` 或数据库。
+
 手动部署：
 
 ```sh

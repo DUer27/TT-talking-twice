@@ -83,6 +83,8 @@ Useful commands:
   sudo systemctl status ${SERVICE_NAME}
   journalctl -u ${SERVICE_NAME} -f
   sudo systemctl restart ${SERVICE_NAME}
+  bash scripts/stop-service-debian.sh
+  bash scripts/cleanup-service-debian.sh
 
 App target:
   http://127.0.0.1:6999
