@@ -28,8 +28,19 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+const requireTeacher = (req, res, next) => {
+  if (!req.currentUser) {
+    return res.status(401).json({ message: '请先登录' });
+  }
+  if (!['admin', 'teacher'].includes(req.currentUser.role)) {
+    return res.status(403).json({ message: '需要教师或管理员权限' });
+  }
+  next();
+};
+
 module.exports = {
   attachCurrentUser,
   requireAdmin,
   requireAuth,
+  requireTeacher,
 };

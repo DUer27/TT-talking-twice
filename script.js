@@ -27,6 +27,40 @@ const weekActiveChip = document.getElementById('weekActiveChip');
 const categoryMenu = document.getElementById('categoryMenu');
 const tagMenu = document.getElementById('tagMenu');
 const brandHome = document.getElementById('brandHome');
+const brandText = document.getElementById('brandText');
+const workspaceSwitchBtn = document.getElementById('workspaceSwitchBtn');
+const workspaceSwitchLabel = document.getElementById('workspaceSwitchLabel');
+const communityWorkspace = document.getElementById('communityWorkspace');
+const classWorkspace = document.getElementById('classWorkspace');
+const classGuestPanel = document.getElementById('classGuestPanel');
+const classAppPanel = document.getElementById('classAppPanel');
+const classHeroTitle = document.getElementById('classHeroTitle');
+const classHeroCopy = document.getElementById('classHeroCopy');
+const classRoleBadge = document.getElementById('classRoleBadge');
+const classPreviewSwitch = document.getElementById('classPreviewSwitch');
+const classTeacherView = document.getElementById('classTeacherView');
+const classStudentView = document.getElementById('classStudentView');
+const classStatAnnouncements = document.getElementById('classStatAnnouncements');
+const classStatAssignments = document.getElementById('classStatAssignments');
+const classAnnouncementForm = document.getElementById('classAnnouncementForm');
+const classAnnouncementTitle = document.getElementById('classAnnouncementTitle');
+const classAnnouncementContent = document.getElementById('classAnnouncementContent');
+const classAssignmentForm = document.getElementById('classAssignmentForm');
+const classAssignmentTitle = document.getElementById('classAssignmentTitle');
+const classAssignmentDesc = document.getElementById('classAssignmentDesc');
+const classAssignmentDue = document.getElementById('classAssignmentDue');
+const classTeacherAnnouncements = document.getElementById('classTeacherAnnouncements');
+const classTeacherAssignments = document.getElementById('classTeacherAssignments');
+const classTeacherSubmissions = document.getElementById('classTeacherSubmissions');
+const classStudentAnnouncements = document.getElementById('classStudentAnnouncements');
+const classStudentAssignments = document.getElementById('classStudentAssignments');
+const classStudentSubmissions = document.getElementById('classStudentSubmissions');
+const classLoginBtn = document.getElementById('classLoginBtn');
+const classBackHomeBtn = document.getElementById('classBackHomeBtn');
+let currentWorkspace = 'community';
+let classPreviewRole = 'teacher';
+let classOverview = { stats: {}, announcements: [], assignments: [], submissions: [] };
+let classLoading = false;
 const announcementBtn = document.getElementById('announcementBtn');
 const generateReportBtn = document.getElementById('generateReportBtn');
 const adminReportCategory = document.getElementById('adminReportCategory');
@@ -327,12 +361,12 @@ const showToast = (message) => {
 let currentUser = null;
 
 const apiRequest = async (url, options = {}) => {
+  const headers = { ...(options.headers || {}) };
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (!isFormData && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
   const response = await fetch(url, {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
+    headers,
     ...options,
   });
 
@@ -343,7 +377,7 @@ const apiRequest = async (url, options = {}) => {
   return data;
 };
 
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'\"]/g, (char) => ({
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
@@ -1037,6 +1071,7 @@ const updateAuthUI = (user) => {
     userMenuName.textContent = '未登录';
     userMenuEmail.textContent = '欢迎回来';
   }
+  syncClassWorkspace();
 };
 
 const setupCanvas = (canvas) => {
@@ -1628,37 +1663,24 @@ navLinks.forEach((link) => {
 renderTopics();
 
 searchInput.addEventListener('input', () => {
-  if (currentFilter === 'admin') return;
+  if (currentWorkspace === 'class' || currentFilter === 'admin') return;
   renderTopics(currentFilter, currentTitle);
 });
 
 searchInput.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     searchInput.value = '';
-    renderTopics(currentFilter, currentTitle);
+    if (currentWorkspace !== 'class') renderTopics(currentFilter, currentTitle);
     searchInput.blur();
     showToast('已清空搜索');
   }
 });
 
 window.addEventListener('scroll', () => {
-  if (currentFilter === 'admin' || !postPageHasMore || postPageLoading) return;
+  if (currentWorkspace === 'class' || currentFilter === 'admin' || !postPageHasMore || postPageLoading) return;
   const remaining = document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
   if (remaining < 360) loadPersistedTopics({ silent: true, reset: false });
 }, { passive: true });
-
-brandHome.addEventListener('click', (event) => {
-  event.preventDefault();
-  resetChips();
-  switchFilter('all', '最新吐槽');
-  showToast('已回到首页');
-});
-
-document.getElementById('sidebarToggle').addEventListener('click', () => {
-  const sidebar = document.getElementById('sidebar');
-  if (window.innerWidth <= 980) sidebar.classList.toggle('open');
-  else sidebar.classList.toggle('collapsed');
-});
 
 const closeDropdowns = () => {
   categoryMenu.hidden = true;
@@ -1668,6 +1690,429 @@ const closeDropdowns = () => {
   categoryChip.setAttribute('aria-expanded', 'false');
   tagChip.setAttribute('aria-expanded', 'false');
 };
+
+const formatClassTime = (value) => {
+  if (!value) return '未设置截止时间';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未设置截止时间';
+  return date.toLocaleString('zh-CN', { hour12: false });
+};
+
+const formatFileSize = (bytes) => {
+  const size = Number(bytes || 0);
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getClassRoleLabel = (role) => {
+  if (role === 'admin') return '管理员';
+  if (role === 'teacher') return '教师';
+  if (role === 'student') return '学生';
+  return '未登录';
+};
+
+const getActiveClassView = () => {
+  if (!currentUser) return null;
+  if (currentUser.role === 'admin') return classPreviewRole === 'student' ? 'student' : 'teacher';
+  if (currentUser.role === 'teacher') return 'teacher';
+  return 'student';
+};
+
+const renderClassEmpty = (text) => `<div class="class-empty">${escapeHtml(text)}</div>`;
+
+const renderClassAnnouncements = (target, items, { canDelete = false } = {}) => {
+  if (!target) return;
+  if (!items.length) {
+    target.innerHTML = renderClassEmpty('暂时还没有班级公告');
+    return;
+  }
+  target.innerHTML = items.map((item) => `
+    <article class="class-item">
+      <div class="class-item-head">
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.authorName || '教师')} · ${escapeHtml(formatClassTime(item.createdAt))}</small>
+      </div>
+      <p>${escapeHtml(item.content || '')}</p>
+      ${canDelete ? `<div class="class-item-actions"><button type="button" class="ghost-btn" data-class-delete-announcement="${escapeHtml(item.id)}">删除公告</button></div>` : ''}
+    </article>
+  `).join('');
+};
+
+const CLASS_FILE_ACCEPT = '.pdf,.doc,.docx,.dot,.dotx,.rtf,.odt,.wps,.ppt,.pptx,.pps,.ppsx,.odp,.xls,.xlsx,.xlsm,.csv,.ods,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif,.jfif,.zip,.rar,.7z,.tar,.gz,.txt,.md,.pages,.numbers,.key';
+
+const getClassFileKind = (filename = '', mimeType = '') => {
+  const ext = String(filename).split('.').pop()?.toLowerCase() || '';
+  const mime = String(mimeType || '').toLowerCase();
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'jfif'].includes(ext) || mime.startsWith('image/')) return 'image';
+  if (ext === 'pdf' || mime === 'application/pdf') return 'pdf';
+  if (['doc', 'docx', 'dot', 'dotx', 'rtf', 'odt', 'wps'].includes(ext)) return 'word';
+  if (['ppt', 'pptx', 'pps', 'ppsx', 'odp'].includes(ext)) return 'ppt';
+  if (['xls', 'xlsx', 'xlsm', 'csv', 'ods'].includes(ext)) return 'excel';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'archive';
+  return 'file';
+};
+
+const getClassFileKindLabel = (kind) => ({
+  image: '图片',
+  pdf: 'PDF',
+  word: 'Word',
+  ppt: 'PPT',
+  excel: 'Excel',
+  archive: '压缩包',
+  file: '文件',
+}[kind] || '文件');
+
+const canPreviewClassFile = (filename, mimeType) => ['image', 'pdf'].includes(getClassFileKind(filename, mimeType));
+
+const renderClassFilePreview = (item) => {
+  const kind = getClassFileKind(item.originalName, item.mimeType);
+  const fileUrl = `/api/class/submissions/${escapeHtml(item.id)}/file`;
+  const previewUrl = `${fileUrl}?inline=1`;
+  if (kind === 'image') {
+    return `<a class="class-file-preview" href="${previewUrl}" target="_blank" rel="noopener noreferrer"><img src="${previewUrl}" alt="${escapeHtml(item.originalName || '图片')}"></a>`;
+  }
+  if (kind === 'pdf') {
+    return `<iframe class="class-file-preview class-file-preview-pdf" src="${previewUrl}" title="${escapeHtml(item.originalName || 'PDF')}"></iframe>`;
+  }
+  return `<div class="class-file-chip">${escapeHtml(getClassFileKindLabel(kind))}</div>`;
+};
+
+const renderClassFileActions = (item, downloadLabel) => {
+  const fileUrl = `/api/class/submissions/${escapeHtml(item.id)}/file`;
+  const previewUrl = `${fileUrl}?inline=1`;
+  const previewable = canPreviewClassFile(item.originalName, item.mimeType);
+  return `
+    <div class="class-item-actions">
+      ${previewable ? `<a class="ghost-btn" href="${previewUrl}" target="_blank" rel="noopener noreferrer">预览</a>` : ''}
+      <a class="ghost-btn" href="${fileUrl}">${escapeHtml(downloadLabel)}</a>
+    </div>
+  `;
+};
+
+const renderTeacherAssignments = (items) => {
+  if (!classTeacherAssignments) return;
+  if (!items.length) {
+    classTeacherAssignments.innerHTML = renderClassEmpty('还没有发布文件收取，发布后学生就可以提交图片、Word 或 PDF。');
+    return;
+  }
+  classTeacherAssignments.innerHTML = items.map((item) => {
+    const submitted = Number(item.submissionCount || 0);
+    const expected = Number(item.expectedCount || 0);
+    const progressLabel = expected > 0 ? `${submitted}/${expected}` : `${submitted}/0`;
+    return `
+      <article class="class-item">
+        <div class="class-item-head">
+          <strong>${escapeHtml(item.title)}</strong>
+          <small>${item.status === 'open' ? '收取中' : '已停止'} · 已提交/总数 ${escapeHtml(progressLabel)}</small>
+        </div>
+        <div class="class-progress" aria-label="已提交 ${submitted}，总数 ${expected}">
+          <span style="width:${expected > 0 ? Math.min(100, Math.round((submitted / expected) * 100)) : 0}%"></span>
+        </div>
+        <p>${escapeHtml(item.description || '未填写收取说明')}</p>
+        <small>截止：${escapeHtml(formatClassTime(item.dueAt))}</small>
+        <div class="class-item-actions">
+          <button type="button" class="ghost-btn" data-class-toggle-assignment="${escapeHtml(item.id)}" data-next-status="${item.status === 'open' ? 'closed' : 'open'}">${item.status === 'open' ? '停止收取' : '重新开放'}</button>
+          <button type="button" class="ghost-btn" data-class-delete-assignment="${escapeHtml(item.id)}">删除收取</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+};
+
+const renderTeacherSubmissions = (items) => {
+  if (!classTeacherSubmissions) return;
+  if (!items.length) {
+    classTeacherSubmissions.innerHTML = renderClassEmpty('还没有学生提交文件。');
+    return;
+  }
+  classTeacherSubmissions.innerHTML = items.map((item) => {
+    const kind = getClassFileKind(item.originalName, item.mimeType);
+    return `
+      <article class="class-item">
+        <div class="class-item-head">
+          <strong>${escapeHtml(item.studentName || '学生')}</strong>
+          <small>${escapeHtml(item.assignmentTitle || '文件收取')} · ${escapeHtml(getClassFileKindLabel(kind))} · ${escapeHtml(formatClassTime(item.updatedAt || item.createdAt))}</small>
+        </div>
+        ${renderClassFilePreview(item)}
+        <p>${escapeHtml(item.originalName || '未命名文件')} · ${escapeHtml(formatFileSize(item.fileSize))}${item.note ? ` · ${escapeHtml(item.note)}` : ''}</p>
+        ${renderClassFileActions(item, '下载文件')}
+      </article>
+    `;
+  }).join('');
+};
+
+const renderStudentAssignments = (items) => {
+  if (!classStudentAssignments) return;
+  if (!items.length) {
+    classStudentAssignments.innerHTML = renderClassEmpty('暂时没有待交文件。');
+    return;
+  }
+  classStudentAssignments.innerHTML = items.map((item) => {
+    const submitted = Boolean(item.mySubmission);
+    const closed = item.status !== 'open';
+    return `
+      <article class="class-item">
+        <div class="class-item-head">
+          <strong>${escapeHtml(item.title)}</strong>
+          <small>${closed ? '已停止收取' : (submitted ? '已提交' : '待提交')}</small>
+        </div>
+        <p>${escapeHtml(item.description || '教师未填写补充说明')}</p>
+        <small>截止：${escapeHtml(formatClassTime(item.dueAt))}${submitted ? ` · 上次提交 ${escapeHtml(item.mySubmission.originalName)}` : ''}</small>
+        ${closed ? '' : `
+          <form class="class-submit-form" data-class-submit="${escapeHtml(item.id)}">
+            <input type="file" name="file" accept="${CLASS_FILE_ACCEPT}" required>
+            <small>可提交图片、Word、PDF、PPT、Excel 或压缩包，单文件不超过 50MB。</small>
+            <input type="text" name="note" maxlength="300" placeholder="可选备注，例如：已按学号命名">
+            <button type="submit" class="primary-btn">${submitted ? '重新提交' : '提交文件'}</button>
+          </form>
+        `}
+      </article>
+    `;
+  }).join('');
+};
+
+const renderStudentSubmissions = (items) => {
+  if (!classStudentSubmissions) return;
+  if (!items.length) {
+    classStudentSubmissions.innerHTML = renderClassEmpty('你还没有提交过文件。');
+    return;
+  }
+  classStudentSubmissions.innerHTML = items.map((item) => {
+    const kind = getClassFileKind(item.originalName, item.mimeType);
+    return `
+      <article class="class-item">
+        <div class="class-item-head">
+          <strong>${escapeHtml(item.assignmentTitle || '文件收取')}</strong>
+          <small>${escapeHtml(getClassFileKindLabel(kind))} · ${escapeHtml(formatClassTime(item.updatedAt || item.createdAt))}</small>
+        </div>
+        ${renderClassFilePreview(item)}
+        <p>${escapeHtml(item.originalName || '未命名文件')} · ${escapeHtml(formatFileSize(item.fileSize))}</p>
+        ${renderClassFileActions(item, '下载我的文件')}
+      </article>
+    `;
+  }).join('');
+};
+
+const renderClassWorkspace = () => {
+  const loggedIn = Boolean(currentUser);
+  if (classGuestPanel) classGuestPanel.hidden = loggedIn;
+  if (classAppPanel) classAppPanel.hidden = !loggedIn;
+  if (!loggedIn) return;
+
+  const view = getActiveClassView();
+  const isAdmin = currentUser.role === 'admin';
+  if (classPreviewSwitch) classPreviewSwitch.hidden = !isAdmin;
+  if (classPreviewSwitch) {
+    classPreviewSwitch.querySelectorAll('[data-class-preview]').forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.classPreview === view);
+    });
+  }
+  if (classTeacherView) classTeacherView.hidden = view !== 'teacher';
+  if (classStudentView) classStudentView.hidden = view !== 'student';
+  if (classRoleBadge) {
+    classRoleBadge.textContent = isAdmin
+      ? `管理员预览 · ${view === 'teacher' ? '教师页' : '学生页'}`
+      : getClassRoleLabel(currentUser.role);
+  }
+  if (classHeroTitle) classHeroTitle.textContent = view === 'teacher' ? '教师工作台' : '学生工作台';
+  if (classHeroCopy) {
+    classHeroCopy.textContent = view === 'teacher'
+      ? '发布班级公告、收取学生文件，并查看图片、Word、PDF 等提交内容。'
+      : '查看教师公告，按收取要求提交图片、Word、PDF 等文件。同一任务再次提交会覆盖旧文件。';
+  }
+  if (classStatAnnouncements) classStatAnnouncements.textContent = classOverview.stats?.announcementCount || 0;
+  if (classStatAssignments) classStatAssignments.textContent = classOverview.stats?.openAssignmentCount || 0;
+
+  renderClassAnnouncements(classTeacherAnnouncements, classOverview.announcements || [], { canDelete: true });
+  renderClassAnnouncements(classStudentAnnouncements, classOverview.announcements || []);
+  renderTeacherAssignments(classOverview.assignments || []);
+  renderTeacherSubmissions(classOverview.submissions || []);
+  renderStudentAssignments(classOverview.assignments || []);
+  renderStudentSubmissions((classOverview.assignments || []).map((item) => item.mySubmission).filter(Boolean));
+};
+
+const loadClassOverview = async ({ silent = false } = {}) => {
+  if (!currentUser) {
+    classOverview = { stats: {}, announcements: [], assignments: [], submissions: [] };
+    renderClassWorkspace();
+    return;
+  }
+  if (classLoading) return;
+  classLoading = true;
+  try {
+    const { overview } = await apiRequest('/api/class/overview');
+    classOverview = overview || { stats: {}, announcements: [], assignments: [], submissions: [] };
+    renderClassWorkspace();
+  } catch (error) {
+    if (!silent) showToast(error.message || '班级数据加载失败');
+    renderClassWorkspace();
+  } finally {
+    classLoading = false;
+  }
+};
+
+const syncClassWorkspace = () => {
+  renderClassWorkspace();
+  if (currentWorkspace === 'class' && currentUser) {
+    loadClassOverview({ silent: true });
+  }
+};
+
+const setWorkspace = (workspace) => {
+  currentWorkspace = workspace === 'class' ? 'class' : 'community';
+  const isClass = currentWorkspace === 'class';
+  document.body.classList.toggle('class-mode', isClass);
+  if (communityWorkspace) communityWorkspace.hidden = isClass;
+  if (classWorkspace) classWorkspace.hidden = !isClass;
+  if (brandText) brandText.textContent = isClass ? '班级管理' : '现经管回声';
+  if (workspaceSwitchLabel) workspaceSwitchLabel.textContent = isClass ? '现经管回声' : '班级管理';
+  if (workspaceSwitchBtn) {
+    workspaceSwitchBtn.setAttribute('aria-label', isClass ? '切换到现经管回声' : '切换到班级管理');
+  }
+  document.title = isClass ? '班级管理' : '现经管回声';
+  if (isClass) {
+    closeDropdowns();
+    syncClassWorkspace();
+  }
+};
+
+brandHome.addEventListener('click', (event) => {
+  event.preventDefault();
+  if (currentWorkspace === 'class') setWorkspace('community');
+  resetChips();
+  switchFilter('all', '最新吐槽');
+  showToast('已回到首页');
+});
+
+if (workspaceSwitchBtn) {
+  workspaceSwitchBtn.addEventListener('click', () => {
+    if (currentWorkspace === 'class') {
+      setWorkspace('community');
+      showToast('已回到现经管回声');
+      return;
+    }
+    setWorkspace('class');
+    showToast('已进入班级管理');
+  });
+}
+
+if (classLoginBtn) classLoginBtn.addEventListener('click', () => openLogin());
+if (classBackHomeBtn) {
+  classBackHomeBtn.addEventListener('click', () => {
+    setWorkspace('community');
+    showToast('已回到现经管回声');
+  });
+}
+if (classPreviewSwitch) {
+  classPreviewSwitch.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-class-preview]');
+    if (!button || currentUser?.role !== 'admin') return;
+    classPreviewRole = button.dataset.classPreview === 'student' ? 'student' : 'teacher';
+    renderClassWorkspace();
+  });
+}
+if (classAnnouncementForm) {
+  classAnnouncementForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await apiRequest('/api/class/announcements', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: classAnnouncementTitle.value.trim(),
+          content: classAnnouncementContent.value.trim(),
+        }),
+      });
+      classAnnouncementForm.reset();
+      showToast('班级公告已发布');
+      await loadClassOverview();
+    } catch (error) {
+      showToast(error.message || '公告发布失败');
+    }
+  });
+}
+if (classAssignmentForm) {
+  classAssignmentForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await apiRequest('/api/class/assignments', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: classAssignmentTitle.value.trim(),
+          description: classAssignmentDesc.value.trim(),
+          dueAt: classAssignmentDue.value ? new Date(classAssignmentDue.value).toISOString() : '',
+        }),
+      });
+      classAssignmentForm.reset();
+      showToast('文件收取已发布');
+      await loadClassOverview();
+    } catch (error) {
+      showToast(error.message || '文件收取发布失败');
+    }
+  });
+}
+if (classWorkspace) {
+  classWorkspace.addEventListener('click', async (event) => {
+    const deleteAnnouncementBtn = event.target.closest('[data-class-delete-announcement]');
+    const toggleAssignmentBtn = event.target.closest('[data-class-toggle-assignment]');
+    const deleteAssignmentBtn = event.target.closest('[data-class-delete-assignment]');
+    try {
+      if (deleteAnnouncementBtn) {
+        await apiRequest(`/api/class/announcements/${deleteAnnouncementBtn.dataset.classDeleteAnnouncement}`, { method: 'DELETE' });
+        showToast('公告已删除');
+        await loadClassOverview();
+        return;
+      }
+      if (toggleAssignmentBtn) {
+        await apiRequest(`/api/class/assignments/${toggleAssignmentBtn.dataset.classToggleAssignment}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: toggleAssignmentBtn.dataset.nextStatus }),
+        });
+        showToast(toggleAssignmentBtn.dataset.nextStatus === 'closed' ? '已停止收取' : '已重新开放');
+        await loadClassOverview();
+        return;
+      }
+      if (deleteAssignmentBtn) {
+        await apiRequest(`/api/class/assignments/${deleteAssignmentBtn.dataset.classDeleteAssignment}`, { method: 'DELETE' });
+        showToast('收取任务已删除');
+        await loadClassOverview();
+      }
+    } catch (error) {
+      showToast(error.message || '操作失败');
+    }
+  });
+  classWorkspace.addEventListener('submit', async (event) => {
+    const form = event.target.closest('[data-class-submit]');
+    if (!form) return;
+    event.preventDefault();
+    const fileInput = form.querySelector('input[type="file"]');
+    const noteInput = form.querySelector('input[name="note"]');
+    if (!fileInput?.files?.[0]) {
+      showToast('请先选择要提交的文件');
+      return;
+    }
+    const payload = new FormData();
+    payload.append('file', fileInput.files[0]);
+    payload.append('note', noteInput?.value || '');
+    try {
+      await apiRequest(`/api/class/assignments/${form.dataset.classSubmit}/submissions`, {
+        method: 'POST',
+        body: payload,
+      });
+      form.reset();
+      showToast('文件已提交');
+      await loadClassOverview();
+    } catch (error) {
+      showToast(error.message || '提交失败');
+    }
+  });
+}
+
+document.getElementById('sidebarToggle').addEventListener('click', () => {
+  const sidebar = document.getElementById('sidebar');
+  if (window.innerWidth <= 980) sidebar.classList.toggle('open');
+  else sidebar.classList.toggle('collapsed');
+});
 
 const openDropdown = (menu, chip) => {
   const willOpen = menu.hidden;

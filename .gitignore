@@ -6,6 +6,7 @@ build/
 .env.*
 *.log
 server/data/
+uploads/
 !.env.example
 *.server
 *.pid

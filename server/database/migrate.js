@@ -358,6 +358,58 @@ const migrate = async () => {
 
   await seedDefaultAdmin(pool);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_announcements (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      author_id BIGINT UNSIGNED NOT NULL,
+      title VARCHAR(120) NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_class_announcements_created_at (created_at),
+      KEY idx_class_announcements_author_id (author_id),
+      CONSTRAINT fk_class_announcements_author_id FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_assignments (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      author_id BIGINT UNSIGNED NOT NULL,
+      title VARCHAR(120) NOT NULL,
+      description TEXT NULL,
+      due_at DATETIME NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'open',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_class_assignments_status_created_at (status, created_at),
+      KEY idx_class_assignments_author_id (author_id),
+      CONSTRAINT fk_class_assignments_author_id FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_submissions (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      assignment_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      note VARCHAR(300) NOT NULL DEFAULT '',
+      original_name VARCHAR(180) NOT NULL,
+      stored_path VARCHAR(255) NOT NULL,
+      mime_type VARCHAR(120) NOT NULL DEFAULT 'application/octet-stream',
+      file_size INT UNSIGNED NOT NULL DEFAULT 0,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_class_submissions_assignment_user (assignment_id, user_id),
+      KEY idx_class_submissions_user_id (user_id),
+      CONSTRAINT fk_class_submissions_assignment_id FOREIGN KEY (assignment_id) REFERENCES class_assignments(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_submissions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');
   await pool.query("DELETE FROM email_verifications WHERE expires_at <= UTC_TIMESTAMP() OR used_at IS NOT NULL");

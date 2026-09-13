@@ -63,6 +63,11 @@ const updateUserPassword = async (id, passwordHash) => {
   return findUserById(id);
 };
 
+const countUsersByRole = async (role) => {
+  const [rows] = await getPool().execute('SELECT COUNT(*) AS total FROM users WHERE role = ?', [role]);
+  return Number(rows[0]?.total || 0);
+};
+
 module.exports = {
   createUser,
   findUserByEmail,
@@ -70,4 +75,5 @@ module.exports = {
   publicUserFields,
   updateUserPassword,
   updateUserProfile,
+  countUsersByRole,
 };

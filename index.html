@@ -13,8 +13,12 @@
         <button class="icon-btn" id="sidebarToggle" aria-label="展开或收起边栏">☰</button>
         <a class="brand" href="#" id="brandHome">
           <span class="brand-mark"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
-          <span class="brand-text">现经管回声</span>
+          <span class="brand-text" id="brandText">现经管回声</span>
         </a>
+        <button class="workspace-switch" id="workspaceSwitchBtn" type="button" aria-label="切换到班级管理">
+          <span class="workspace-switch-icon" aria-hidden="true">⇄</span>
+          <span id="workspaceSwitchLabel">班级管理</span>
+        </button>
       </div>
       <div class="topbar-search">
         <span class="search-icon">⌕</span>
@@ -48,7 +52,7 @@
       </div>
     </header>
 
-    <div class="main-wrap">
+    <div class="main-wrap" id="communityWorkspace">
       <aside class="sidebar" id="sidebar">
         <section class="sidebar-section">
           <div class="sidebar-title">导航</div>
@@ -336,6 +340,131 @@
           </section>
         </section>
       </main>
+    </div>
+    <div class="class-workspace" id="classWorkspace" hidden>
+      <section class="class-guest" id="classGuestPanel">
+        <div class="class-guest-card">
+          <h1>班级管理</h1>
+          <p>这里按账号身份进入不同工作台：教师可发布班级公告并收取文件，学生可查看公告并提交图片、Word、PDF 等文件。请先登录后再使用。</p>
+          <div class="class-guest-actions">
+            <button type="button" class="primary-btn" id="classLoginBtn">登录后进入</button>
+            <button type="button" class="ghost-btn" id="classBackHomeBtn">返回社区</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="class-app" id="classAppPanel" hidden>
+        <header class="class-hero">
+          <div>
+            <strong id="classHeroTitle">班级工作台</strong>
+            <span id="classHeroCopy">登录后会按教师或学生身份显示对应功能。</span>
+          </div>
+          <div class="class-hero-actions">
+            <span class="class-role-badge" id="classRoleBadge">未登录</span>
+            <div class="class-preview-switch" id="classPreviewSwitch" hidden>
+              <button type="button" class="ghost-btn is-active" data-class-preview="teacher">教师页</button>
+              <button type="button" class="ghost-btn" data-class-preview="student">学生页</button>
+            </div>
+          </div>
+        </header>
+
+        <section class="class-stats" id="classStats">
+          <article class="admin-card"><strong>班级公告</strong><span id="classStatAnnouncements">0</span><small>已发布公告</small></article>
+          <article class="admin-card"><strong>进行中收取</strong><span id="classStatAssignments">0</span><small>正在收取的文件任务</small></article>
+        </section>
+
+        <div class="class-grid" id="classTeacherView" hidden>
+          <article class="class-card">
+            <h2>发布班级公告</h2>
+            <p>公告会立即出现在学生工作台，适合布置说明、调课通知和截止提醒。</p>
+            <form class="create-form" id="classAnnouncementForm">
+              <label>
+                <span>公告标题</span>
+                <input type="text" id="classAnnouncementTitle" maxlength="80" placeholder="例如：周五实验课改到机房 B203" required>
+              </label>
+              <label>
+                <span>公告内容</span>
+                <textarea id="classAnnouncementContent" rows="5" maxlength="4000" placeholder="请写清时间、地点和需要学生完成的事项" required></textarea>
+              </label>
+              <div class="create-actions">
+                <button type="submit" class="primary-btn">发布公告</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="class-card">
+            <h2>发布文件收取</h2>
+            <p>发布后学生可提交图片、Word、PDF、PPT、Excel 或压缩包；同一任务再次提交会覆盖旧文件。</p>
+            <form class="create-form" id="classAssignmentForm">
+              <label>
+                <span>收取标题</span>
+                <input type="text" id="classAssignmentTitle" maxlength="80" placeholder="例如：实验报告扫描件 / 课程小结" required>
+              </label>
+              <label>
+                <span>收取说明</span>
+                <textarea id="classAssignmentDesc" rows="4" maxlength="2000" placeholder="说明可提交的文件类型、命名要求和截止安排"></textarea>
+              </label>
+              <label>
+                <span>截止时间（可选）</span>
+                <input type="datetime-local" id="classAssignmentDue">
+              </label>
+              <div class="create-actions">
+                <button type="submit" class="primary-btn">发布收取</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="class-card class-card-wide">
+            <div class="class-card-head">
+              <div>
+                <h2>已发布公告</h2>
+                <p>可删除过期公告，学生端会同步更新。</p>
+              </div>
+            </div>
+            <div class="class-list" id="classTeacherAnnouncements"></div>
+          </article>
+
+          <article class="class-card class-card-wide">
+            <div class="class-card-head">
+              <div>
+                <h2>文件收取进度</h2>
+                <p>可停止收取、重新开放，或删除整份收取任务。</p>
+              </div>
+            </div>
+            <div class="class-list" id="classTeacherAssignments"></div>
+          </article>
+
+          <article class="class-card class-card-wide">
+            <div class="class-card-head">
+              <div>
+                <h2>学生提交收件箱</h2>
+                <p>查看最近提交的文件。图片和 PDF 可直接预览，Word 等文档可下载后打开。</p>
+              </div>
+            </div>
+            <div class="class-list" id="classTeacherSubmissions"></div>
+          </article>
+        </div>
+
+        <div class="class-grid" id="classStudentView" hidden>
+          <article class="class-card">
+            <h2>班级公告</h2>
+            <p>教师发布的通知会显示在这里，请留意截止时间和提交要求。</p>
+            <div class="class-list" id="classStudentAnnouncements"></div>
+          </article>
+
+          <article class="class-card">
+            <h2>我的提交</h2>
+            <p>已上传的文件可以预览或下载，重新提交会覆盖旧文件。</p>
+            <div class="class-list" id="classStudentSubmissions"></div>
+          </article>
+
+          <article class="class-card class-card-wide">
+            <h2>待交文件</h2>
+            <p>支持 JPG / PNG / WebP 等图片，以及 Word、PDF、PPT、Excel 和压缩包，单文件不超过 50MB。</p>
+            <div class="class-list" id="classStudentAssignments"></div>
+          </article>
+        </div>
+      </section>
     </div>
   </div>
 

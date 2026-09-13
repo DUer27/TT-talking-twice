@@ -10,6 +10,7 @@ const categoryRoutes = require('./routes/categoryRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 const postRoutes = require('./routes/postRoutes');
 const avatarRoutes = require('./routes/avatarRoutes');
+const classRoutes = require('./routes/classRoutes');
 const { purgeExpiredDeletedPosts } = require('./repositories/postRepository');
 
 const app = express();
@@ -41,12 +42,12 @@ process.on('SIGTERM', () => { cleanupPidFile(); process.exit(0); });
 app.disable('x-powered-by');
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://q1.qlogo.cn; connect-src 'self'"
+    "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; frame-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://q1.qlogo.cn; connect-src 'self'"
   );
   next();
 });
@@ -60,6 +61,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/avatars', avatarRoutes);
+app.use('/api/class', classRoutes);
 
 app.use('/assets', express.static(path.join(rootDir, 'assets'), staticOptions));
 app.get(['/styles.css', '/script.js'], (req, res) => {
