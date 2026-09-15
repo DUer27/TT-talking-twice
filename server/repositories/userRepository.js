@@ -8,6 +8,7 @@ const publicUserFields = (user) => {
     role: user.role,
     nickname: user.nickname,
     qq: user.qq || '',
+    studentNo: user.student_no || '',
     createdAt: user.created_at,
   };
 };
@@ -17,18 +18,25 @@ const findUserByEmail = async (email) => {
   return rows[0] || null;
 };
 
+const findUserByStudentNo = async (studentNo) => {
+  const normalized = String(studentNo || '').trim();
+  if (!normalized) return null;
+  const [rows] = await getPool().execute('SELECT * FROM users WHERE student_no = ? LIMIT 1', [normalized]);
+  return rows[0] || null;
+};
+
 const findUserById = async (id) => {
   const [rows] = await getPool().execute('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
   return rows[0] || null;
 };
 
-const createUser = async ({ email, passwordHash, role = 'student', nickname, qq = '' }) => {
+const createUser = async ({ email, passwordHash, role = 'student', nickname, qq = '', studentNo = null }) => {
   const normalizedEmail = email.toLowerCase();
   try {
     const [result] = await getPool().execute(
-      `INSERT INTO users (email, password_hash, role, nickname, qq)
-       VALUES (?, ?, ?, ?, ?)`,
-      [normalizedEmail, passwordHash, role, nickname || normalizedEmail.split('@')[0], qq]
+      `INSERT INTO users (email, password_hash, role, nickname, qq, student_no)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [normalizedEmail, passwordHash, role, nickname || normalizedEmail.split('@')[0], qq, studentNo || null]
     );
     return findUserById(result.insertId);
   } catch (error) {
@@ -68,12 +76,28 @@ const countUsersByRole = async (role) => {
   return Number(rows[0]?.total || 0);
 };
 
+const listUsersByRole = async (role) => {
+  const [rows] = await getPool().execute(
+    'SELECT * FROM users WHERE role = ? ORDER BY created_at DESC, id DESC',
+    [role]
+  );
+  return rows.map(publicUserFields);
+};
+
+const updateUserRole = async (id, role) => {
+  await getPool().execute('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+  return findUserById(id);
+};
+
 module.exports = {
   createUser,
   findUserByEmail,
   findUserById,
+  findUserByStudentNo,
   publicUserFields,
   updateUserPassword,
   updateUserProfile,
   countUsersByRole,
+  listUsersByRole,
+  updateUserRole,
 };

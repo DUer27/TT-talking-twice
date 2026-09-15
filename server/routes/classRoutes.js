@@ -1,10 +1,14 @@
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
-const { requireAuth } = require('../middleware/authMiddleware');
+const { requireAdmin, requireAuth } = require('../middleware/authMiddleware');
 const {
   MAX_FILE_SIZE,
+  assignTeacher,
   changeAssignmentStatus,
+  createManagedClass,
+  createTeacherAccount,
+  getAdminDirectory,
   getOverview,
   getSubmissionFile,
   listAnnouncements,
@@ -14,7 +18,10 @@ const {
   publishAssignment,
   removeAnnouncement,
   removeAssignment,
+  removeManagedClass,
+  renameManagedClass,
   submitAssignment,
+  unassignTeacher,
 } = require('../services/classService');
 
 const router = express.Router();
@@ -24,6 +31,69 @@ const upload = multer({
 });
 
 router.use(requireAuth);
+
+router.get('/admin/directory', requireAdmin, async (req, res, next) => {
+  try {
+    const directory = await getAdminDirectory(req.currentUser);
+    res.json({ directory });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admin/classes', requireAdmin, async (req, res, next) => {
+  try {
+    const classGroup = await createManagedClass(req.currentUser, req.body);
+    res.status(201).json({ class: classGroup });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/admin/classes/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const classGroup = await renameManagedClass(req.currentUser, req.params.id, req.body);
+    res.json({ class: classGroup });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/admin/classes/:id', requireAdmin, async (req, res, next) => {
+  try {
+    await removeManagedClass(req.currentUser, req.params.id);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admin/teachers', requireAdmin, async (req, res, next) => {
+  try {
+    const teacher = await createTeacherAccount(req.currentUser, req.body);
+    res.status(201).json({ teacher });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/admin/classes/:id/teachers', requireAdmin, async (req, res, next) => {
+  try {
+    const classGroup = await assignTeacher(req.currentUser, req.params.id, req.body);
+    res.json({ class: classGroup });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/admin/classes/:id/teachers/:teacherId', requireAdmin, async (req, res, next) => {
+  try {
+    const classGroup = await unassignTeacher(req.currentUser, req.params.id, req.params.teacherId);
+    res.json({ class: classGroup });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/overview', async (req, res, next) => {
   try {

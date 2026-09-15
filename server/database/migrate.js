@@ -1,5 +1,7 @@
 const crypto = require('crypto');
-const { db, defaultAdmin } = require('../config/env');
+const fs = require('fs');
+const path = require('path');
+const { db, defaultAdmin, rootDir } = require('../config/env');
 const { getPool, getServerPool } = require('./connection');
 const { hashPassword } = require('../utils/password');
 
@@ -16,6 +18,28 @@ const ensureUserQqColumn = async (pool) => {
   if (rows.length) return;
 
   await pool.query("ALTER TABLE users ADD COLUMN qq VARCHAR(20) NOT NULL DEFAULT '' AFTER nickname");
+};
+
+const hasColumn = async (pool, tableName, columnName) => {
+  const [rows] = await pool.execute(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = ?
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [db.database, tableName, columnName]
+  );
+  return rows.length > 0;
+};
+
+const ensureUserStudentNoColumn = async (pool) => {
+  if (await hasColumn(pool, 'users', 'student_no')) return;
+  await pool.query("ALTER TABLE users ADD COLUMN student_no VARCHAR(32) NULL AFTER qq");
+  const [indexRows] = await pool.execute("SHOW INDEX FROM users WHERE Key_name = 'uk_users_student_no'");
+  if (!indexRows.length) {
+    await pool.query('ALTER TABLE users ADD UNIQUE KEY uk_users_student_no (student_no)');
+  }
 };
 
 const seedDefaultAdmin = async (pool) => {
@@ -42,6 +66,162 @@ const seedDefaultAdmin = async (pool) => {
   }
 };
 
+const seedDefaultClassTeachers = async (pool) => {
+  const defaults = [
+    { email: 'teacher1@class.local', nickname: '教师1', password: 'TeacherOne#2026', className: '数经1', aliases: ['班级1'] },
+    { email: 'teacher2@class.local', nickname: '教师2', password: 'TeacherTwo#2026', className: '数经2', aliases: ['班级2'] },
+  ];
+
+  for (const item of defaults) {
+    const names = [item.className, ...(item.aliases || [])];
+    let classId = null;
+    for (const name of names) {
+      const [classRows] = await pool.execute('SELECT id FROM class_groups WHERE name = ? LIMIT 1', [name]);
+      if (classRows[0]?.id) {
+        classId = classRows[0].id;
+        if (name !== item.className) {
+          await pool.execute('UPDATE class_groups SET name = ? WHERE id = ?', [item.className, classId]);
+        }
+        break;
+      }
+    }
+    if (!classId) {
+      await pool.execute('INSERT INTO class_groups (name) VALUES (?)', [item.className]);
+      const [classRows] = await pool.execute('SELECT id FROM class_groups WHERE name = ? LIMIT 1', [item.className]);
+      classId = classRows[0]?.id;
+    }
+    const [userRows] = await pool.execute('SELECT id, role FROM users WHERE email = ? LIMIT 1', [item.email]);
+    let userId = userRows[0]?.id;
+    if (!userId) {
+      const passwordHash = await hashPassword(item.password);
+      const [result] = await pool.execute(
+        'INSERT INTO users (email, password_hash, role, nickname) VALUES (?, ?, ?, ?)',
+        [item.email, passwordHash, 'teacher', item.nickname]
+      );
+      userId = result.insertId;
+      console.warn(`Created teacher account: ${item.email}`);
+    } else if (userRows[0].role !== 'admin') {
+      await pool.execute('UPDATE users SET role = ?, nickname = ? WHERE id = ?', ['teacher', item.nickname, userId]);
+    }
+    if (classId && userId) {
+      await pool.execute('INSERT IGNORE INTO class_teachers (class_id, user_id) VALUES (?, ?)', [classId, userId]);
+    }
+  }
+};
+
+const hashInviteCode = (code) => crypto
+  .createHash('sha256')
+  .update(String(code || '').trim().replace(/\s+/g, '').toUpperCase())
+  .digest('hex');
+
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const SIMPLE_INVITE_CODE = /^[A-Z]{3}\d{4}$/;
+
+const createStudentInviteCode = () => {
+  let letters = '';
+  for (let index = 0; index < 3; index += 1) {
+    letters += LETTERS[crypto.randomInt(0, LETTERS.length)];
+  }
+  return `${letters}${String(crypto.randomInt(0, 10000)).padStart(4, '0')}`;
+};
+
+const insertInviteCode = async (pool, { className, nickname, studentNo }) => {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const inviteCode = createStudentInviteCode();
+    const codeHash = hashInviteCode(inviteCode);
+    try {
+      const [result] = await pool.execute(
+        `INSERT INTO invite_codes (code_hash, label, max_uses, status)
+         VALUES (?, ?, 1, 'active')`,
+        [codeHash, `${className} ${nickname} ${studentNo}`]
+      );
+      return { inviteCode, inviteId: result.insertId };
+    } catch (error) {
+      if (error.code !== 'ER_DUP_ENTRY') throw error;
+    }
+  }
+  throw new Error(`Failed to create invite code for student ${studentNo}`);
+};
+
+const cleanupImportedStudentAccounts = async (pool) => {
+  const [result] = await pool.execute(
+    "DELETE FROM users WHERE role = 'student' AND email LIKE '%@student.local'"
+  );
+  if (result.affectedRows) {
+    console.warn(`Removed ${result.affectedRows} previously imported student accounts.`);
+  }
+};
+
+const seedClassRoster = async (pool) => {
+  const rosterPath = path.join(rootDir, 'scripts', 'seed-class-students.json');
+  if (!fs.existsSync(rosterPath)) return;
+
+  const roster = JSON.parse(fs.readFileSync(rosterPath, 'utf8'));
+  if (!Array.isArray(roster) || !roster.length) return;
+
+  const exportDir = path.join(rootDir, 'server', 'data');
+  fs.mkdirSync(exportDir, { recursive: true });
+  const exportPath = path.join(exportDir, 'student-invite-codes.txt');
+  const lines = ['班级\t学号\t姓名\t邀请码'];
+  let createdRoster = 0;
+  let createdInvites = 0;
+  let refreshedInvites = 0;
+
+  for (const item of roster) {
+    const className = String(item.className || '').trim();
+    const studentNo = String(item.studentNo || '').trim();
+    const nickname = String(item.name || '').trim();
+    if (!className || !studentNo || !nickname) continue;
+
+    const [classRows] = await pool.execute('SELECT id FROM class_groups WHERE name = ? LIMIT 1', [className]);
+    const classId = classRows[0]?.id;
+    if (!classId) continue;
+
+    const [existingRows] = await pool.execute('SELECT * FROM class_roster WHERE student_no = ? LIMIT 1', [studentNo]);
+    if (existingRows[0]) {
+      await pool.execute(
+        'UPDATE class_roster SET class_id = ?, name = ? WHERE id = ?',
+        [classId, nickname, existingRows[0].id]
+      );
+      let inviteCode = String(existingRows[0].invite_code || '').trim().toUpperCase();
+      if (!existingRows[0].user_id && !SIMPLE_INVITE_CODE.test(inviteCode)) {
+        const created = await insertInviteCode(pool, { className, nickname, studentNo });
+        inviteCode = created.inviteCode;
+        await pool.execute(
+          'UPDATE class_roster SET invite_code = ?, invite_code_id = ? WHERE id = ?',
+          [inviteCode, created.inviteId, existingRows[0].id]
+        );
+        if (existingRows[0].invite_code_id) {
+          await pool.execute(
+            "DELETE FROM invite_codes WHERE id = ? AND used_count = 0",
+            [existingRows[0].invite_code_id]
+          );
+        }
+        createdInvites += 1;
+        refreshedInvites += 1;
+      }
+      lines.push(`${className}\t${studentNo}\t${nickname}\t${inviteCode}`);
+      continue;
+    }
+
+    const created = await insertInviteCode(pool, { className, nickname, studentNo });
+    await pool.execute(
+      `INSERT INTO class_roster (class_id, student_no, name, invite_code, invite_code_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [classId, studentNo, nickname, created.inviteCode, created.inviteId]
+    );
+    createdRoster += 1;
+    createdInvites += 1;
+    lines.push(`${className}\t${studentNo}\t${nickname}\t${created.inviteCode}`);
+  }
+
+  fs.writeFileSync(exportPath, `${lines.join('\n')}\n`, 'utf8');
+  if (createdRoster || createdInvites || refreshedInvites) {
+    console.warn(`Imported class roster: ${createdRoster} students, ${createdInvites} invite codes, refreshed ${refreshedInvites}.`);
+    console.warn(`Plaintext invite codes written to ${exportPath}`);
+  }
+};
+
 const migrate = async () => {
   const serverPool = getServerPool();
   await serverPool.query(
@@ -57,14 +237,16 @@ const migrate = async () => {
       role VARCHAR(32) NOT NULL DEFAULT 'student',
       nickname VARCHAR(80) NULL,
       qq VARCHAR(20) NOT NULL DEFAULT '',
+      student_no VARCHAR(32) NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
-      UNIQUE KEY uk_users_email (email)
+      UNIQUE KEY uk_users_email (email),
+      UNIQUE KEY uk_users_student_no (student_no)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
-
   await ensureUserQqColumn(pool);
+  await ensureUserStudentNoColumn(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -409,6 +591,68 @@ const migrate = async () => {
       CONSTRAINT fk_class_submissions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_groups (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(80) NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_class_groups_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_teachers (
+      class_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (class_id, user_id),
+      KEY idx_class_teachers_user_id (user_id),
+      CONSTRAINT fk_class_teachers_class_id FOREIGN KEY (class_id) REFERENCES class_groups(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_teachers_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_students (
+      class_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (class_id, user_id),
+      KEY idx_class_students_user_id (user_id),
+      CONSTRAINT fk_class_students_class_id FOREIGN KEY (class_id) REFERENCES class_groups(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_students_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_roster (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      class_id BIGINT UNSIGNED NOT NULL,
+      student_no VARCHAR(32) NOT NULL,
+      name VARCHAR(80) NOT NULL,
+      invite_code VARCHAR(64) NOT NULL,
+      invite_code_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NULL,
+      claimed_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_class_roster_student_no (student_no),
+      UNIQUE KEY uk_class_roster_invite_code (invite_code),
+      UNIQUE KEY uk_class_roster_invite_code_id (invite_code_id),
+      UNIQUE KEY uk_class_roster_user_id (user_id),
+      KEY idx_class_roster_class_id (class_id),
+      CONSTRAINT fk_class_roster_class_id FOREIGN KEY (class_id) REFERENCES class_groups(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_roster_invite_code_id FOREIGN KEY (invite_code_id) REFERENCES invite_codes(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_roster_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await seedDefaultClassTeachers(pool);
+  await cleanupImportedStudentAccounts(pool);
+  await seedClassRoster(pool);
 
   await pool.query('DELETE FROM sessions WHERE expires_at <= UTC_TIMESTAMP()');
   await pool.query('DELETE FROM login_attempts WHERE reset_at <= UTC_TIMESTAMP()');

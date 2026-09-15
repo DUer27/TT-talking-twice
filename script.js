@@ -38,10 +38,26 @@ const classHeroTitle = document.getElementById('classHeroTitle');
 const classHeroCopy = document.getElementById('classHeroCopy');
 const classRoleBadge = document.getElementById('classRoleBadge');
 const classPreviewSwitch = document.getElementById('classPreviewSwitch');
+const classAdminView = document.getElementById('classAdminView');
 const classTeacherView = document.getElementById('classTeacherView');
 const classStudentView = document.getElementById('classStudentView');
+const classStats = document.getElementById('classStats');
+const classStatClassCard = document.getElementById('classStatClassCard');
+const classStatTeacherCard = document.getElementById('classStatTeacherCard');
+const classStatStudentCard = document.getElementById('classStatStudentCard');
+const classStatClasses = document.getElementById('classStatClasses');
+const classStatTeachers = document.getElementById('classStatTeachers');
+const classStatStudents = document.getElementById('classStatStudents');
 const classStatAnnouncements = document.getElementById('classStatAnnouncements');
 const classStatAssignments = document.getElementById('classStatAssignments');
+const classCreateForm = document.getElementById('classCreateForm');
+const classCreateName = document.getElementById('classCreateName');
+const classStudentClasses = document.getElementById('classStudentClasses');
+const classTeacherCreateForm = document.getElementById('classTeacherCreateForm');
+const classTeacherName = document.getElementById('classTeacherName');
+const classTeacherEmail = document.getElementById('classTeacherEmail');
+const classTeacherPassword = document.getElementById('classTeacherPassword');
+const classAdminClasses = document.getElementById('classAdminClasses');
 const classAnnouncementForm = document.getElementById('classAnnouncementForm');
 const classAnnouncementTitle = document.getElementById('classAnnouncementTitle');
 const classAnnouncementContent = document.getElementById('classAnnouncementContent');
@@ -58,9 +74,11 @@ const classStudentSubmissions = document.getElementById('classStudentSubmissions
 const classLoginBtn = document.getElementById('classLoginBtn');
 const classBackHomeBtn = document.getElementById('classBackHomeBtn');
 let currentWorkspace = 'community';
-let classPreviewRole = 'teacher';
-let classOverview = { stats: {}, announcements: [], assignments: [], submissions: [] };
+let classPreviewRole = 'admin';
+let classOverview = { stats: {}, announcements: [], assignments: [], submissions: [], myClasses: [] };
+let classDirectory = { classes: [], teachers: [], studentCount: 0 };
 let classLoading = false;
+let classDirectoryLoading = false;
 const announcementBtn = document.getElementById('announcementBtn');
 const generateReportBtn = document.getElementById('generateReportBtn');
 const adminReportCategory = document.getElementById('adminReportCategory');
@@ -1714,9 +1732,74 @@ const getClassRoleLabel = (role) => {
 
 const getActiveClassView = () => {
   if (!currentUser) return null;
-  if (currentUser.role === 'admin') return classPreviewRole === 'student' ? 'student' : 'teacher';
+  if (currentUser.role === 'admin') {
+    if (classPreviewRole === 'student') return 'student';
+    if (classPreviewRole === 'teacher') return 'teacher';
+    return 'admin';
+  }
   if (currentUser.role === 'teacher') return 'teacher';
   return 'student';
+};
+
+const getAssignableTeachers = (classItem) => {
+  const assignedIds = new Set((classItem.teachers || []).map((teacher) => String(teacher.id)));
+  return (classDirectory.teachers || []).filter((teacher) => !assignedIds.has(String(teacher.id)));
+};
+
+const renderAdminClasses = () => {
+  if (!classAdminClasses) return;
+  const classes = classDirectory.classes || [];
+  if (!classes.length) {
+    classAdminClasses.innerHTML = renderClassEmpty('还没有班级。先在左侧创建班级，再任命老师。');
+    return;
+  }
+  classAdminClasses.innerHTML = classes.map((item) => {
+    const teachers = item.teachers || [];
+    const students = item.students || [];
+    const availableTeachers = getAssignableTeachers(item);
+    const teacherChips = teachers.length
+      ? `<div class="class-teacher-chips">${teachers.map((teacher) => `
+          <div class="class-teacher-chip">
+            <strong>${escapeHtml(teacher.nickname || teacher.email)}</strong>
+            <small>${escapeHtml(teacher.email || '')}</small>
+            <button type="button" class="ghost-btn" data-class-unassign="${escapeHtml(item.id)}" data-teacher-id="${escapeHtml(teacher.id)}">取消任命</button>
+          </div>
+        `).join('')}</div>`
+      : renderClassEmpty('该班还没有老师，可从下方选择任命。');
+    const studentChips = students.length
+      ? `<div class="class-student-chips">${students.map((student) => `
+          <div class="class-teacher-chip">
+            <strong>${escapeHtml(student.nickname || student.name || student.email)}</strong>
+            <small>${escapeHtml(student.studentNo || '')}${student.claimed ? ' · 已注册' : ' · 待注册'}</small>
+          </div>
+        `).join('')}</div>`
+      : renderClassEmpty('该班还没有导入花名册。');
+    const assignOptions = availableTeachers.length
+      ? availableTeachers.map((teacher) => `<option value="${escapeHtml(teacher.id)}">${escapeHtml(teacher.nickname || teacher.email)} · ${escapeHtml(teacher.email || '')}</option>`).join('')
+      : '<option value="">暂无可任命教师</option>';
+    return `
+      <article class="class-item">
+        <div class="class-item-head">
+          <strong>${escapeHtml(item.name)}</strong>
+          <small>${teachers.length} 位老师 · ${students.length} 名学生</small>
+        </div>
+        ${teacherChips}
+        ${studentChips}
+        <form class="class-assign-form" data-class-assign="${escapeHtml(item.id)}">
+          <select name="teacherId" ${availableTeachers.length ? '' : 'disabled'} required>
+            <option value="">选择要任命的老师</option>
+            ${assignOptions}
+          </select>
+          <button type="submit" class="primary-btn" ${availableTeachers.length ? '' : 'disabled'}>任命老师</button>
+        </form>
+        <form class="class-rename-form" data-class-rename="${escapeHtml(item.id)}">
+          <input type="text" name="name" maxlength="40" value="${escapeHtml(item.name)}" required>
+          <button type="submit" class="ghost-btn">保存名称</button>
+          <button type="button" class="ghost-btn" data-class-delete="${escapeHtml(item.id)}">删除班级</button>
+        </form>
+      </article>
+    `;
+  }).join('');
 };
 
 const renderClassEmpty = (text) => `<div class="class-empty">${escapeHtml(text)}</div>`;
@@ -1908,22 +1991,54 @@ const renderClassWorkspace = () => {
       btn.classList.toggle('is-active', btn.dataset.classPreview === view);
     });
   }
+  if (classAdminView) classAdminView.hidden = view !== 'admin';
   if (classTeacherView) classTeacherView.hidden = view !== 'teacher';
   if (classStudentView) classStudentView.hidden = view !== 'student';
+  if (classStats) classStats.classList.toggle('is-admin', isAdmin && view === 'admin');
+  if (classStatClassCard) classStatClassCard.hidden = !(isAdmin && view === 'admin');
+  if (classStatTeacherCard) classStatTeacherCard.hidden = !(isAdmin && view === 'admin');
+  if (classStatStudentCard) classStatStudentCard.hidden = !(isAdmin && view === 'admin');
   if (classRoleBadge) {
     classRoleBadge.textContent = isAdmin
-      ? `管理员预览 · ${view === 'teacher' ? '教师页' : '学生页'}`
+      ? (view === 'admin' ? '管理员后台' : `管理员预览 · ${view === 'teacher' ? '教师页' : '学生页'}`)
       : getClassRoleLabel(currentUser.role);
   }
-  if (classHeroTitle) classHeroTitle.textContent = view === 'teacher' ? '教师工作台' : '学生工作台';
-  if (classHeroCopy) {
-    classHeroCopy.textContent = view === 'teacher'
-      ? '发布班级公告、收取学生文件，并查看图片、Word、PDF 等提交内容。'
-      : '查看教师公告，按收取要求提交图片、Word、PDF 等文件。同一任务再次提交会覆盖旧文件。';
+  if (classHeroTitle) {
+    classHeroTitle.textContent = view === 'admin'
+      ? '班级管理后台'
+      : (view === 'teacher' ? '教师工作台' : '学生工作台');
   }
+  if (classHeroCopy) {
+    const classNames = (classOverview.myClasses || []).map((item) => item.name).filter(Boolean);
+    classHeroCopy.textContent = view === 'admin'
+      ? '创建班级、创建教师账号，并为每个班级任命一位或多位老师。学生使用专属邀请码注册后会自动进入花名册班级。'
+      : (view === 'teacher'
+        ? '发布班级公告、收取学生文件，并查看图片、Word、PDF 等提交内容。'
+        : (classNames.length
+          ? `你已被分配到：${classNames.join('、')}。可查看教师公告并提交文件。`
+          : '查看教师公告，按收取要求提交图片、Word、PDF 等文件。同一任务再次提交会覆盖旧文件。'));
+  }
+  if (classStatClasses) classStatClasses.textContent = (classDirectory.classes || []).length;
+  if (classStatTeachers) classStatTeachers.textContent = (classDirectory.teachers || []).length;
+  if (classStatStudents) classStatStudents.textContent = classDirectory.studentCount || (classDirectory.classes || []).reduce((sum, item) => sum + Number((item.students || []).length || item.studentCount || 0), 0);
   if (classStatAnnouncements) classStatAnnouncements.textContent = classOverview.stats?.announcementCount || 0;
   if (classStatAssignments) classStatAssignments.textContent = classOverview.stats?.openAssignmentCount || 0;
 
+  if (view === 'admin') renderAdminClasses();
+  if (classStudentClasses) {
+    const myClasses = classOverview.myClasses || [];
+    classStudentClasses.innerHTML = myClasses.length
+      ? myClasses.map((item) => `
+          <article class="class-item">
+            <div class="class-item-head">
+              <strong>${escapeHtml(item.name)}</strong>
+              <small>已分配</small>
+            </div>
+            <p>注册成功后已自动进入该班，可查看公告并提交文件。</p>
+          </article>
+        `).join('')
+      : renderClassEmpty('还没有分配班级。请使用管理员发给你的专属邀请码注册。');
+  }
   renderClassAnnouncements(classTeacherAnnouncements, classOverview.announcements || [], { canDelete: true });
   renderClassAnnouncements(classStudentAnnouncements, classOverview.announcements || []);
   renderTeacherAssignments(classOverview.assignments || []);
@@ -1934,7 +2049,7 @@ const renderClassWorkspace = () => {
 
 const loadClassOverview = async ({ silent = false } = {}) => {
   if (!currentUser) {
-    classOverview = { stats: {}, announcements: [], assignments: [], submissions: [] };
+    classOverview = { stats: {}, announcements: [], assignments: [], submissions: [], myClasses: [] };
     renderClassWorkspace();
     return;
   }
@@ -1942,7 +2057,7 @@ const loadClassOverview = async ({ silent = false } = {}) => {
   classLoading = true;
   try {
     const { overview } = await apiRequest('/api/class/overview');
-    classOverview = overview || { stats: {}, announcements: [], assignments: [], submissions: [] };
+    classOverview = overview || { stats: {}, announcements: [], assignments: [], submissions: [], myClasses: [] };
     renderClassWorkspace();
   } catch (error) {
     if (!silent) showToast(error.message || '班级数据加载失败');
@@ -1952,10 +2067,30 @@ const loadClassOverview = async ({ silent = false } = {}) => {
   }
 };
 
+const loadClassDirectory = async ({ silent = false } = {}) => {
+  if (!currentUser || currentUser.role !== 'admin') {
+    classDirectory = { classes: [], teachers: [] };
+    return;
+  }
+  if (classDirectoryLoading) return;
+  classDirectoryLoading = true;
+  try {
+    const { directory } = await apiRequest('/api/class/admin/directory');
+    classDirectory = directory || { classes: [], teachers: [], studentCount: 0 };
+    renderClassWorkspace();
+  } catch (error) {
+    if (!silent) showToast(error.message || '管理后台数据加载失败');
+    renderClassWorkspace();
+  } finally {
+    classDirectoryLoading = false;
+  }
+};
+
 const syncClassWorkspace = () => {
   renderClassWorkspace();
   if (currentWorkspace === 'class' && currentUser) {
     loadClassOverview({ silent: true });
+    if (currentUser.role === 'admin') loadClassDirectory({ silent: true });
   }
 };
 
@@ -2008,8 +2143,47 @@ if (classPreviewSwitch) {
   classPreviewSwitch.addEventListener('click', (event) => {
     const button = event.target.closest('[data-class-preview]');
     if (!button || currentUser?.role !== 'admin') return;
-    classPreviewRole = button.dataset.classPreview === 'student' ? 'student' : 'teacher';
+    const nextView = button.dataset.classPreview;
+    classPreviewRole = ['admin', 'teacher', 'student'].includes(nextView) ? nextView : 'admin';
     renderClassWorkspace();
+    if (classPreviewRole === 'admin') loadClassDirectory({ silent: true });
+    else loadClassOverview({ silent: true });
+  });
+}
+if (classCreateForm) {
+  classCreateForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await apiRequest('/api/class/admin/classes', {
+        method: 'POST',
+        body: JSON.stringify({ name: classCreateName.value.trim() }),
+      });
+      classCreateForm.reset();
+      showToast('班级已创建');
+      await loadClassDirectory();
+    } catch (error) {
+      showToast(error.message || '创建班级失败');
+    }
+  });
+}
+if (classTeacherCreateForm) {
+  classTeacherCreateForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await apiRequest('/api/class/admin/teachers', {
+        method: 'POST',
+        body: JSON.stringify({
+          nickname: classTeacherName.value.trim(),
+          email: classTeacherEmail.value.trim(),
+          password: classTeacherPassword.value,
+        }),
+      });
+      classTeacherCreateForm.reset();
+      showToast('教师账号已创建');
+      await loadClassDirectory();
+    } catch (error) {
+      showToast(error.message || '创建教师失败');
+    }
   });
 }
 if (classAnnouncementForm) {
@@ -2056,6 +2230,8 @@ if (classWorkspace) {
     const deleteAnnouncementBtn = event.target.closest('[data-class-delete-announcement]');
     const toggleAssignmentBtn = event.target.closest('[data-class-toggle-assignment]');
     const deleteAssignmentBtn = event.target.closest('[data-class-delete-assignment]');
+    const unassignBtn = event.target.closest('[data-class-unassign]');
+    const deleteClassBtn = event.target.closest('[data-class-delete]');
     try {
       if (deleteAnnouncementBtn) {
         await apiRequest(`/api/class/announcements/${deleteAnnouncementBtn.dataset.classDeleteAnnouncement}`, { method: 'DELETE' });
@@ -2076,12 +2252,68 @@ if (classWorkspace) {
         await apiRequest(`/api/class/assignments/${deleteAssignmentBtn.dataset.classDeleteAssignment}`, { method: 'DELETE' });
         showToast('收取任务已删除');
         await loadClassOverview();
+        return;
+      }
+      if (unassignBtn) {
+        await apiRequest(`/api/class/admin/classes/${unassignBtn.dataset.classUnassign}/teachers/${unassignBtn.dataset.teacherId}`, { method: 'DELETE' });
+        showToast('已取消任命');
+        await loadClassDirectory();
+        return;
+      }
+      if (deleteClassBtn) {
+        const className = deleteClassBtn.closest('.class-item')?.querySelector('strong')?.textContent || '该班级';
+        if (!window.confirm(`确定删除「${className}」吗？该班的老师任命会一并取消。`)) return;
+        await apiRequest(`/api/class/admin/classes/${deleteClassBtn.dataset.classDelete}`, { method: 'DELETE' });
+        showToast('班级已删除');
+        await loadClassDirectory();
       }
     } catch (error) {
       showToast(error.message || '操作失败');
     }
   });
   classWorkspace.addEventListener('submit', async (event) => {
+    const assignForm = event.target.closest('[data-class-assign]');
+    if (assignForm) {
+      event.preventDefault();
+      const teacherId = assignForm.querySelector('select[name="teacherId"]')?.value;
+      if (!teacherId) {
+        showToast('请先选择要任命的老师');
+        return;
+      }
+      try {
+        await apiRequest(`/api/class/admin/classes/${assignForm.dataset.classAssign}/teachers`, {
+          method: 'POST',
+          body: JSON.stringify({ teacherId }),
+        });
+        showToast('老师已任命');
+        await loadClassDirectory();
+      } catch (error) {
+        showToast(error.message || '任命失败');
+      }
+      return;
+    }
+
+    const renameForm = event.target.closest('[data-class-rename]');
+    if (renameForm) {
+      event.preventDefault();
+      const name = renameForm.querySelector('input[name="name"]')?.value.trim();
+      if (!name) {
+        showToast('请输入班级名称');
+        return;
+      }
+      try {
+        await apiRequest(`/api/class/admin/classes/${renameForm.dataset.classRename}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name }),
+        });
+        showToast('班级名称已更新');
+        await loadClassDirectory();
+      } catch (error) {
+        showToast(error.message || '改名失败');
+      }
+      return;
+    }
+
     const form = event.target.closest('[data-class-submit]');
     if (!form) return;
     event.preventDefault();
@@ -3847,7 +4079,7 @@ loginForm.addEventListener('submit', async (event) => {
   const email = loginEmail.value.trim();
   const password = loginPassword.value.trim();
   if (!email || !password) {
-    markLoginError('请填写邮箱和密码');
+    markLoginError('请填写邮箱或学号和密码');
     return;
   }
 

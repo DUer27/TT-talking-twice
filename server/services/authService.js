@@ -5,10 +5,12 @@ const {
   createUser,
   findUserByEmail,
   findUserById,
+  findUserByStudentNo,
   publicUserFields,
   updateUserPassword,
   updateUserProfile,
 } = require('../repositories/userRepository');
+const { claimRosterForUser, findRosterByInviteCode } = require('../repositories/classRepository');
 const {
   countEmailCodesSince,
   createEmailVerification,
@@ -200,11 +202,23 @@ const register = async ({ email, password, code, inviteCode }) => {
     throw error;
   }
 
+  const roster = await findRosterByInviteCode(normalizedInviteCode);
+  if (roster?.user_id) {
+    const error = new Error('该邀请码已被使用');
+    error.statusCode = 401;
+    throw error;
+  }
+
   const codeHash = hashInviteCode(normalizedInviteCode);
   await assertInviteCodeUsable(codeHash, { requireAvailableUse: true });
   const verification = await assertValidEmailCode({ email: normalizedEmail, purpose: 'register', code });
   const passwordHash = await hashPassword(password);
-  const user = await createUser({ email: normalizedEmail, passwordHash });
+  const user = await createUser({
+    email: normalizedEmail,
+    passwordHash,
+    nickname: roster?.name || normalizedEmail.split('@')[0],
+    studentNo: roster?.student_no || null,
+  });
   const redeemed = await redeemInviteCode({ codeHash, email: normalizedEmail, userId: user.id });
   if (!redeemed.ok) {
     const messages = {
@@ -217,23 +231,27 @@ const register = async ({ email, password, code, inviteCode }) => {
     error.statusCode = 401;
     throw error;
   }
+  if (roster) {
+    await claimRosterForUser({ rosterId: roster.id, userId: user.id });
+    await disableInviteByCodeHash(codeHash);
+  }
   await markEmailVerificationUsed(verification.id);
   return publicUserFields(user);
 };
 
 const login = async ({ email, password }) => {
   const loginIdentifier = normalizeLoginIdentifier(email);
-  const user = await findUserByEmail(loginIdentifier);
+  const user = await findUserByEmail(loginIdentifier) || await findUserByStudentNo(loginIdentifier);
 
   if (!user) {
-    const error = new Error('邮箱或密码错误');
+    const error = new Error('账号或密码错误');
     error.statusCode = 401;
     throw error;
   }
 
   const matched = await verifyPassword(password || '', user.password_hash);
   if (!matched) {
-    const error = new Error('邮箱或密码错误');
+    const error = new Error('账号或密码错误');
     error.statusCode = 401;
     throw error;
   }

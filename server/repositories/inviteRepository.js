@@ -67,22 +67,26 @@ const redeemInviteCode = async ({ codeHash, email, userId }) => {
     );
 
     if (redemptionRows.length) {
-      await connection.execute(
-        'UPDATE invite_code_redemptions SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?',
-        [redemptionRows[0].id]
-      );
-      await connection.commit();
-      return { ok: true, invite, alreadyRedeemed: true };
+      await connection.rollback();
+      return { ok: false, reason: 'used_up', alreadyRedeemed: true };
     }
 
     if (Number(invite.used_count || 0) >= Number(invite.max_uses || 1)) {
-      await connection.rollback();
+      await connection.execute(
+        "UPDATE invite_codes SET status = 'disabled' WHERE id = ? AND status <> 'disabled'",
+        [invite.id]
+      );
+      await connection.commit();
       return { ok: false, reason: 'used_up' };
     }
 
+    const nextUsedCount = Number(invite.used_count || 0) + 1;
+    const exhausted = nextUsedCount >= Number(invite.max_uses || 1);
     await connection.execute(
-      'UPDATE invite_codes SET used_count = used_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [invite.id]
+      `UPDATE invite_codes
+       SET used_count = ?, last_used_at = CURRENT_TIMESTAMP, status = IF(? = 1, 'disabled', status)
+       WHERE id = ?`,
+      [nextUsedCount, exhausted ? 1 : 0, invite.id]
     );
     await connection.execute(
       `INSERT INTO invite_code_redemptions (invite_code_id, user_id, email)
@@ -90,7 +94,7 @@ const redeemInviteCode = async ({ codeHash, email, userId }) => {
       [invite.id, userId, email]
     );
     await connection.commit();
-    return { ok: true, invite, alreadyRedeemed: false };
+    return { ok: true, invite, alreadyRedeemed: false, exhausted };
   } catch (error) {
     await connection.rollback();
     throw error;

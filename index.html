@@ -345,7 +345,7 @@
       <section class="class-guest" id="classGuestPanel">
         <div class="class-guest-card">
           <h1>班级管理</h1>
-          <p>这里按账号身份进入不同工作台：教师可发布班级公告并收取文件，学生可查看公告并提交图片、Word、PDF 等文件。请先登录后再使用。</p>
+          <p>这里按账号身份进入不同工作台：管理员可创建班级并任命多位老师，教师可发布班级公告并收取文件，学生可查看公告并提交图片、Word、PDF 等文件。请先登录后再使用。</p>
           <div class="class-guest-actions">
             <button type="button" class="primary-btn" id="classLoginBtn">登录后进入</button>
             <button type="button" class="ghost-btn" id="classBackHomeBtn">返回社区</button>
@@ -357,21 +357,73 @@
         <header class="class-hero">
           <div>
             <strong id="classHeroTitle">班级工作台</strong>
-            <span id="classHeroCopy">登录后会按教师或学生身份显示对应功能。</span>
+            <span id="classHeroCopy">登录后会按管理员、教师或学生身份显示对应功能。</span>
           </div>
           <div class="class-hero-actions">
             <span class="class-role-badge" id="classRoleBadge">未登录</span>
             <div class="class-preview-switch" id="classPreviewSwitch" hidden>
-              <button type="button" class="ghost-btn is-active" data-class-preview="teacher">教师页</button>
+              <button type="button" class="ghost-btn is-active" data-class-preview="admin">管理后台</button>
+              <button type="button" class="ghost-btn" data-class-preview="teacher">教师页</button>
               <button type="button" class="ghost-btn" data-class-preview="student">学生页</button>
             </div>
           </div>
         </header>
 
         <section class="class-stats" id="classStats">
+          <article class="admin-card" id="classStatClassCard" hidden><strong>班级数量</strong><span id="classStatClasses">0</span><small>已创建班级</small></article>
+          <article class="admin-card" id="classStatTeacherCard" hidden><strong>教师账号</strong><span id="classStatTeachers">0</span><small>可任命的老师</small></article>
+          <article class="admin-card" id="classStatStudentCard" hidden><strong>花名册</strong><span id="classStatStudents">0</span><small>已导入学生</small></article>
           <article class="admin-card"><strong>班级公告</strong><span id="classStatAnnouncements">0</span><small>已发布公告</small></article>
           <article class="admin-card"><strong>进行中收取</strong><span id="classStatAssignments">0</span><small>正在收取的文件任务</small></article>
         </section>
+
+        <div class="class-grid" id="classAdminView" hidden>
+          <article class="class-card">
+            <h2>新增班级</h2>
+            <p>创建班级后，可以为该班任命一位或多位老师共同管理。</p>
+            <form class="create-form" id="classCreateForm">
+              <label>
+                <span>班级名称</span>
+                <input type="text" id="classCreateName" maxlength="40" placeholder="例如：数经1 / 2026 级 1 班" required>
+              </label>
+              <div class="create-actions">
+                <button type="submit" class="primary-btn">创建班级</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="class-card">
+            <h2>创建教师账号</h2>
+            <p>先创建教师账号，再把它任命到对应班级。同一班级可任命多位老师。</p>
+            <form class="create-form" id="classTeacherCreateForm">
+              <label>
+                <span>教师姓名</span>
+                <input type="text" id="classTeacherName" maxlength="24" placeholder="例如：张老师" required>
+              </label>
+              <label>
+                <span>登录邮箱</span>
+                <input type="email" id="classTeacherEmail" placeholder="例如：teacher1@class.local" required>
+              </label>
+              <label>
+                <span>初始密码</span>
+                <input type="text" id="classTeacherPassword" minlength="8" placeholder="至少 8 位" required>
+              </label>
+              <div class="create-actions">
+                <button type="submit" class="primary-btn">创建教师</button>
+              </div>
+            </form>
+          </article>
+
+          <article class="class-card class-card-wide">
+            <div class="class-card-head">
+              <div>
+                <h2>班级、老师与学生</h2>
+                <p>每个班级可以同时由多位老师管理。导入的学生名单会显示在对应班级下。</p>
+              </div>
+            </div>
+            <div class="class-list" id="classAdminClasses"></div>
+          </article>
+        </div>
 
         <div class="class-grid" id="classTeacherView" hidden>
           <article class="class-card">
@@ -446,6 +498,11 @@
         </div>
 
         <div class="class-grid" id="classStudentView" hidden>
+          <article class="class-card">
+            <h2>我的班级</h2>
+            <p>用专属邀请码注册成功后，会自动进入花名册里分配好的班级。</p>
+            <div class="class-list" id="classStudentClasses"></div>
+          </article>
           <article class="class-card">
             <h2>班级公告</h2>
             <p>教师发布的通知会显示在这里，请留意截止时间和提交要求。</p>
@@ -629,13 +686,13 @@
         <span class="login-logo"><img src="./assets/logo.svg" alt="现经管回声 Logo" /></span>
         <div>
           <h2 id="loginTitle">登录现经管回声</h2>
-          <p>使用邮箱登录后即可发布吐槽、评论、收藏和参与校园讨论。</p>
+          <p>使用邮箱或学号登录后即可发布吐槽、评论、收藏和参与校园讨论。</p>
         </div>
       </div>
       <form class="login-form" id="loginForm">
         <label>
-          <span>邮箱</span>
-          <input id="loginEmail" type="email" placeholder="请输入邮箱，例如 name@example.com" required />
+          <span>邮箱或学号</span>
+          <input id="loginEmail" type="text" placeholder="请输入邮箱或学号" required />
         </label>
         <label>
           <span>密码</span>
@@ -648,12 +705,12 @@
           </label>
           <button type="button" class="link-btn" id="forgotPasswordBtn">忘记密码？</button>
         </div>
-        <button type="submit" class="primary-btn login-submit">邮箱登录</button>
+        <button type="submit" class="primary-btn login-submit">登录</button>
         <div class="auth-switch-line">
           <span>还没有账号？</span>
           <button type="button" class="link-btn" id="showRegisterBtn">立即注册</button>
         </div>
-        <p class="login-tip">请使用已注册邮箱和密码登录。</p>
+        <p class="login-tip">学生请先用专属邀请码注册，再用邮箱或学号登录；教师和管理员请使用邮箱登录。</p>
       </form>
     </div>
   </div>
@@ -697,7 +754,7 @@
           <span>已有账号？</span>
           <button type="button" class="link-btn" id="backToLoginBtn">返回登录</button>
         </div>
-        <p class="login-tip">请先填写有效邀请码，再申请邮箱验证码。</p>
+        <p class="login-tip">请使用管理员发给你的专属邀请码注册，注册成功后会自动进入对应班级。</p>
       </form>
     </div>
   </div>

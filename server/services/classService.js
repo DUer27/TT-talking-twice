@@ -2,21 +2,31 @@ const path = require('path');
 const fs = require('fs');
 const { rootDir } = require('../config/env');
 const {
+  assignTeacherToClass,
   createAnnouncement,
   createAssignment,
+  createClassGroup,
   deleteAnnouncement,
   deleteAssignment,
+  deleteClassGroup,
   findAnnouncementById,
   findAssignmentById,
+  findClassGroupById,
+  findClassGroupByName,
+  findClassesForUser,
   findSubmissionById,
   getClassStats,
   listAnnouncements,
   listAssignments,
+  listClassGroups,
   listSubmissions,
+  removeTeacherFromClass,
+  renameClassGroup,
   updateAssignmentStatus,
   upsertSubmission,
 } = require('../repositories/classRepository');
-const { countUsersByRole } = require('../repositories/userRepository');
+const { countUsersByRole, createUser, findUserByEmail, findUserById, listUsersByRole, publicUserFields, updateUserRole } = require('../repositories/userRepository');
+const { hashPassword } = require('../utils/password');
 
 const uploadRoot = path.join(rootDir, 'server', 'data', 'class-uploads');
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -98,6 +108,7 @@ const assertSubmitClass = (user) => {
 };
 const getOverview = async (user) => {
   const studentCount = await countUsersByRole('student');
+  const myClasses = user?.id ? await findClassesForUser(user.id) : [];
   const [stats, announcements, assignments, submissions] = await Promise.all([
     getClassStats(),
     listAnnouncements({ limit: 8 }),
@@ -115,6 +126,7 @@ const getOverview = async (user) => {
       ...stats,
       studentCount,
     },
+    myClasses,
     announcements,
     assignments: assignments.map((assignment) => ({
       ...assignment,
@@ -253,12 +265,98 @@ const getSubmissionFile = async (user, id, { inline = false } = {}) => {
   };
 };
 
+const assertAdmin = (user) => {
+  if (user?.role !== 'admin') throw createHttpError('只有管理员可以执行该操作', 403);
+};
+
+const getAdminDirectory = async (user) => {
+  assertAdmin(user);
+  const [classes, teachers] = await Promise.all([
+    listClassGroups(),
+    listUsersByRole('teacher'),
+  ]);
+  const studentCount = classes.reduce((sum, item) => sum + Number(item.studentCount || 0), 0);
+  return { classes, teachers, studentCount };
+};
+
+const createManagedClass = async (user, { name }) => {
+  assertAdmin(user);
+  const safeName = normalizeText(name);
+  if (!safeName) throw createHttpError('请输入班级名称');
+  if (safeName.length > 40) throw createHttpError('班级名称不能超过 40 个字');
+  const existed = await findClassGroupByName(safeName);
+  if (existed) throw createHttpError('该班级已存在');
+  return createClassGroup(safeName);
+};
+
+const renameManagedClass = async (user, id, { name }) => {
+  assertAdmin(user);
+  const safeName = normalizeText(name);
+  if (!safeName) throw createHttpError('请输入班级名称');
+  const current = await findClassGroupById(id);
+  if (!current) throw createHttpError('班级不存在', 404);
+  const existed = await findClassGroupByName(safeName);
+  if (existed && String(existed.id) !== String(id)) throw createHttpError('该班级名称已被占用');
+  return renameClassGroup(id, safeName);
+};
+
+const removeManagedClass = async (user, id) => {
+  assertAdmin(user);
+  const current = await findClassGroupById(id);
+  if (!current) throw createHttpError('班级不存在', 404);
+  await deleteClassGroup(id);
+  return { ok: true };
+};
+
+const createTeacherAccount = async (user, { email, nickname, password }) => {
+  assertAdmin(user);
+  const safeEmail = String(email || '').trim().toLowerCase();
+  const safeNickname = normalizeText(nickname);
+  const safePassword = String(password || '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) throw createHttpError('请输入有效邮箱');
+  if (!safeNickname) throw createHttpError('请输入教师姓名');
+  if (safePassword.length < 8) throw createHttpError('教师密码至少 8 位');
+  const existed = await findUserByEmail(safeEmail);
+  if (existed) throw createHttpError('该邮箱已注册');
+  const created = await createUser({
+    email: safeEmail,
+    passwordHash: await hashPassword(safePassword),
+    role: 'teacher',
+    nickname: safeNickname,
+  });
+  return publicUserFields(created);
+};
+
+const assignTeacher = async (user, classId, { teacherId, email }) => {
+  assertAdmin(user);
+  const currentClass = await findClassGroupById(classId);
+  if (!currentClass) throw createHttpError('班级不存在', 404);
+  let teacher = teacherId ? await findUserById(teacherId) : await findUserByEmail(String(email || '').trim().toLowerCase());
+  if (!teacher) throw createHttpError('教师账号不存在', 404);
+  if (teacher.role === 'admin') throw createHttpError('不能把管理员任命为班级老师');
+  if (teacher.role !== 'teacher') {
+    teacher = await updateUserRole(teacher.id, 'teacher');
+  }
+  return assignTeacherToClass(classId, teacher.id);
+};
+
+const unassignTeacher = async (user, classId, teacherId) => {
+  assertAdmin(user);
+  const currentClass = await findClassGroupById(classId);
+  if (!currentClass) throw createHttpError('班级不存在', 404);
+  return removeTeacherFromClass(classId, teacherId);
+};
+
 module.exports = {
   ALLOWED_EXTENSIONS,
   MAX_FILE_SIZE,
+  assignTeacher,
   canManageClass,
   canSubmitClass,
   changeAssignmentStatus,
+  createManagedClass,
+  createTeacherAccount,
+  getAdminDirectory,
   getOverview,
   getSubmissionFile,
   isPreviewableFile,
@@ -269,6 +367,9 @@ module.exports = {
   publishAssignment,
   removeAnnouncement,
   removeAssignment,
+  removeManagedClass,
+  renameManagedClass,
   submitAssignment,
+  unassignTeacher,
   uploadRoot,
 };

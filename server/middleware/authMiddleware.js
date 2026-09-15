@@ -20,10 +20,10 @@ const requireAuth = (req, res, next) => {
 
 const requireAdmin = (req, res, next) => {
   if (!req.currentUser) {
-    return res.status(401).json({ message: 'Please log in first' });
+    return res.status(401).json({ message: '请先登录' });
   }
   if (req.currentUser.role !== 'admin') {
-    return res.status(403).json({ message: 'Admin permission required' });
+    return res.status(403).json({ message: '需要管理员权限' });
   }
   next();
 };

@@ -253,18 +253,215 @@ const getClassStats = async () => {
   };
 };
 
+const publicClassGroup = (row, teachers = [], students = []) => {
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    name: row.name,
+    teacherCount: teachers.length || Number(row.teacher_count || 0),
+    studentCount: students.length || Number(row.student_count || 0),
+    teachers,
+    students,
+    createdAt: toIsoString(row.created_at),
+    updatedAt: toIsoString(row.updated_at),
+  };
+};
+
+const findClassGroupById = async (id) => {
+  const [rows] = await getPool().execute('SELECT * FROM class_groups WHERE id = ? LIMIT 1', [id]);
+  return rows[0] || null;
+};
+
+const findClassGroupByName = async (name) => {
+  const [rows] = await getPool().execute('SELECT * FROM class_groups WHERE name = ? LIMIT 1', [name]);
+  return rows[0] || null;
+};
+
+const listTeachersForClass = async (classId) => {
+  const [rows] = await getPool().execute(
+    `SELECT users.id, users.email, users.nickname, users.role, users.created_at
+     FROM class_teachers
+     INNER JOIN users ON users.id = class_teachers.user_id
+     WHERE class_teachers.class_id = ?
+     ORDER BY users.nickname ASC, users.id ASC`,
+    [classId]
+  );
+  return rows.map((row) => ({
+    id: String(row.id),
+    email: row.email,
+    nickname: row.nickname,
+    role: row.role,
+    createdAt: toIsoString(row.created_at),
+  }));
+};
+
+const publicRosterStudent = (row) => {
+  if (!row) return null;
+  return {
+    id: row.user_id ? String(row.user_id) : `roster-${row.id}`,
+    rosterId: String(row.id),
+    email: row.email || '',
+    nickname: row.user_nickname || row.name,
+    name: row.name,
+    role: row.role || 'student',
+    studentNo: row.student_no || '',
+    inviteCode: row.invite_code || '',
+    claimed: Boolean(row.user_id),
+    claimedAt: toIsoString(row.claimed_at),
+    createdAt: toIsoString(row.created_at),
+  };
+};
+
+const listStudentsForClass = async (classId) => {
+  const [rows] = await getPool().execute(
+    `SELECT class_roster.*,
+            users.email,
+            users.nickname AS user_nickname,
+            users.role
+     FROM class_roster
+     LEFT JOIN users ON users.id = class_roster.user_id
+     WHERE class_roster.class_id = ?
+     ORDER BY class_roster.student_no ASC, class_roster.id ASC`,
+    [classId]
+  );
+  return rows.map(publicRosterStudent);
+};
+
+const findRosterByInviteCode = async (inviteCode) => {
+  const normalized = String(inviteCode || '').trim().replace(/\s+/g, '').toUpperCase();
+  if (!normalized) return null;
+  const [rows] = await getPool().execute(
+    `SELECT class_roster.*, class_groups.name AS class_name
+     FROM class_roster
+     INNER JOIN class_groups ON class_groups.id = class_roster.class_id
+     WHERE UPPER(class_roster.invite_code) = ?
+     LIMIT 1`,
+    [normalized]
+  );
+  return rows[0] || null;
+};
+
+const findClassesForUser = async (userId) => {
+  const [rows] = await getPool().execute(
+    `SELECT class_groups.id, class_groups.name
+     FROM class_students
+     INNER JOIN class_groups ON class_groups.id = class_students.class_id
+     WHERE class_students.user_id = ?
+     ORDER BY class_groups.created_at ASC, class_groups.id ASC`,
+    [userId]
+  );
+  return rows.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+  }));
+};
+
+const claimRosterForUser = async ({ rosterId, userId }) => {
+  await getPool().execute(
+    `UPDATE class_roster
+     SET user_id = ?, claimed_at = UTC_TIMESTAMP()
+     WHERE id = ? AND user_id IS NULL`,
+    [userId, rosterId]
+  );
+  const [rows] = await getPool().execute(
+    `SELECT class_roster.*, class_groups.name AS class_name
+     FROM class_roster
+     INNER JOIN class_groups ON class_groups.id = class_roster.class_id
+     WHERE class_roster.id = ?
+     LIMIT 1`,
+    [rosterId]
+  );
+  const roster = rows[0];
+  if (roster?.class_id && userId) {
+    await getPool().execute(
+      'INSERT IGNORE INTO class_students (class_id, user_id) VALUES (?, ?)',
+      [roster.class_id, userId]
+    );
+  }
+  return roster || null;
+};
+
+const getClassMembers = async (classId) => {
+  const [teachers, students] = await Promise.all([
+    listTeachersForClass(classId),
+    listStudentsForClass(classId),
+  ]);
+  return { teachers, students };
+};
+
+const listClassGroups = async () => {
+  const [rows] = await getPool().execute(
+    `SELECT class_groups.*,
+            (SELECT COUNT(*) FROM class_teachers WHERE class_teachers.class_id = class_groups.id) AS teacher_count,
+            (SELECT COUNT(*) FROM class_roster WHERE class_roster.class_id = class_groups.id) AS student_count
+     FROM class_groups
+     ORDER BY class_groups.created_at ASC, class_groups.id ASC`
+  );
+  const groups = [];
+  for (const row of rows) {
+    const { teachers, students } = await getClassMembers(row.id);
+    groups.push(publicClassGroup(row, teachers, students));
+  }
+  return groups;
+};
+
+const createClassGroup = async (name) => {
+  const [result] = await getPool().execute('INSERT INTO class_groups (name) VALUES (?)', [name]);
+  const created = await findClassGroupById(result.insertId);
+  return publicClassGroup(created, [], []);
+};
+
+const renameClassGroup = async (id, name) => {
+  await getPool().execute('UPDATE class_groups SET name = ? WHERE id = ?', [name, id]);
+  const updated = await findClassGroupById(id);
+  const { teachers, students } = await getClassMembers(id);
+  return publicClassGroup(updated, teachers, students);
+};
+
+const deleteClassGroup = async (id) => {
+  const [result] = await getPool().execute('DELETE FROM class_groups WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+};
+
+const assignTeacherToClass = async (classId, userId) => {
+  await getPool().execute('INSERT IGNORE INTO class_teachers (class_id, user_id) VALUES (?, ?)', [classId, userId]);
+  const updated = await findClassGroupById(classId);
+  const { teachers, students } = await getClassMembers(classId);
+  return publicClassGroup(updated, teachers, students);
+};
+
+const removeTeacherFromClass = async (classId, userId) => {
+  await getPool().execute('DELETE FROM class_teachers WHERE class_id = ? AND user_id = ?', [classId, userId]);
+  const updated = await findClassGroupById(classId);
+  const { teachers, students } = await getClassMembers(classId);
+  return publicClassGroup(updated, teachers, students);
+};
+
 module.exports = {
+  assignTeacherToClass,
+  claimRosterForUser,
   createAnnouncement,
   createAssignment,
+  createClassGroup,
   deleteAnnouncement,
   deleteAssignment,
+  deleteClassGroup,
   findAnnouncementById,
   findAssignmentById,
+  findClassGroupById,
+  findClassGroupByName,
+  findClassesForUser,
+  findRosterByInviteCode,
   findSubmissionById,
   getClassStats,
   listAnnouncements,
   listAssignments,
+  listClassGroups,
+  listStudentsForClass,
   listSubmissions,
+  listTeachersForClass,
+  removeTeacherFromClass,
+  renameClassGroup,
   updateAssignmentStatus,
   upsertSubmission,
 };
