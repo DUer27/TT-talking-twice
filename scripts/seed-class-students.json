@@ -2,501 +2,1101 @@
   {
     "className": "数经1",
     "studentNo": "202611225",
-    "name": "蒋思琪"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611226",
-    "name": "王慧妍"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611227",
-    "name": "吕毅婷"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611228",
-    "name": "牟雪原"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611229",
-    "name": "朱文晴"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611230",
-    "name": "朱珂奕"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611231",
-    "name": "周沙沙"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611232",
-    "name": "郑雅鑫"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611233",
-    "name": "赵晓贝"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611234",
-    "name": "张心怡"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611235",
-    "name": "虞爱如"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611236",
-    "name": "幸宇璇"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611237",
-    "name": "肖美萍"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611238",
-    "name": "夏静雯"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611239",
-    "name": "吴一仪"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611240",
-    "name": "王璇"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611241",
-    "name": "王婕宁"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611242",
-    "name": "唐意君"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611243",
-    "name": "谭红霞"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611244",
-    "name": "欧阳静薇"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611245",
-    "name": "梅欣雨"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611246",
-    "name": "刘丽婷"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611247",
-    "name": "廖茜"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611248",
-    "name": "李思敏"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611249",
-    "name": "李梦茜"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611250",
-    "name": "雷依凡"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611251",
-    "name": "蒋文静"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611252",
-    "name": "郭丽颖"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611253",
-    "name": "高丽红"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611254",
-    "name": "程田田"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611255",
-    "name": "陈璐"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611256",
-    "name": "潘秀文"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611257",
-    "name": "李蕴"
+    "name": "蒋思琪",
+    "originProvince": "浙江省",
+    "gaokaoScore": 520.0,
+    "gaokaoMath": 78.0,
+    "gaokaoChinese": 102.0,
+    "gaokaoEnglish": 112.0,
+    "initialRank": 1
   },
   {
     "className": "数经1",
     "studentNo": "202611258",
-    "name": "张新依"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611259",
-    "name": "张语欣"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611260",
-    "name": "郑伊轩"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611261",
-    "name": "张威"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611262",
-    "name": "余博涛"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611263",
-    "name": "许志宏"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611264",
-    "name": "王成"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611265",
-    "name": "汤继荣"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611266",
-    "name": "邱志诚"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611267",
-    "name": "刘展鹏"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611268",
-    "name": "刘强"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611269",
-    "name": "黎宇航"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611270",
-    "name": "贺晓文"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611271",
-    "name": "付欣鹏"
-  },
-  {
-    "className": "数经1",
-    "studentNo": "202611272",
-    "name": "方其荣"
+    "name": "张新依",
+    "originProvince": "河北省",
+    "gaokaoScore": 496.0,
+    "gaokaoMath": 76.0,
+    "gaokaoChinese": 105.0,
+    "gaokaoEnglish": 103.0,
+    "initialRank": 2
   },
   {
     "className": "数经1",
     "studentNo": "202611273",
-    "name": "胡皓"
+    "name": "胡皓",
+    "originProvince": "江苏省",
+    "gaokaoScore": 485.0,
+    "gaokaoMath": 89.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 3
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611256",
+    "name": "潘秀文",
+    "originProvince": "江苏省",
+    "gaokaoScore": 476.0,
+    "gaokaoMath": 70.0,
+    "gaokaoChinese": 99.0,
+    "gaokaoEnglish": 120.0,
+    "initialRank": 4
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611226",
+    "name": "王慧妍",
+    "originProvince": "天津市",
+    "gaokaoScore": 471.097,
+    "gaokaoMath": 94.0,
+    "gaokaoChinese": 97.0,
+    "gaokaoEnglish": 82.0,
+    "initialRank": 5
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611245",
+    "name": "梅欣雨",
+    "originProvince": "江西省",
+    "gaokaoScore": 466.87606,
+    "gaokaoMath": 78.0,
+    "gaokaoChinese": 104.0,
+    "gaokaoEnglish": 105.0,
+    "initialRank": 6
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611266",
+    "name": "邱志诚",
+    "originProvince": "江西省",
+    "gaokaoScore": 464.874306,
+    "gaokaoMath": 94.0,
+    "gaokaoChinese": 97.0,
+    "gaokaoEnglish": 60.0,
+    "initialRank": 7
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611270",
+    "name": "贺晓文",
+    "originProvince": "江西省",
+    "gaokaoScore": 463.873622,
+    "gaokaoMath": 101.0,
+    "gaokaoChinese": 104.0,
+    "gaokaoEnglish": 91.0,
+    "initialRank": 8
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611264",
+    "name": "王成",
+    "originProvince": "江西省",
+    "gaokaoScore": 463.872811,
+    "gaokaoMath": 77.0,
+    "gaokaoChinese": 101.0,
+    "gaokaoEnglish": 101.0,
+    "initialRank": 9
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611230",
+    "name": "朱珂奕",
+    "originProvince": "江西省",
+    "gaokaoScore": 463.872788,
+    "gaokaoMath": 72.0,
+    "gaokaoChinese": 105.0,
+    "gaokaoEnglish": 120.0,
+    "initialRank": 10
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611269",
+    "name": "黎宇航",
+    "originProvince": "江西省",
+    "gaokaoScore": 462.872419,
+    "gaokaoMath": 96.0,
+    "gaokaoChinese": 101.0,
+    "gaokaoEnglish": 89.0,
+    "initialRank": 11
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611268",
+    "name": "刘强",
+    "originProvince": "江西省",
+    "gaokaoScore": 462.872411,
+    "gaokaoMath": 81.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 83.0,
+    "initialRank": 12
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611233",
+    "name": "赵晓贝",
+    "originProvince": "江西省",
+    "gaokaoScore": 462.872366,
+    "gaokaoMath": 89.0,
+    "gaokaoChinese": 106.0,
+    "gaokaoEnglish": 122.0,
+    "initialRank": 13
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611253",
+    "name": "高丽红",
+    "originProvince": "江西省",
+    "gaokaoScore": 462.87231,
+    "gaokaoMath": 86.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 100.0,
+    "initialRank": 14
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611267",
+    "name": "刘展鹏",
+    "originProvince": "江西省",
+    "gaokaoScore": 461.871171,
+    "gaokaoMath": 80.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 78.0,
+    "initialRank": 15
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611235",
+    "name": "虞爱如",
+    "originProvince": "江西省",
+    "gaokaoScore": 461.870561,
+    "gaokaoMath": 63.0,
+    "gaokaoChinese": 103.0,
+    "gaokaoEnglish": 110.0,
+    "initialRank": 16
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611247",
+    "name": "廖茜",
+    "originProvince": "江西省",
+    "gaokaoScore": 460.870119,
+    "gaokaoMath": 79.0,
+    "gaokaoChinese": 111.0,
+    "gaokaoEnglish": 101.0,
+    "initialRank": 17
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611241",
+    "name": "王婕宁",
+    "originProvince": "江西省",
+    "gaokaoScore": 460.869755,
+    "gaokaoMath": 63.0,
+    "gaokaoChinese": 117.0,
+    "gaokaoEnglish": 113.0,
+    "initialRank": 18
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611265",
+    "name": "汤继荣",
+    "originProvince": "江西省",
+    "gaokaoScore": 459.869402,
+    "gaokaoMath": 98.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 71.0,
+    "initialRank": 19
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611231",
+    "name": "周沙沙",
+    "originProvince": "江西省",
+    "gaokaoScore": 459.868736,
+    "gaokaoMath": 74.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 111.0,
+    "initialRank": 20
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611229",
+    "name": "朱文晴",
+    "originProvince": "江西省",
+    "gaokaoScore": 458.867978,
+    "gaokaoMath": 73.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 21
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611255",
+    "name": "陈璐",
+    "originProvince": "江西省",
+    "gaokaoScore": 458.867766,
+    "gaokaoMath": 78.0,
+    "gaokaoChinese": 105.0,
+    "gaokaoEnglish": 87.0,
+    "initialRank": 22
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611261",
+    "name": "张威",
+    "originProvince": "江西省",
+    "gaokaoScore": 458.867681,
+    "gaokaoMath": 74.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 111.0,
+    "initialRank": 23
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611272",
+    "name": "方其荣",
+    "originProvince": "江西省",
+    "gaokaoScore": 457.867279,
+    "gaokaoMath": 98.0,
+    "gaokaoChinese": 104.0,
+    "gaokaoEnglish": 71.0,
+    "initialRank": 24
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611239",
+    "name": "吴一仪",
+    "originProvince": "江西省",
+    "gaokaoScore": 455.865146,
+    "gaokaoMath": 86.0,
+    "gaokaoChinese": 109.0,
+    "gaokaoEnglish": 87.0,
+    "initialRank": 25
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611252",
+    "name": "郭丽颖",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.864286,
+    "gaokaoMath": 91.0,
+    "gaokaoChinese": 111.0,
+    "gaokaoEnglish": 62.0,
+    "initialRank": 26
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611263",
+    "name": "许志宏",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.864177,
+    "gaokaoMath": 93.0,
+    "gaokaoChinese": 103.0,
+    "gaokaoEnglish": 74.0,
+    "initialRank": 27
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611237",
+    "name": "肖美萍",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.863365,
+    "gaokaoMath": 51.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 114.0,
+    "initialRank": 28
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611248",
+    "name": "李思敏",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.863347,
+    "gaokaoMath": 76.0,
+    "gaokaoChinese": 88.0,
+    "gaokaoEnglish": 95.0,
+    "initialRank": 29
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611240",
+    "name": "王璇",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862991,
+    "gaokaoMath": 79.0,
+    "gaokaoChinese": 111.0,
+    "gaokaoEnglish": 100.0,
+    "initialRank": 30
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611236",
+    "name": "幸宇璇",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862886,
+    "gaokaoMath": 77.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 85.0,
+    "initialRank": 31
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611242",
+    "name": "唐意君",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862743,
+    "gaokaoMath": 66.0,
+    "gaokaoChinese": 117.0,
+    "gaokaoEnglish": 104.0,
+    "initialRank": 32
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611234",
+    "name": "张心怡",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862732,
+    "gaokaoMath": 76.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 80.0,
+    "initialRank": 33
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611260",
+    "name": "郑伊轩",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862383,
+    "gaokaoMath": 73.0,
+    "gaokaoChinese": 98.0,
+    "gaokaoEnglish": 92.0,
+    "initialRank": 34
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611244",
+    "name": "欧阳静薇",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.862235,
+    "gaokaoMath": 93.0,
+    "gaokaoChinese": 109.0,
+    "gaokaoEnglish": 98.0,
+    "initialRank": 35
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611238",
+    "name": "夏静雯",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861836,
+    "gaokaoMath": 69.0,
+    "gaokaoChinese": 116.0,
+    "gaokaoEnglish": 71.0,
+    "initialRank": 36
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611246",
+    "name": "刘丽婷",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861798,
+    "gaokaoMath": 74.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 112.0,
+    "initialRank": 37
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611243",
+    "name": "谭红霞",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861609,
+    "gaokaoMath": 73.0,
+    "gaokaoChinese": 106.0,
+    "gaokaoEnglish": 74.0,
+    "initialRank": 38
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611254",
+    "name": "程田田",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861531,
+    "gaokaoMath": 68.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 39
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611249",
+    "name": "李梦茜",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.861033,
+    "gaokaoMath": 83.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 76.0,
+    "initialRank": 40
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611271",
+    "name": "付欣鹏",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.860798,
+    "gaokaoMath": 83.0,
+    "gaokaoChinese": 102.0,
+    "gaokaoEnglish": 74.0,
+    "initialRank": 41
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611251",
+    "name": "蒋文静",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.860661,
+    "gaokaoMath": 66.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 107.0,
+    "initialRank": 42
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611250",
+    "name": "雷依凡",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.860652,
+    "gaokaoMath": 73.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 93.0,
+    "initialRank": 43
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611232",
+    "name": "郑雅鑫",
+    "originProvince": "江西省",
+    "gaokaoScore": 450.860227,
+    "gaokaoMath": 88.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 100.0,
+    "initialRank": 44
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611262",
+    "name": "余博涛",
+    "originProvince": "江西省",
+    "gaokaoScore": 450.859991,
+    "gaokaoMath": 83.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 65.0,
+    "initialRank": 45
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611227",
+    "name": "吕毅婷",
+    "originProvince": "山西省",
+    "gaokaoScore": 444.179118095,
+    "gaokaoMath": 61.0,
+    "gaokaoChinese": 118.0,
+    "gaokaoEnglish": 95.0,
+    "initialRank": 46
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611228",
+    "name": "牟雪原",
+    "originProvince": "辽宁省",
+    "gaokaoScore": 441.0,
+    "gaokaoMath": 93.0,
+    "gaokaoChinese": 97.0,
+    "gaokaoEnglish": 102.0,
+    "initialRank": 47
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611257",
+    "name": "李蕴",
+    "originProvince": "湖南省",
+    "gaokaoScore": 441.0,
+    "gaokaoMath": 64.0,
+    "gaokaoChinese": 100.0,
+    "gaokaoEnglish": 98.0,
+    "initialRank": 48
+  },
+  {
+    "className": "数经1",
+    "studentNo": "202611259",
+    "name": "张语欣",
+    "originProvince": "甘肃省",
+    "gaokaoScore": 399.0,
+    "gaokaoMath": 55.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 69.0,
+    "initialRank": 49
   },
   {
     "className": "数经1",
     "studentNo": "202611274",
-    "name": "王晓东"
+    "name": "王晓东",
+    "originProvince": "甘肃省",
+    "gaokaoScore": 394.0,
+    "gaokaoMath": 85.0,
+    "gaokaoChinese": 81.0,
+    "gaokaoEnglish": 30.0,
+    "initialRank": 50
   },
   {
     "className": "数经2",
     "studentNo": "202611275",
-    "name": "何冰洁"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611276",
-    "name": "闫怡臻"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611277",
-    "name": "杨欣"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611278",
-    "name": "诸琴芳"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611279",
-    "name": "朱琪"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611280",
-    "name": "朱红菲"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611281",
-    "name": "钟雨诗"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611282",
-    "name": "赵雅一"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611283",
-    "name": "赵茜"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611284",
-    "name": "张申申"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611285",
-    "name": "熊子燕"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611286",
-    "name": "肖悦"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611287",
-    "name": "夏庆雯"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611288",
-    "name": "吴韵灵"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611289",
-    "name": "王子娴"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611290",
-    "name": "王晓染"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611291",
-    "name": "涂梓欣"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611292",
-    "name": "谭丽娇"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611293",
-    "name": "邱文娜"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611294",
-    "name": "宁文静"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611295",
-    "name": "陆静怡"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611296",
-    "name": "林玉媛"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611297",
-    "name": "李鑫雨"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611298",
-    "name": "李秋媛"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611299",
-    "name": "李晗芳"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611300",
-    "name": "赖玮晔"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611301",
-    "name": "黄菲"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611302",
-    "name": "龚雪"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611303",
-    "name": "董诗琪"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611304",
-    "name": "陈钰彤"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611305",
-    "name": "曾彤"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611306",
-    "name": "胡宇娜"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611307",
-    "name": "李雨露"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611308",
-    "name": "李瑞瑞"
+    "name": "何冰洁",
+    "originProvince": "浙江省",
+    "gaokaoScore": 516.0,
+    "gaokaoMath": 100.0,
+    "gaokaoChinese": 102.0,
+    "gaokaoEnglish": 78.0,
+    "initialRank": 1
   },
   {
     "className": "数经2",
     "studentNo": "202611309",
-    "name": "陈楚茵"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611310",
-    "name": "张宇毫"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611311",
-    "name": "余子杭"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611312",
-    "name": "应宇航"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611313",
-    "name": "王琪"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611314",
-    "name": "汤珂涵"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611315",
-    "name": "宋杰超"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611316",
-    "name": "欧阳思瑜"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611317",
-    "name": "刘淘咏"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611318",
-    "name": "李佳俊"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611319",
-    "name": "胡玄煜"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611320",
-    "name": "郭子铭"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611321",
-    "name": "方文康"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611322",
-    "name": "陈鑫坤"
-  },
-  {
-    "className": "数经2",
-    "studentNo": "202611323",
-    "name": "秦梓航"
+    "name": "陈楚茵",
+    "originProvince": "福建省",
+    "gaokaoScore": 494.0,
+    "gaokaoMath": 72.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 104.0,
+    "initialRank": 2
   },
   {
     "className": "数经2",
     "studentNo": "202611324",
-    "name": "黄圣火"
+    "name": "黄圣火",
+    "originProvince": "福建省",
+    "gaokaoScore": 491.0,
+    "gaokaoMath": 83.0,
+    "gaokaoChinese": 116.0,
+    "gaokaoEnglish": 77.0,
+    "initialRank": 3
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611307",
+    "name": "李雨露",
+    "originProvince": "河南省",
+    "gaokaoScore": 482.196111102,
+    "gaokaoMath": 85.0,
+    "gaokaoChinese": 111.0,
+    "gaokaoEnglish": 102.0,
+    "initialRank": 4
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611315",
+    "name": "宋杰超",
+    "originProvince": "江西省",
+    "gaokaoScore": 479.890004,
+    "gaokaoMath": 80.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 101.0,
+    "initialRank": 5
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611277",
+    "name": "杨欣",
+    "originProvince": "山东省",
+    "gaokaoScore": 474.0,
+    "gaokaoMath": 76.0,
+    "gaokaoChinese": 114.0,
+    "gaokaoEnglish": 125.0,
+    "initialRank": 6
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611305",
+    "name": "曾彤",
+    "originProvince": "江西省",
+    "gaokaoScore": 464.873699,
+    "gaokaoMath": 47.0,
+    "gaokaoChinese": 114.0,
+    "gaokaoEnglish": 93.0,
+    "initialRank": 7
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611298",
+    "name": "李秋媛",
+    "originProvince": "江西省",
+    "gaokaoScore": 463.873098,
+    "gaokaoMath": 74.0,
+    "gaokaoChinese": 112.0,
+    "gaokaoEnglish": 86.0,
+    "initialRank": 8
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611313",
+    "name": "王琪",
+    "originProvince": "江西省",
+    "gaokaoScore": 463.872952,
+    "gaokaoMath": 77.0,
+    "gaokaoChinese": 105.0,
+    "gaokaoEnglish": 96.0,
+    "initialRank": 9
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611300",
+    "name": "赖玮晔",
+    "originProvince": "江西省",
+    "gaokaoScore": 463.872769,
+    "gaokaoMath": 64.0,
+    "gaokaoChinese": 112.0,
+    "gaokaoEnglish": 119.0,
+    "initialRank": 10
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611320",
+    "name": "郭子铭",
+    "originProvince": "江西省",
+    "gaokaoScore": 460.869645,
+    "gaokaoMath": 82.0,
+    "gaokaoChinese": 95.0,
+    "gaokaoEnglish": 107.0,
+    "initialRank": 11
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611280",
+    "name": "朱红菲",
+    "originProvince": "江西省",
+    "gaokaoScore": 458.867541,
+    "gaokaoMath": 73.0,
+    "gaokaoChinese": 103.0,
+    "gaokaoEnglish": 94.0,
+    "initialRank": 12
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611293",
+    "name": "邱文娜",
+    "originProvince": "江西省",
+    "gaokaoScore": 458.867495,
+    "gaokaoMath": 71.0,
+    "gaokaoChinese": 103.0,
+    "gaokaoEnglish": 102.0,
+    "initialRank": 13
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611282",
+    "name": "赵雅一",
+    "originProvince": "江西省",
+    "gaokaoScore": 457.866883,
+    "gaokaoMath": 83.0,
+    "gaokaoChinese": 104.0,
+    "gaokaoEnglish": 102.0,
+    "initialRank": 14
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611294",
+    "name": "宁文静",
+    "originProvince": "江西省",
+    "gaokaoScore": 457.866803,
+    "gaokaoMath": 82.0,
+    "gaokaoChinese": 103.0,
+    "gaokaoEnglish": 89.0,
+    "initialRank": 15
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611301",
+    "name": "黄菲",
+    "originProvince": "江西省",
+    "gaokaoScore": 457.866726,
+    "gaokaoMath": 72.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 100.0,
+    "initialRank": 16
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611316",
+    "name": "欧阳思瑜",
+    "originProvince": "江西省",
+    "gaokaoScore": 456.865872,
+    "gaokaoMath": 83.0,
+    "gaokaoChinese": 104.0,
+    "gaokaoEnglish": 81.0,
+    "initialRank": 17
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611299",
+    "name": "李晗芳",
+    "originProvince": "江西省",
+    "gaokaoScore": 456.865632,
+    "gaokaoMath": 76.0,
+    "gaokaoChinese": 104.0,
+    "gaokaoEnglish": 91.0,
+    "initialRank": 18
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611297",
+    "name": "李鑫雨",
+    "originProvince": "江西省",
+    "gaokaoScore": 456.865607,
+    "gaokaoMath": 71.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 19
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611311",
+    "name": "余子杭",
+    "originProvince": "江西省",
+    "gaokaoScore": 455.865308,
+    "gaokaoMath": 98.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 64.0,
+    "initialRank": 20
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611289",
+    "name": "王子娴",
+    "originProvince": "江西省",
+    "gaokaoScore": 455.865283,
+    "gaokaoMath": 93.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 21
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611290",
+    "name": "王晓染",
+    "originProvince": "江西省",
+    "gaokaoScore": 455.864688,
+    "gaokaoMath": 74.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 101.0,
+    "initialRank": 22
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611317",
+    "name": "刘淘咏",
+    "originProvince": "江西省",
+    "gaokaoScore": 455.864548,
+    "gaokaoMath": 82.0,
+    "gaokaoChinese": 95.0,
+    "gaokaoEnglish": 80.0,
+    "initialRank": 23
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611321",
+    "name": "方文康",
+    "originProvince": "江西省",
+    "gaokaoScore": 455.864457,
+    "gaokaoMath": 75.0,
+    "gaokaoChinese": 97.0,
+    "gaokaoEnglish": 97.0,
+    "initialRank": 24
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611314",
+    "name": "汤珂涵",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.864333,
+    "gaokaoMath": 94.0,
+    "gaokaoChinese": 113.0,
+    "gaokaoEnglish": 79.0,
+    "initialRank": 25
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611295",
+    "name": "陆静怡",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.864312,
+    "gaokaoMath": 90.0,
+    "gaokaoChinese": 114.0,
+    "gaokaoEnglish": 99.0,
+    "initialRank": 26
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611304",
+    "name": "陈钰彤",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.864289,
+    "gaokaoMath": 80.0,
+    "gaokaoChinese": 122.0,
+    "gaokaoEnglish": 90.0,
+    "initialRank": 27
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611322",
+    "name": "陈鑫坤",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.864248,
+    "gaokaoMath": 107.0,
+    "gaokaoChinese": 92.0,
+    "gaokaoEnglish": 64.0,
+    "initialRank": 28
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611318",
+    "name": "李佳俊",
+    "originProvince": "江西省",
+    "gaokaoScore": 454.863908,
+    "gaokaoMath": 92.0,
+    "gaokaoChinese": 96.0,
+    "gaokaoEnglish": 74.0,
+    "initialRank": 29
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611319",
+    "name": "胡玄煜",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862707,
+    "gaokaoMath": 90.0,
+    "gaokaoChinese": 93.0,
+    "gaokaoEnglish": 115.0,
+    "initialRank": 30
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611296",
+    "name": "林玉媛",
+    "originProvince": "江西省",
+    "gaokaoScore": 453.862532,
+    "gaokaoMath": 82.0,
+    "gaokaoChinese": 96.0,
+    "gaokaoEnglish": 99.0,
+    "initialRank": 31
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611312",
+    "name": "应宇航",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.862274,
+    "gaokaoMath": 92.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 38.0,
+    "initialRank": 32
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611283",
+    "name": "赵茜",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.862091,
+    "gaokaoMath": 81.0,
+    "gaokaoChinese": 112.0,
+    "gaokaoEnglish": 103.0,
+    "initialRank": 33
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611302",
+    "name": "龚雪",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.862009,
+    "gaokaoMath": 77.0,
+    "gaokaoChinese": 113.0,
+    "gaokaoEnglish": 99.0,
+    "initialRank": 34
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611281",
+    "name": "钟雨诗",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.86177,
+    "gaokaoMath": 85.0,
+    "gaokaoChinese": 99.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 35
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611291",
+    "name": "涂梓欣",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861762,
+    "gaokaoMath": 68.0,
+    "gaokaoChinese": 115.0,
+    "gaokaoEnglish": 102.0,
+    "initialRank": 36
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611279",
+    "name": "朱琪",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861608,
+    "gaokaoMath": 74.0,
+    "gaokaoChinese": 105.0,
+    "gaokaoEnglish": 102.0,
+    "initialRank": 37
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611286",
+    "name": "肖悦",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861449,
+    "gaokaoMath": 62.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 101.0,
+    "initialRank": 38
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611303",
+    "name": "董诗琪",
+    "originProvince": "江西省",
+    "gaokaoScore": 452.861376,
+    "gaokaoMath": 61.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 83.0,
+    "initialRank": 39
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611287",
+    "name": "夏庆雯",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.861259,
+    "gaokaoMath": 96.0,
+    "gaokaoChinese": 107.0,
+    "gaokaoEnglish": 96.0,
+    "initialRank": 40
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611284",
+    "name": "张申申",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.861063,
+    "gaokaoMath": 78.0,
+    "gaokaoChinese": 114.0,
+    "gaokaoEnglish": 73.0,
+    "initialRank": 41
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611292",
+    "name": "谭丽娇",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.860703,
+    "gaokaoMath": 89.0,
+    "gaokaoChinese": 94.0,
+    "gaokaoEnglish": 94.0,
+    "initialRank": 42
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611310",
+    "name": "张宇毫",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.860505,
+    "gaokaoMath": 62.0,
+    "gaokaoChinese": 114.0,
+    "gaokaoEnglish": 118.0,
+    "initialRank": 43
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611285",
+    "name": "熊子燕",
+    "originProvince": "江西省",
+    "gaokaoScore": 451.860444,
+    "gaokaoMath": 66.0,
+    "gaokaoChinese": 108.0,
+    "gaokaoEnglish": 90.0,
+    "initialRank": 44
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611288",
+    "name": "吴韵灵",
+    "originProvince": "江西省",
+    "gaokaoScore": 450.860167,
+    "gaokaoMath": 88.0,
+    "gaokaoChinese": 110.0,
+    "gaokaoEnglish": 76.0,
+    "initialRank": 45
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611278",
+    "name": "诸琴芳",
+    "originProvince": "江西省",
+    "gaokaoScore": 450.859972,
+    "gaokaoMath": 96.0,
+    "gaokaoChinese": 95.0,
+    "gaokaoEnglish": 85.0,
+    "initialRank": 46
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611308",
+    "name": "李瑞瑞",
+    "originProvince": "贵州省",
+    "gaokaoScore": 450.0,
+    "gaokaoMath": 79.0,
+    "gaokaoChinese": 93.0,
+    "gaokaoEnglish": 88.0,
+    "initialRank": 47
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611276",
+    "name": "闫怡臻",
+    "originProvince": "山西省",
+    "gaokaoScore": 443.158106097,
+    "gaokaoMath": 52.0,
+    "gaokaoChinese": 106.0,
+    "gaokaoEnglish": 97.0,
+    "initialRank": 48
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611323",
+    "name": "秦梓航",
+    "originProvince": "黑龙江省",
+    "gaokaoScore": 380.0,
+    "gaokaoMath": 50.0,
+    "gaokaoChinese": 103.0,
+    "gaokaoEnglish": 71.0,
+    "initialRank": 49
+  },
+  {
+    "className": "数经2",
+    "studentNo": "202611306",
+    "name": "胡宇娜",
+    "originProvince": "吉林省",
+    "gaokaoScore": 372.0,
+    "gaokaoMath": 92.0,
+    "gaokaoChinese": 72.0,
+    "gaokaoEnglish": 51.0,
+    "initialRank": 50
   }
 ]

@@ -15,11 +15,16 @@ const {
   findClassGroupByName,
   findClassesForUser,
   findSubmissionById,
+  countClassRosterStudents,
+  createClassReminders,
   getClassStats,
+  listActiveRemindersForUser,
   listAnnouncements,
   listAssignments,
   listClassGroups,
+  listPendingStudentsForAssignment,
   listSubmissions,
+  markRemindersSubmittedForUserAndAssignment,
   removeTeacherFromClass,
   renameClassGroup,
   updateAssignmentStatus,
@@ -106,27 +111,46 @@ const assertManageClass = (user) => {
 const assertSubmitClass = (user) => {
   if (!canSubmitClass(user)) throw createHttpError('只有学生或管理员可以提交文件', 403);
 };
-const getOverview = async (user) => {
-  const studentCount = await countUsersByRole('student');
+const getOverview = async (user, { classId = null } = {}) => {
   const myClasses = user?.id ? await findClassesForUser(user.id) : [];
+  let effectiveClassId = null;
+  if (user?.role === 'teacher') {
+    effectiveClassId = myClasses[0]?.id ? Number(myClasses[0].id) : null;
+  } else if (user?.role === 'student') {
+    effectiveClassId = myClasses[0]?.id ? Number(myClasses[0].id) : null;
+  } else if (user?.role === 'admin') {
+    effectiveClassId = classId ? Number(classId) : null;
+  }
+
+  const rosterCount = await countClassRosterStudents(effectiveClassId);
+  const studentCount = rosterCount || 50;
+
   const [stats, announcements, assignments, submissions] = await Promise.all([
-    getClassStats(),
-    listAnnouncements({ limit: 8 }),
-    listAssignments({ limit: 8, expectedCount: studentCount }),
-    listSubmissions({ userId: canSubmitClass(user) && user.role !== 'admin' ? user.id : null, limit: 12 }),
+    getClassStats(effectiveClassId),
+    listAnnouncements({ classId: effectiveClassId, limit: 12 }),
+    listAssignments({ classId: effectiveClassId, limit: 12, expectedCount: studentCount }),
+    listSubmissions({
+      classId: effectiveClassId,
+      userId: canSubmitClass(user) && user.role !== 'admin' ? user.id : null,
+      limit: canManageClass(user) ? 200 : 50,
+      isManager: canManageClass(user),
+    }),
   ]);
 
   const mySubmissions = user?.role === 'student' || user?.role === 'admin'
-    ? await listSubmissions({ userId: user.id, limit: 50 })
+    ? await listSubmissions({ userId: user.id, limit: 50, isManager: false })
     : [];
   const mySubmissionMap = new Map(mySubmissions.map((item) => [item.assignmentId, item]));
-
+  const myReminders = user?.role === 'student'
+    ? await listActiveRemindersForUser(user.id)
+    : [];
   return {
     stats: {
       ...stats,
       studentCount,
     },
     myClasses,
+    effectiveClassId,
     announcements,
     assignments: assignments.map((assignment) => ({
       ...assignment,
@@ -134,10 +158,11 @@ const getOverview = async (user) => {
       overdue: Boolean(assignment.dueAt && new Date(assignment.dueAt).getTime() < Date.now()),
     })),
     submissions: canManageClass(user) ? submissions : mySubmissions,
+    myReminders,
   };
 };
 
-const publishAnnouncement = async (user, { title, content }) => {
+const publishAnnouncement = async (user, { title, content, classId = null }) => {
   assertManageClass(user);
   const safeTitle = normalizeText(title);
   const safeContent = String(content || '').trim();
@@ -145,8 +170,14 @@ const publishAnnouncement = async (user, { title, content }) => {
   if (safeTitle.length > 80) throw createHttpError('公告标题不能超过 80 个字');
   if (!safeContent) throw createHttpError('请输入公告内容');
   if (safeContent.length > 4000) throw createHttpError('公告内容不能超过 4000 个字');
+  let targetClassId = classId ? Number(classId) : null;
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    targetClassId = teacherClasses[0]?.id ? Number(teacherClasses[0].id) : null;
+  }
   return createAnnouncement({
     authorId: user.id,
+    classId: targetClassId,
     title: safeTitle,
     content: safeContent,
   });
@@ -157,11 +188,18 @@ const removeAnnouncement = async (user, id) => {
   if (!id || !/^\d+$/.test(String(id))) throw createHttpError('公告不存在', 404);
   const existed = await findAnnouncementById(id);
   if (!existed) throw createHttpError('公告不存在', 404);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    if (existed.classId && !classIds.has(String(existed.classId))) {
+      throw createHttpError('没有权限删除其他班级的公告', 403);
+    }
+  }
   await deleteAnnouncement(id);
   return { ok: true };
 };
 
-const publishAssignment = async (user, { title, description, dueAt }) => {
+const publishAssignment = async (user, { title, description, dueAt, classId = null }) => {
   assertManageClass(user);
   const safeTitle = normalizeText(title);
   const safeDescription = String(description || '').trim();
@@ -176,8 +214,15 @@ const publishAssignment = async (user, { title, description, dueAt }) => {
     normalizedDueAt = date;
   }
 
+  let targetClassId = classId ? Number(classId) : null;
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    targetClassId = teacherClasses[0]?.id ? Number(teacherClasses[0].id) : null;
+  }
+
   return createAssignment({
     authorId: user.id,
+    classId: targetClassId,
     title: safeTitle,
     description: safeDescription,
     dueAt: normalizedDueAt,
@@ -189,6 +234,13 @@ const changeAssignmentStatus = async (user, id, { status }) => {
   if (!['open', 'closed'].includes(status)) throw createHttpError('收取状态无效');
   const assignment = await findAssignmentById(id);
   if (!assignment) throw createHttpError('收取任务不存在', 404);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    if (assignment.classId && !classIds.has(String(assignment.classId))) {
+      throw createHttpError('没有权限修改其他班级的收取任务', 403);
+    }
+  }
   return updateAssignmentStatus({ id, status });
 };
 
@@ -196,6 +248,13 @@ const removeAssignment = async (user, id) => {
   assertManageClass(user);
   const assignment = await findAssignmentById(id);
   if (!assignment) throw createHttpError('收取任务不存在', 404);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    if (assignment.classId && !classIds.has(String(assignment.classId))) {
+      throw createHttpError('没有权限删除其他班级的收取任务', 403);
+    }
+  }
   const submissions = await listSubmissions({ assignmentId: id, limit: 200 });
   submissions.forEach((item) => {
     const absolutePath = path.join(uploadRoot, item.storedPath);
@@ -244,15 +303,24 @@ const submitAssignment = async (user, assignmentId, { note, file }) => {
     const previousPath = path.join(uploadRoot, result.previous.storedPath);
     if (previousPath !== absolutePath && fs.existsSync(previousPath)) fs.unlinkSync(previousPath);
   }
+  await markRemindersSubmittedForUserAndAssignment(user.id, assignmentId);
 
   return result.current;
 };
 
 const getSubmissionFile = async (user, id, { inline = false } = {}) => {
-  const submission = await findSubmissionById(id);
+  const submission = await findSubmissionById(id, { isManager: canManageClass(user) });
   if (!submission) throw createHttpError('提交记录不存在', 404);
   if (!canManageClass(user) && String(submission.userId) !== String(user.id)) {
     throw createHttpError('没有权限查看该文件', 403);
+  }
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    const subClassId = submission.classId || submission.class_id;
+    if (subClassId && !classIds.has(String(subClassId))) {
+      throw createHttpError('没有权限查看其他班级学生的文件', 403);
+    }
   }
   const absolutePath = path.join(uploadRoot, submission.storedPath);
   if (!fs.existsSync(absolutePath)) throw createHttpError('文件已丢失', 404);
@@ -347,6 +415,78 @@ const unassignTeacher = async (user, classId, teacherId) => {
   return removeTeacherFromClass(classId, teacherId);
 };
 
+const getAssignmentPendingStudents = async (user, assignmentId) => {
+  assertManageClass(user);
+  const assignment = await findAssignmentById(assignmentId);
+  if (!assignment) throw createHttpError('收取任务不存在', 404);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    if (assignment.classId && !classIds.has(String(assignment.classId))) {
+      throw createHttpError('没有权限查看其他班级作业的催交名单', 403);
+    }
+  }
+  let students = await listPendingStudentsForAssignment(assignmentId);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    students = students.filter((s) => !s.classId || classIds.has(String(s.classId)));
+  }
+  return {
+    assignment,
+    students,
+  };
+};
+
+const sendAssignmentReminders = async (user, { assignmentId, studentNos = [], rosterIds = [], message = '' } = {}) => {
+  assertManageClass(user);
+  const assignment = await findAssignmentById(assignmentId);
+  if (!assignment) throw createHttpError('收取任务不存在', 404);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    if (assignment.classId && !classIds.has(String(assignment.classId))) {
+      throw createHttpError('没有权限向其他班级学生发送催交', 403);
+    }
+  }
+  const safeMessage = normalizeText(message) || `【${assignment.title}】截稿在即，任课教师提醒您及时在系统提交作业。`;
+  let allStudents = await listPendingStudentsForAssignment(assignmentId);
+  if (user.role === 'teacher') {
+    const teacherClasses = await findClassesForUser(user.id);
+    const classIds = new Set(teacherClasses.map((c) => String(c.id)));
+    allStudents = allStudents.filter((s) => !s.classId || classIds.has(String(s.classId)));
+  }
+  let targets = allStudents.filter((s) => !s.submitted);
+  if (Array.isArray(rosterIds) && rosterIds.length > 0) {
+    const rosterSet = new Set(rosterIds.map(String));
+    targets = targets.filter((s) => rosterSet.has(String(s.rosterId)));
+  } else if (Array.isArray(studentNos) && studentNos.length > 0) {
+    const noSet = new Set(studentNos.map(String));
+    targets = targets.filter((s) => noSet.has(String(s.studentNo)));
+  }
+  if (!targets.length) {
+    throw createHttpError('没有需要催交的未交学生', 400);
+  }
+  const reminders = await createClassReminders({
+    assignmentId: assignment.id,
+    teacherId: user.id,
+    classId: assignment.classId,
+    message: safeMessage,
+    targets,
+  });
+  return {
+    ok: true,
+    assignmentId: assignment.id,
+    assignmentTitle: assignment.title,
+    count: reminders.length,
+    remindedStudents: reminders,
+  };
+};
+
+const listMyReminders = async (user) => {
+  if (!user?.id) return [];
+  return listActiveRemindersForUser(user.id);
+};
 module.exports = {
   ALLOWED_EXTENSIONS,
   MAX_FILE_SIZE,
@@ -371,5 +511,8 @@ module.exports = {
   renameManagedClass,
   submitAssignment,
   unassignTeacher,
+  getAssignmentPendingStudents,
+  listMyReminders,
+  sendAssignmentReminders,
   uploadRoot,
 };

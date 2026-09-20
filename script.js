@@ -73,12 +73,28 @@ const classStudentAssignments = document.getElementById('classStudentAssignments
 const classStudentSubmissions = document.getElementById('classStudentSubmissions');
 const classLoginBtn = document.getElementById('classLoginBtn');
 const classBackHomeBtn = document.getElementById('classBackHomeBtn');
+const classSwitcherBar = document.getElementById('classSwitcherBar');
+const classSwitcherLabel = document.getElementById('classSwitcherLabel');
+const classSwitcherTitle = document.getElementById('classSwitcherTitle');
+const classSwitcherScopeBadge = document.getElementById('classSwitcherScopeBadge');
+const classSwitcherTabs = document.getElementById('classSwitcherTabs');
+const classTeacherIsolatedBadge = document.getElementById('classTeacherIsolatedBadge');
+const classTeacherIsolatedText = document.getElementById('classTeacherIsolatedText');
+const announcementClassSelectLabel = document.getElementById('announcementClassSelectLabel');
+const classAnnouncementClassSelect = document.getElementById('classAnnouncementClassSelect');
+const assignmentClassSelectLabel = document.getElementById('assignmentClassSelectLabel');
+const classAssignmentClassSelect = document.getElementById('classAssignmentClassSelect');
+let currentClassScope = 'all';
 let currentWorkspace = 'community';
 let classPreviewRole = 'admin';
 let classOverview = { stats: {}, announcements: [], assignments: [], submissions: [], myClasses: [] };
 let classDirectory = { classes: [], teachers: [], studentCount: 0 };
 let classLoading = false;
 let classDirectoryLoading = false;
+let classDiagnostics = null;
+let classDiagnosticsLoading = false;
+let currentGradingSubmission = null;
+let currentTeacherSubmissionsList = [];
 const announcementBtn = document.getElementById('announcementBtn');
 const generateReportBtn = document.getElementById('generateReportBtn');
 const adminReportCategory = document.getElementById('adminReportCategory');
@@ -1063,6 +1079,11 @@ const updateAuthUI = (user) => {
     switchFilter('all', '最新吐槽');
   }
   if (user) {
+    if (user.role === 'teacher') {
+      classPreviewRole = 'teacher';
+    } else if (user.role === 'admin') {
+      classPreviewRole = 'admin';
+    }
     const displayName = user.nickname || user.email.split('@')[0];
     loginBtn.textContent = `${displayName} ▾`;
     loginBtn.classList.add('logged-in');
@@ -1076,6 +1097,8 @@ const updateAuthUI = (user) => {
     userMenuName.textContent = displayName;
     userMenuEmail.textContent = user.email;
   } else {
+    currentClassScope = 'all';
+    classPreviewRole = 'admin';
     loginBtn.textContent = '登录';
     loginBtn.classList.remove('logged-in');
     loginBtn.setAttribute('aria-expanded', 'false');
@@ -1767,12 +1790,29 @@ const renderAdminClasses = () => {
         `).join('')}</div>`
       : renderClassEmpty('该班还没有老师，可从下方选择任命。');
     const studentChips = students.length
-      ? `<div class="class-student-chips">${students.map((student) => `
-          <div class="class-teacher-chip">
-            <strong>${escapeHtml(student.nickname || student.name || student.email)}</strong>
-            <small>${escapeHtml(student.studentNo || '')}${student.claimed ? ' · 已注册' : ' · 待注册'}</small>
+      ? `
+        <div class="class-roster-summary-card">
+          <div class="roster-summary-info">
+            <span class="roster-icon">📋</span>
+            <div class="roster-summary-text">
+              <strong>在籍独立花名册 · 共 ${students.length} 名学生</strong>
+              <small>高考基线总分/位次已录入，专属邀请码已生成就绪</small>
+            </div>
           </div>
-        `).join('')}</div>`
+          <div class="roster-actions">
+            <button type="button" class="primary-btn btn-sm" data-jump-to-class="${escapeHtml(item.id)}">👉 前往教师页查看学情</button>
+            <button type="button" class="ghost-btn btn-sm" data-toggle-roster="${escapeHtml(item.id)}">展开/查看 50 人名单明细</button>
+          </div>
+          <div class="class-student-chips roster-collapsible" id="rosterList_${escapeHtml(item.id)}" hidden>
+            ${students.map((student) => `
+              <div class="class-teacher-chip">
+                <strong>${escapeHtml(student.nickname || student.name || student.email)}</strong>
+                <small>${escapeHtml(student.studentNo || '')}${student.claimed ? ' · 已注册' : ' · 待注册'}</small>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `
       : renderClassEmpty('该班还没有导入花名册。');
     const assignOptions = availableTeachers.length
       ? availableTeachers.map((teacher) => `<option value="${escapeHtml(teacher.id)}">${escapeHtml(teacher.nickname || teacher.email)} · ${escapeHtml(teacher.email || '')}</option>`).join('')
@@ -1804,6 +1844,18 @@ const renderAdminClasses = () => {
 
 const renderClassEmpty = (text) => `<div class="class-empty">${escapeHtml(text)}</div>`;
 
+const renderClassScopeBadge = (classId, className) => {
+  const cid = classId ? String(classId) : '';
+  const cname = className || '';
+  if (cid === '1' || cname.includes('1')) {
+    return '<span class="class-scope-badge scope-1">数经1班</span>';
+  }
+  if (cid === '2' || cname.includes('2')) {
+    return '<span class="class-scope-badge scope-2">数经2班</span>';
+  }
+  return '<span class="class-scope-badge scope-all">全部班级</span>';
+};
+
 const renderClassAnnouncements = (target, items, { canDelete = false } = {}) => {
   if (!target) return;
   if (!items.length) {
@@ -1813,7 +1865,10 @@ const renderClassAnnouncements = (target, items, { canDelete = false } = {}) => 
   target.innerHTML = items.map((item) => `
     <article class="class-item">
       <div class="class-item-head">
-        <strong>${escapeHtml(item.title)}</strong>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <strong>${escapeHtml(item.title)}</strong>
+          ${renderClassScopeBadge(item.classId, item.className)}
+        </div>
         <small>${escapeHtml(item.authorName || '教师')} · ${escapeHtml(formatClassTime(item.createdAt))}</small>
       </div>
       <p>${escapeHtml(item.content || '')}</p>
@@ -1886,7 +1941,10 @@ const renderTeacherAssignments = (items) => {
     return `
       <article class="class-item">
         <div class="class-item-head">
-          <strong>${escapeHtml(item.title)}</strong>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${escapeHtml(item.title)}</strong>
+            ${renderClassScopeBadge(item.classId, item.className)}
+          </div>
           <small>${item.status === 'open' ? '收取中' : '已停止'} · 已提交/总数 ${escapeHtml(progressLabel)}</small>
         </div>
         <div class="class-progress" aria-label="已提交 ${submitted}，总数 ${expected}">
@@ -1895,6 +1953,7 @@ const renderTeacherAssignments = (items) => {
         <p>${escapeHtml(item.description || '未填写收取说明')}</p>
         <small>截止：${escapeHtml(formatClassTime(item.dueAt))}</small>
         <div class="class-item-actions">
+          <button type="button" class="ghost-btn remind-assignment-btn" data-class-remind-assignment="${escapeHtml(item.id)}" title="查看该作业未交学生名单并一键催交">🔔 催交未交学生</button>
           <button type="button" class="ghost-btn" data-class-toggle-assignment="${escapeHtml(item.id)}" data-next-status="${item.status === 'open' ? 'closed' : 'open'}">${item.status === 'open' ? '停止收取' : '重新开放'}</button>
           <button type="button" class="ghost-btn" data-class-delete-assignment="${escapeHtml(item.id)}">删除收取</button>
         </div>
@@ -1902,27 +1961,645 @@ const renderTeacherAssignments = (items) => {
     `;
   }).join('');
 };
+const getTierClass = (tier) => {
+  if (tier === 'A') return 'tier-badge-a';
+  if (tier === 'B+') return 'tier-badge-b-plus';
+  if (tier === 'B') return 'tier-badge-b';
+  if (tier === 'C') return 'tier-badge-c';
+  if (tier === 'D') return 'tier-badge-d';
+  return 'tier-badge-none';
+};
+
+const renderTierBadge = (tier) => {
+  if (!tier) return '<span class="tier-badge tier-badge-none">未评级</span>';
+  return `<span class="tier-badge ${getTierClass(tier)}">${escapeHtml(tier)}</span>`;
+};
+
+const renderSubmissionStatusPill = (item) => {
+  if (item.score !== null && item.score !== undefined) {
+    return '<span class="status-pill graded">已完成批阅</span>';
+  }
+  if (item.aiEvaluation || item.aiSuggestedScore !== null && item.aiSuggestedScore !== undefined) {
+    return '<span class="status-pill ai_pregraded">AI已预评</span>';
+  }
+  return '<span class="status-pill pending">待批阅</span>';
+};
+const renderTeacherClassJumpGrid = () => {
+  const grid = document.getElementById('teacherClassJumpGrid');
+  if (!grid) return;
+
+  const subs = classOverview.submissions || [];
+  const subs1 = subs.filter((s) => String(s.classId || s.class_id) === '1');
+  const subs2 = subs.filter((s) => String(s.classId || s.class_id) === '2');
+
+  const graded1 = subs1.filter((s) => s.score !== null && s.score !== undefined);
+  const graded2 = subs2.filter((s) => s.score !== null && s.score !== undefined);
+
+  const avg1 = graded1.length
+    ? `${Math.round((graded1.reduce((sum, s) => sum + Number(s.score || 0), 0) / graded1.length) * 10) / 10} 分`
+    : (subs1.length ? '待打分' : '暂无提交');
+  const avg2 = graded2.length
+    ? `${Math.round((graded2.reduce((sum, s) => sum + Number(s.score || 0), 0) / graded2.length) * 10) / 10} 分`
+    : (subs2.length ? '待打分' : '暂无提交');
+
+  const quads = classDiagnostics?.quadrants || {};
+  const c1Top = ((quads.leader || []).concat(quads.breakthrough || [])).filter(
+    (st) => st.className && st.className.includes('1')
+  ).length;
+  const c2Top = ((quads.leader || []).concat(quads.breakthrough || [])).filter(
+    (st) => st.className && st.className.includes('2')
+  ).length;
+
+  grid.innerHTML = `
+    <div class="teacher-class-jump-card card-class-1" data-jump-to-class="1" role="button" tabindex="0" title="点击直接进入数经1班查看班级情况">
+      <div class="jump-card-header">
+        <div class="jump-card-title-wrap">
+          <span class="jump-class-icon">🏛️</span>
+          <div>
+            <h3 class="jump-class-name">数经1班</h3>
+            <span class="jump-class-teacher">任课教师：张老师 (teacher1@class.local)</span>
+          </div>
+        </div>
+        <span class="jump-class-badge badge-c1">独立建制 · 50人</span>
+      </div>
+      <p class="jump-card-desc">已建立 50 人真实高考学籍基线。点击直接进入数经1班页面，直接查看专属四象限学情、作业批阅与位次跃迁。</p>
+      <div class="jump-card-stats">
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">在籍学生</span>
+          <span class="jump-stat-value">50 人</span>
+        </div>
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">已收作业</span>
+          <span class="jump-stat-value text-blue">${subs1.length} 份</span>
+        </div>
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">已批均分</span>
+          <span class="jump-stat-value">${avg1}</span>
+        </div>
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">拔尖/跃迁</span>
+          <span class="jump-stat-value text-purple">${c1Top} 人</span>
+        </div>
+      </div>
+      <div class="jump-card-action">
+        <button type="button" class="jump-action-btn" data-jump-to-class="1">
+          👉 直接进入【数经1班】查看班级情况
+        </button>
+      </div>
+    </div>
+
+    <div class="teacher-class-jump-card card-class-2" data-jump-to-class="2" role="button" tabindex="0" title="点击直接进入数经2班查看班级情况">
+      <div class="jump-card-header">
+        <div class="jump-card-title-wrap">
+          <span class="jump-class-icon">🏛️</span>
+          <div>
+            <h3 class="jump-class-name">数经2班</h3>
+            <span class="jump-class-teacher">任课教师：李老师 (teacher2@class.local)</span>
+          </div>
+        </div>
+        <span class="jump-class-badge badge-c2">独立建制 · 50人</span>
+      </div>
+      <p class="jump-card-desc">已建立 50 人真实高考学籍基线。点击直接进入数经2班页面，直接查看专属四象限学情、作业批阅与位次跃迁。</p>
+      <div class="jump-card-stats">
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">在籍学生</span>
+          <span class="jump-stat-value">50 人</span>
+        </div>
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">已收作业</span>
+          <span class="jump-stat-value text-blue">${subs2.length} 份</span>
+        </div>
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">已批均分</span>
+          <span class="jump-stat-value">${avg2}</span>
+        </div>
+        <div class="jump-stat-item">
+          <span class="jump-stat-label">拔尖/跃迁</span>
+          <span class="jump-stat-value text-purple">${c2Top} 人</span>
+        </div>
+      </div>
+      <div class="jump-card-action">
+        <button type="button" class="jump-action-btn" data-jump-to-class="2">
+          👉 直接进入【数经2班】查看班级情况
+        </button>
+      </div>
+    </div>
+  `;
+};
+
+const renderClassTeacherDiagnostics = (data) => {
+  const card = document.getElementById('classTeacherDiagnosticsCard');
+  if (!card) return;
+  if (!data) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const isAllCohortView = currentUser?.role === 'admin' && currentClassScope === 'all';
+
+  const subText = card.querySelector('.class-card-head p');
+  if (subText) {
+    if (currentUser?.role === 'admin' && currentClassScope === 'all') {
+      subText.textContent = '双班 100 人宏观汇总大盘：已隐藏密集名单。点击下方象限中的班级按钮或上方班级卡片，直接跳转至对应班级看班级情况。';
+    } else if (currentClassScope === '1') {
+      subText.textContent = '数经1班专属学情诊断：结合高考初始基线与本班作业实证表现，动态洞察本班 50 位同学领跑、跃迁、滑坡与帮扶梯队。';
+    } else if (currentClassScope === '2') {
+      subText.textContent = '数经2班专属学情诊断：结合高考初始基线与本班作业实证表现，动态洞察本班 50 位同学领跑、跃迁、滑坡与帮扶梯队。';
+    } else {
+      subText.textContent = '结合高考初始基线与大学作业实证表现，动态洞察领跑、跃迁、滑坡与帮扶学生梯队。';
+    }
+  }
+
+  const metricsGrid = document.getElementById('diagnosticsMetricsGrid');
+  if (metricsGrid) {
+    metricsGrid.innerHTML = `
+      <div class="metric-card">
+        <span class="metric-title">班级学生在籍总数</span>
+        <span class="metric-value">${Number(data.totalStudents || 0)}</span>
+        <span class="metric-sub">${data.className ? escapeHtml(data.className) : (data.totalStudents === 50 ? '班级独立花名册' : '数经1、数经2合计')}</span>
+      </div>
+      <div class="metric-card accent-blue">
+        <span class="metric-title">作业提交率</span>
+        <span class="metric-value">${data.submissionRate || 0}%</span>
+        <span class="metric-sub">已提交 ${Number(data.submittedCount || 0)} 份</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-title">批阅完成率</span>
+        <span class="metric-value">${data.gradingRate || 0}%</span>
+        <span class="metric-sub">已打分 ${Number(data.gradedCount || 0)} 份</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-title">已批均分 / 中位数</span>
+        <span class="metric-value">${data.avgScore || 0}</span>
+        <span class="metric-sub">中位数 ${data.medianScore || 0} / 极差 [${data.minScore || 0}-${data.maxScore || 0}]</span>
+      </div>
+      <div class="metric-card accent-purple">
+        <span class="metric-title">位次跃迁先锋</span>
+        <span class="metric-value">${(data.topLeapStudents || []).length}</span>
+        <span class="metric-sub">逆势破格晋级学生数</span>
+      </div>
+      <div class="metric-card accent-orange">
+        <span class="metric-title">学业预警关注</span>
+        <span class="metric-value">${(data.atRiskStudents || []).length}</span>
+        <span class="metric-sub">高基线滑坡与未交预警</span>
+      </div>
+    `;
+  }
+
+  const tierStrip = document.getElementById('diagnosticsTierStrip');
+  if (tierStrip && data.tierDistribution) {
+    const dist = data.tierDistribution;
+    const totalGraded = (dist.A || 0) + (dist['B+'] || 0) + (dist.B || 0) + (dist.C || 0) + (dist.D || 0) || 1;
+    const pA = Math.round(((dist.A || 0) / totalGraded) * 100);
+    const pBp = Math.round(((dist['B+'] || 0) / totalGraded) * 100);
+    const pB = Math.round(((dist.B || 0) / totalGraded) * 100);
+    const pC = Math.round(((dist.C || 0) / totalGraded) * 100);
+    const pD = Math.max(0, 100 - pA - pBp - pB - pC);
+
+    tierStrip.innerHTML = `
+      <div class="tier-strip-header">
+        <span>五级分位分布 (已批阅 ${totalGraded} 份作业)</span>
+        <small style="color:var(--muted)">A(卓越) · B+(优秀) · B(良好) · C(合格) · D(需帮扶)</small>
+      </div>
+      <div class="tier-strip-bar">
+        <div class="tier-strip-segment seg-a" style="width:${pA}%" title="A: ${dist.A || 0}人 (${pA}%)"></div>
+        <div class="tier-strip-segment seg-b-plus" style="width:${pBp}%" title="B+: ${dist['B+'] || 0}人 (${pBp}%)"></div>
+        <div class="tier-strip-segment seg-b" style="width:${pB}%" title="B: ${dist.B || 0}人 (${pB}%)"></div>
+        <div class="tier-strip-segment seg-c" style="width:${pC}%" title="C: ${dist.C || 0}人 (${pC}%)"></div>
+        <div class="tier-strip-segment seg-d" style="width:${pD}%" title="D: ${dist.D || 0}人 (${pD}%)"></div>
+      </div>
+      <div class="tier-strip-legends">
+        <span class="tier-strip-legend-item"><span class="tier-strip-legend-dot" style="background:#f59e0b"></span> <b>A 卓越</b>: ${dist.A || 0}人 (${pA}%)</span>
+        <span class="tier-strip-legend-item"><span class="tier-strip-legend-dot" style="background:#2563eb"></span> <b>B+ 优秀</b>: ${dist['B+'] || 0}人 (${pBp}%)</span>
+        <span class="tier-strip-legend-item"><span class="tier-strip-legend-dot" style="background:#10b981"></span> <b>B 良好</b>: ${dist.B || 0}人 (${pB}%)</span>
+        <span class="tier-strip-legend-item"><span class="tier-strip-legend-dot" style="background:#f97316"></span> <b>C 合格</b>: ${dist.C || 0}人 (${pC}%)</span>
+        <span class="tier-strip-legend-item"><span class="tier-strip-legend-dot" style="background:#64748b"></span> <b>D 需努力</b>: ${dist.D || 0}人 (${pD}%)</span>
+      </div>
+    `;
+  }
+
+  const quadGrid = document.getElementById('diagnosticsQuadrantGrid');
+  if (quadGrid && data.quadrants) {
+    const quads = [
+      {
+        type: 'leader',
+        cls: 'quad-leader',
+        title: '👑 领跑·拔尖象限',
+        desc: '高考基线高（前25名）且大学作业实证表现优异（分≥78或排名前25）',
+        students: data.quadrants.leader || [],
+      },
+      {
+        type: 'breakthrough',
+        cls: 'quad-breakthrough',
+        title: '🚀 跃迁·突破象限',
+        desc: '高考基线居中或偏后，在数字经济学实证课程中逆势突围，展现强劲学术后劲',
+        students: data.quadrants.breakthrough || [],
+      },
+      {
+        type: 'slipping',
+        cls: 'quad-slipping',
+        title: '⚠️ 高基线滑坡象限',
+        desc: '高考基础扎实但大学作业提交未达预期或尚未提交，需精准跟进学业适应与状态',
+        students: data.quadrants.slipping || [],
+      },
+      {
+        type: 'needsSupport',
+        cls: 'quad-needs-support',
+        title: '🤝 协同·帮扶象限',
+        desc: '双重承压学生群体，建议结合答疑、学习互助小组进行阶梯式实证方法指导',
+        students: data.quadrants.needsSupport || [],
+      },
+    ];
+
+    // isAllCohortView is defined at function top scope
+    quadGrid.innerHTML = quads.map((q) => {
+      const c1Students = q.students.filter((st) => st.className && st.className.includes('1'));
+      const c2Students = q.students.filter((st) => st.className && st.className.includes('2'));
+
+      let contentHtml = '';
+      if (isAllCohortView) {
+        contentHtml = `
+          <div class="quadrant-cohort-summary">
+            <div class="cohort-dist-row">
+              <span class="cohort-dist-pill dist-total">双班总计：<b>${q.students.length}</b> 人</span>
+              <span class="cohort-dist-pill">数经1班：<b>${c1Students.length}</b> 人</span>
+              <span class="cohort-dist-pill">数经2班：<b>${c2Students.length}</b> 人</span>
+            </div>
+            <div class="cohort-jump-actions">
+              <button type="button" class="quad-jump-btn" data-jump-to-class="1" title="切换到数经1班直接看班级情况">👉 进入数经1班看该象限 (${c1Students.length}人)</button>
+              <button type="button" class="quad-jump-btn" data-jump-to-class="2" title="切换到数经2班直接看班级情况">👉 进入数经2班看该象限 (${c2Students.length}人)</button>
+            </div>
+          </div>
+        `;
+      } else {
+        contentHtml = `
+          <div class="quadrant-students-wrap">
+            ${q.students.length ? q.students.map((st) => `
+              <span class="quadrant-student-chip" title="学号: ${escapeHtml(st.studentNo)} | 高考: ${st.gaokaoScore || '无'} (位次#${st.initialRank || '-'}) | 本次得分: ${st.score !== null ? st.score : '未打分'}">
+                <strong>${escapeHtml(st.name)}</strong>
+                <small>${st.className ? escapeHtml(st.className) : ''}${st.score !== null ? ` · ${st.score}分` : (st.submitted ? ' · 待批' : ' · 未交')}</small>
+              </span>
+            `).join('') : '<small style="color:var(--muted)">暂无该象限学生</small>'}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="quadrant-card ${q.cls}">
+          <div class="quadrant-header">
+            <span class="quadrant-title">${q.title}</span>
+            <span class="quadrant-count">${q.students.length} 人</span>
+          </div>
+          <p class="quadrant-desc">${q.desc}</p>
+          ${contentHtml}
+        </div>
+      `;
+    }).join('');
+  }
+
+  const leapList = document.getElementById('diagnosticsLeapList');
+  if (leapList) {
+    const topLeap = data.topLeapStudents || [];
+    if (isAllCohortView) {
+      const c1Leap = topLeap.filter((item) => item.className && item.className.includes('1'));
+      const c2Leap = topLeap.filter((item) => item.className && item.className.includes('2'));
+      leapList.innerHTML = `
+        <div class="cohort-summary-box leap-cohort-box">
+          <div class="cohort-summary-desc">
+            <span class="cohort-summary-badge">⚡ 跃迁总览</span>
+            <span>大盘模式已隔离个人名单。数经1班共 <b>${c1Leap.length}</b> 人跃迁，数经2班共 <b>${c2Leap.length}</b> 人跃迁。点击直接跳转至旁边班级页面查看完整先锋榜：</span>
+          </div>
+          <div class="cohort-jump-actions">
+            <button type="button" class="quad-jump-btn" data-jump-to-class="1" title="切换到数经1班直接看班级情况">👉 进入【数经1班】查看跃迁先锋榜 (${c1Leap.length}人)</button>
+            <button type="button" class="quad-jump-btn" data-jump-to-class="2" title="切换到数经2班直接看班级情况">👉 进入【数经2班】查看跃迁先锋榜 (${c2Leap.length}人)</button>
+          </div>
+        </div>
+      `;
+    } else {
+      leapList.innerHTML = topLeap.length ? topLeap.map((item, idx) => `
+        <div class="leap-item">
+          <div>
+            <strong>#${idx + 1} ${escapeHtml(item.name)}</strong>
+            <small style="color:var(--muted)">（${escapeHtml(item.className || '数经')} · ${escapeHtml(item.originProvince || '')}）</small>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+              初始位次 #${item.initialRank} ➔ 作业位次 #${item.rankInClass}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <span class="rank-badge-change">▲ 跃升 +${item.rankGain} 位</span>
+            <div style="margin-top:4px;">
+              ${renderTierBadge(item.tier)}
+              <strong style="font-size:13px;margin-left:4px;">${item.score}分</strong>
+            </div>
+          </div>
+        </div>
+      `).join('') : renderClassEmpty('暂无符合位次跃迁（排名净增≥15或后进前12）的学生');
+    }
+  }
+
+  const riskList = document.getElementById('diagnosticsRiskList');
+  if (riskList) {
+    const atRisk = data.atRiskStudents || [];
+    if (isAllCohortView) {
+      const c1Risk = atRisk.filter((item) => item.className && item.className.includes('1'));
+      const c2Risk = atRisk.filter((item) => item.className && item.className.includes('2'));
+      riskList.innerHTML = `
+        <div class="cohort-summary-box risk-cohort-box">
+          <div class="cohort-summary-desc">
+            <span class="cohort-summary-badge" style="background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.25);">🚨 预警总览</span>
+            <span>大盘模式已隔离个人名单。数经1班共 <b>${c1Risk.length}</b> 人需教学预警干预，数经2班共 <b>${c2Risk.length}</b> 人需教学预警干预。点击直接跳转至旁边班级页面查看预警明细与帮扶：</span>
+          </div>
+          <div class="cohort-jump-actions">
+            <button type="button" class="quad-jump-btn" data-jump-to-class="1" title="切换到数经1班直接看班级情况">👉 进入【数经1班】查看预警名单 (${c1Risk.length}人)</button>
+            <button type="button" class="quad-jump-btn" data-jump-to-class="2" title="切换到数经2班直接看班级情况">👉 进入【数经2班】查看预警名单 (${c2Risk.length}人)</button>
+          </div>
+        </div>
+      `;
+    } else {
+      riskList.innerHTML = atRisk.length ? atRisk.map((item, idx) => `
+        <div class="risk-item">
+          <div>
+            <strong>#${idx + 1} ${escapeHtml(item.name)}</strong>
+            <small style="color:var(--muted)">（${escapeHtml(item.className || '数经')} · ${escapeHtml(item.originProvince || '')}）</small>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+              高考总分 ${item.gaokaoScore || '未录入'} (数学 ${item.gaokaoMath || '-'}分) · 初始位次 #${item.initialRank || '-'}
+            </div>
+          </div>
+            <span class="risk-badge">${item.submitted ? (item.score !== null ? `滑落 #${item.rankInClass}` : '待批阅') : '🚨 尚未提交作业'}</span>
+            <div style="margin-top:4px;font-size:12px;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;gap:6px;">
+              ${item.score !== null ? `得分: <b>${item.score}</b>` : (item.submitted ? '建议跟进' : `<button type="button" class="ghost-btn risk-remind-btn" data-risk-remind-student="${escapeHtml(item.studentNo)}" data-risk-roster-id="${escapeHtml(item.rosterId || '')}" data-risk-student-name="${escapeHtml(item.name)}" title="一键催交该学生">🔔 一键催交</button>`)}
+            </div>
+          </div>
+        </div>
+      `).join('') : renderClassEmpty('暂无风险预警学生');
+    }
+  }
+
+  const provWrap = document.getElementById('diagnosticsProvinceWrap');
+  if (provWrap) {
+    const provs = data.provinceAnalysis || [];
+    provWrap.innerHTML = `
+      <table class="province-table">
+        <thead>
+          <tr>
+            <th>生源省份</th>
+            <th>学生总数</th>
+            <th>高考数学均分</th>
+            <th>高考综合均分</th>
+            <th>本次作业提交率</th>
+            <th>大学作业实证均分</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${provs.map((pv) => `
+            <tr>
+              <td><strong>${escapeHtml(pv.province)}</strong></td>
+              <td>${pv.studentCount} 人</td>
+              <td><b>${pv.avgMath || '-'}</b> 分</td>
+              <td>${pv.avgGaokao || '-'} 分</td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span>${pv.submissionRate}%</span>
+                  <div style="width:50px;height:6px;background:rgba(0,0,0,.08);border-radius:999px;overflow:hidden;">
+                    <div style="height:100%;background:var(--blue);width:${pv.submissionRate}%"></div>
+                  </div>
+                </div>
+              </td>
+              <td>${pv.avgCourseworkScore !== null ? `<b>${pv.avgCourseworkScore}</b> 分` : '<span style="color:var(--muted)">待评分</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+};
+
+const loadClassDiagnostics = async ({ silent = false } = {}) => {
+  if (!currentUser || !['admin', 'teacher'].includes(currentUser.role)) return;
+  if (classDiagnosticsLoading) return;
+  classDiagnosticsLoading = true;
+  try {
+    const params = new URLSearchParams();
+    if (currentUser.role === 'admin' && currentClassScope && currentClassScope !== 'all') {
+      params.set('classId', currentClassScope);
+    }
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const { diagnostics } = await apiRequest(`/api/class/diagnostics${queryString}`);
+    classDiagnostics = diagnostics;
+    renderClassTeacherDiagnostics(classDiagnostics);
+  } catch (error) {
+    if (!silent) showToast(error.message || '学情诊断数据加载失败');
+  } finally {
+    classDiagnosticsLoading = false;
+  }
+};
 
 const renderTeacherSubmissions = (items) => {
   if (!classTeacherSubmissions) return;
-  if (!items.length) {
-    classTeacherSubmissions.innerHTML = renderClassEmpty('还没有学生提交文件。');
+  currentTeacherSubmissionsList = items || [];
+  const filterSelect = document.getElementById('teacherSubmissionFilter');
+  const isAllCohortView = currentUser?.role === 'admin' && currentClassScope === 'all';
+
+  if (filterSelect) {
+    filterSelect.style.display = isAllCohortView ? 'none' : '';
+  }
+
+  if (isAllCohortView) {
+    const subs = currentTeacherSubmissionsList || [];
+    const subs1 = subs.filter((s) => String(s.classId || s.class_id) === '1');
+    const subs2 = subs.filter((s) => String(s.classId || s.class_id) === '2');
+
+    const graded1 = subs1.filter((s) => s.score !== null && s.score !== undefined);
+    const graded2 = subs2.filter((s) => s.score !== null && s.score !== undefined);
+
+    const pending1 = subs1.length - graded1.length;
+    const pending2 = subs2.length - graded2.length;
+
+    const avg1 = graded1.length
+      ? `${Math.round((graded1.reduce((sum, s) => sum + Number(s.score || 0), 0) / graded1.length) * 10) / 10} 分`
+      : (subs1.length ? '待打分' : '暂无提交');
+    const avg2 = graded2.length
+      ? `${Math.round((graded2.reduce((sum, s) => sum + Number(s.score || 0), 0) / graded2.length) * 10) / 10} 分`
+      : (subs2.length ? '待打分' : '暂无提交');
+
+    classTeacherSubmissions.innerHTML = `
+      <div class="cohort-submissions-overview-wrap">
+        <div class="cohort-submissions-banner">
+          <span class="cohort-submissions-icon">📁</span>
+          <div class="cohort-submissions-banner-content">
+            <strong>全部班级大盘视角：已收起学生个人提交明细（双班共 100 名在籍学生）</strong>
+            <p>为保障分班管理清晰度与学生隐私，大盘模式下不罗列个人提交列表。请直接点击下方对应班级卡片跳转至旁边专属班级页面，直接查看学情与批阅：</p>
+          </div>
+        </div>
+        <div class="teacher-class-jump-grid">
+          <div class="teacher-class-jump-card card-class-1" data-jump-to-class="1" data-jump-target="submissions" role="button" tabindex="0" title="点击直接进入数经1班作业收件箱与批阅">
+            <div class="jump-card-header">
+              <div class="jump-card-title-wrap">
+                <span class="jump-class-icon">📝</span>
+                <div>
+                  <h3 class="jump-class-name">数经1班 · 作业收件箱</h3>
+                  <span class="jump-class-teacher">任课教师：张老师 (teacher1@class.local)</span>
+                </div>
+              </div>
+              <span class="jump-class-badge badge-c1">在籍 50 人</span>
+            </div>
+            <p class="jump-card-desc">独立花名册 50 人。点击直接跳转至旁边数经1班页面，查看专属四象限学情、学生作业量规打分与AI预评复核。</p>
+            <div class="jump-card-stats">
+              <div class="jump-stat-item">
+                <span class="jump-stat-label">已收作业</span>
+                <span class="jump-stat-value text-blue">${subs1.length} 份</span>
+              </div>
+              <div class="jump-stat-item">
+                <span class="jump-stat-label">待批/预评</span>
+                <span class="jump-stat-value text-orange">${pending1} 份</span>
+              </div>
+              <div class="jump-stat-item">
+                <span class="jump-stat-label">已批均分</span>
+                <span class="jump-stat-value">${avg1}</span>
+              </div>
+            </div>
+            <div class="jump-card-action">
+              <button type="button" class="jump-action-btn" data-jump-to-class="1" data-jump-target="submissions">
+                👉 直接进入【数经1班】批阅与查看学情
+              </button>
+            </div>
+          </div>
+
+          <div class="teacher-class-jump-card card-class-2" data-jump-to-class="2" data-jump-target="submissions" role="button" tabindex="0" title="点击直接进入数经2班作业收件箱与批阅">
+            <div class="jump-card-header">
+              <div class="jump-card-title-wrap">
+                <span class="jump-class-icon">📝</span>
+                <div>
+                  <h3 class="jump-class-name">数经2班 · 作业收件箱</h3>
+                  <span class="jump-class-teacher">任课教师：李老师 (teacher2@class.local)</span>
+                </div>
+              </div>
+              <span class="jump-class-badge badge-c2">在籍 50 人</span>
+            </div>
+            <p class="jump-card-desc">独立花名册 50 人。点击直接跳转至旁边数经2班页面，查看专属四象限学情、学生作业量规打分与AI预评复核。</p>
+            <div class="jump-card-stats">
+              <div class="jump-stat-item">
+                <span class="jump-stat-label">已收作业</span>
+                <span class="jump-stat-value text-blue">${subs2.length} 份</span>
+              </div>
+              <div class="jump-stat-item">
+                <span class="jump-stat-label">待批/预评</span>
+                <span class="jump-stat-value text-orange">${pending2} 份</span>
+              </div>
+              <div class="jump-stat-item">
+                <span class="jump-stat-label">已批均分</span>
+                <span class="jump-stat-value">${avg2}</span>
+              </div>
+            </div>
+            <div class="jump-card-action">
+              <button type="button" class="jump-action-btn" data-jump-to-class="2" data-jump-target="submissions">
+                👉 直接进入【数经2班】批阅与查看学情
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
     return;
   }
-  classTeacherSubmissions.innerHTML = items.map((item) => {
+
+  const filterVal = filterSelect ? filterSelect.value : 'all';
+  let filtered = currentTeacherSubmissionsList;
+  if (filterVal === 'pending') {
+    filtered = filtered.filter((i) => i.score === null && !i.aiEvaluation && (i.aiSuggestedScore === null || i.aiSuggestedScore === undefined));
+  } else if (filterVal === 'ai_pregraded') {
+    filtered = filtered.filter((i) => i.score === null && (Boolean(i.aiEvaluation) || (i.aiSuggestedScore !== null && i.aiSuggestedScore !== undefined)));
+  } else if (filterVal === 'graded') {
+    filtered = filtered.filter((i) => i.score !== null && i.score !== undefined);
+  } else if (filterVal === 'leap') {
+    filtered = filtered.filter((i) => Boolean(i.isLeap) || (i.rankGain !== null && Number(i.rankGain) >= 15));
+  }
+
+  if (!filtered.length) {
+    classTeacherSubmissions.innerHTML = renderClassEmpty('暂无符合筛选条件的学生作业提交。');
+    return;
+  }
+  classTeacherSubmissions.innerHTML = filtered.map((item) => {
     const kind = getClassFileKind(item.originalName, item.mimeType);
+    const rubricSummary = item.rubricScores
+      ? `理论:${item.rubricScores.theory || 0} · 实证:${item.rubricScores.empirical || 0} · 创新:${item.rubricScores.innovation || 0} · 规范:${item.rubricScores.expression || 0}`
+      : (item.aiEvaluation ? `AI建议: 理论${item.aiEvaluation.rubric?.theory ?? item.aiEvaluation.theory ?? 0}·实证${item.aiEvaluation.rubric?.empirical ?? item.aiEvaluation.empirical ?? 0}·创新${item.aiEvaluation.rubric?.innovation ?? item.aiEvaluation.innovation ?? 0}·规范${item.aiEvaluation.rubric?.expression ?? item.aiEvaluation.expression ?? 0}` : null);
+
     return `
       <article class="class-item">
         <div class="class-item-head">
-          <strong>${escapeHtml(item.studentName || '学生')}</strong>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${escapeHtml(item.studentName || '学生')}</strong>
+            ${renderClassScopeBadge(item.classId, item.className)}
+            <small style="color:var(--muted)">学号: ${escapeHtml(item.studentNo || '-')}</small>
+            ${renderTierBadge(item.tier || item.aiSuggestedTier)}
+            ${renderSubmissionStatusPill(item)}
+            ${item.isLeap ? '<span class="leap-badge">⚡ 位次跃迁</span>' : ''}
+          </div>
           <small>${escapeHtml(item.assignmentTitle || '文件收取')} · ${escapeHtml(getClassFileKindLabel(kind))} · ${escapeHtml(formatClassTime(item.updatedAt || item.createdAt))}</small>
         </div>
+
+        <div style="font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:12px;background:var(--surface-soft);padding:8px 12px;border-radius:8px;border:1px solid var(--border);">
+          <span>📍 生源: <b>${escapeHtml(item.originProvince || '未录入')}</b></span>
+          <span>高考总分: <b>${item.gaokaoScore || '无'}</b> (数学 <b>${item.gaokaoMath || '-'}</b>)</span>
+          <span>初始排位: <b>#${item.initialRank || '-'}</b></span>
+          ${item.rankInClass !== null && item.rankInClass !== undefined ? `<span>本次排位: <b>#${item.rankInClass}</b></span>` : ''}
+          ${item.rankGain !== null && item.rankGain !== undefined ? `<span style="color:${item.rankGain >= 0 ? 'var(--purple)' : 'var(--orange)'};font-weight:700;">位次净增: ${item.rankGain >= 0 ? '+' : ''}${item.rankGain}</span>` : ''}
+          ${item.score !== null ? `<span style="color:var(--blue);font-weight:800;">最终得分: ${item.score}分</span>` : (item.aiSuggestedScore !== null && item.aiSuggestedScore !== undefined ? `<span style="color:var(--blue);">AI建议分: ${item.aiSuggestedScore}分</span>` : '')}
+        </div>
+
         ${renderClassFilePreview(item)}
-        <p>${escapeHtml(item.originalName || '未命名文件')} · ${escapeHtml(formatFileSize(item.fileSize))}${item.note ? ` · ${escapeHtml(item.note)}` : ''}</p>
-        ${renderClassFileActions(item, '下载文件')}
+        <p>${escapeHtml(item.originalName || '未命名文件')} · ${escapeHtml(formatFileSize(item.fileSize))}${item.note ? ` · 备注: ${escapeHtml(item.note)}` : ''}</p>
+
+        ${rubricSummary ? `<div style="font-size:12px;color:var(--muted);"><b>四维拆解：</b>${escapeHtml(rubricSummary)}</div>` : ''}
+        ${item.feedback ? `<div style="font-size:12px;color:var(--text);background:var(--blue-soft);padding:8px 12px;border-radius:8px;"><b>学生评语：</b>${escapeHtml(item.feedback)}</div>` : ''}
+        ${item.teacherDiagnosticNote ? `<div style="font-size:12px;color:#92400e;background:rgba(245,158,11,.1);padding:8px 12px;border-radius:8px;border:1px dashed rgba(245,158,11,.4);"><b>内部教学诊断备忘：</b>${escapeHtml(item.teacherDiagnosticNote)}</div>` : ''}
+
+        <div class="class-item-actions">
+          <button type="button" class="primary-btn" data-class-grade-submission="${escapeHtml(item.id)}">${item.score !== null ? '调整量规打分' : '量规批阅与诊断'}</button>
+          ${renderClassFileActions(item, '下载文件')}
+        </div>
       </article>
     `;
   }).join('');
+};
+
+const renderStudentRemindersBanner = (reminders = []) => {
+  const wrap = document.getElementById('classStudentRemindersWrap');
+  if (!wrap) return;
+  if (!reminders.length) {
+    wrap.hidden = true;
+    wrap.innerHTML = '';
+    return;
+  }
+  wrap.hidden = false;
+  wrap.innerHTML = `
+    <div class="student-reminder-alert-banner">
+      <div class="reminder-banner-icon">🔔</div>
+      <div class="reminder-banner-content">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <strong>您有 ${reminders.length} 份作业收到任课教师的催交通知！</strong>
+          <span style="font-size:12px;color:#b45309;background:rgba(245,158,11,0.15);padding:2px 8px;border-radius:999px;font-weight:600;">请尽快提交</span>
+        </div>
+        <div class="reminder-banner-list">
+          ${reminders.map((r) => `
+            <div class="reminder-banner-item">
+              <div class="reminder-banner-item-left">
+                <span style="font-weight:700;color:var(--text);">【${escapeHtml(r.assignmentTitle)}】</span>
+                <span style="color:var(--muted);font-size:12px;">（${escapeHtml(r.teacherName || '任课教师')} 于 ${escapeHtml(formatClassTime(r.createdAt))} 发出催交）</span>
+              </div>
+              <div style="font-size:12px;color:var(--text);flex:1;min-width:200px;padding:0 8px;">
+                💬 <em>${escapeHtml(r.message || '请及时提交')}</em>
+              </div>
+              <button type="button" class="reminder-banner-jump-btn" data-jump-to-assignment="${escapeHtml(r.assignmentId)}">
+                ✍️ 立即前往提交
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
 };
 
 const renderStudentAssignments = (items) => {
@@ -1931,19 +2608,37 @@ const renderStudentAssignments = (items) => {
     classStudentAssignments.innerHTML = renderClassEmpty('暂时没有待交文件。');
     return;
   }
+  const myReminders = classOverview.myReminders || [];
+  const reminderMap = new Map(myReminders.map((r) => [String(r.assignmentId), r]));
+
   classStudentAssignments.innerHTML = items.map((item) => {
     const submitted = Boolean(item.mySubmission);
     const closed = item.status !== 'open';
+    const reminder = reminderMap.get(String(item.id));
     return `
-      <article class="class-item">
+      <article class="class-item" id="student-assignment-item-${escapeHtml(item.id)}">
         <div class="class-item-head">
-          <strong>${escapeHtml(item.title)}</strong>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${escapeHtml(item.title)}</strong>
+            ${renderClassScopeBadge(item.classId, item.className)}
+            ${reminder && !submitted ? '<span class="status-pill" style="background:#fef3c7;color:#b45309;border:1px solid #fcd34d;">⚠️ 教师已催交</span>' : ''}
+          </div>
           <small>${closed ? '已停止收取' : (submitted ? '已提交' : '待提交')}</small>
         </div>
         <p>${escapeHtml(item.description || '教师未填写补充说明')}</p>
         <small>截止：${escapeHtml(formatClassTime(item.dueAt))}${submitted ? ` · 上次提交 ${escapeHtml(item.mySubmission.originalName)}` : ''}</small>
+        ${reminder && !submitted ? `
+          <div class="assignment-reminder-callout">
+            <div class="callout-icon">🔔</div>
+            <div style="flex:1;">
+              <strong>任课教师（${escapeHtml(reminder.teacherName || '任课教师')}）催交提醒：</strong>
+              <p>${escapeHtml(reminder.message || '请抓紧在系统完成提交！')}</p>
+              <small>提醒发送时间：${escapeHtml(formatClassTime(reminder.createdAt))}</small>
+            </div>
+          </div>
+        ` : ''}
         ${closed ? '' : `
-          <form class="class-submit-form" data-class-submit="${escapeHtml(item.id)}">
+          <form class="class-submit-form" data-class-submit="${escapeHtml(item.id)}" style="margin-top:12px;">
             <input type="file" name="file" accept="${CLASS_FILE_ACCEPT}" required>
             <small>可提交图片、Word、PDF、PPT、Excel 或压缩包，单文件不超过 50MB。</small>
             <input type="text" name="note" maxlength="300" placeholder="可选备注，例如：已按学号命名">
@@ -1963,15 +2658,23 @@ const renderStudentSubmissions = (items) => {
   }
   classStudentSubmissions.innerHTML = items.map((item) => {
     const kind = getClassFileKind(item.originalName, item.mimeType);
+    const isGraded = Boolean(item.isGraded || item.status === 'graded');
     return `
       <article class="class-item">
         <div class="class-item-head">
-          <strong>${escapeHtml(item.assignmentTitle || '文件收取')}</strong>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${escapeHtml(item.assignmentTitle || '文件收取')}</strong>
+            ${isGraded ? '<span class="status-pill graded">教师已审阅反馈</span>' : '<span class="status-pill pending">教师审阅中</span>'}
+          </div>
           <small>${escapeHtml(getClassFileKindLabel(kind))} · ${escapeHtml(formatClassTime(item.updatedAt || item.createdAt))}</small>
         </div>
         ${renderClassFilePreview(item)}
-        <p>${escapeHtml(item.originalName || '未命名文件')} · ${escapeHtml(formatFileSize(item.fileSize))}</p>
-        ${renderClassFileActions(item, '下载我的文件')}
+        <p>${escapeHtml(item.originalName || '未命名文件')} · ${escapeHtml(formatFileSize(item.fileSize))}${item.note ? ` · 我的备注: ${escapeHtml(item.note)}` : ''}</p>
+        ${isGraded && item.feedback ? `<div class="student-feedback-box"><strong>教师指导评语：</strong>${escapeHtml(item.feedback)}</div>` : ''}
+        <div class="class-item-actions">
+          ${isGraded ? `<button type="button" class="primary-btn" data-class-view-submission="${escapeHtml(item.id)}">查看教师学术指导与评语</button>` : ''}
+          ${renderClassFileActions(item, '下载我的文件')}
+        </div>
       </article>
     `;
   }).join('');
@@ -1994,10 +2697,15 @@ const renderClassWorkspace = () => {
   if (classAdminView) classAdminView.hidden = view !== 'admin';
   if (classTeacherView) classTeacherView.hidden = view !== 'teacher';
   if (classStudentView) classStudentView.hidden = view !== 'student';
-  if (classStats) classStats.classList.toggle('is-admin', isAdmin && view === 'admin');
-  if (classStatClassCard) classStatClassCard.hidden = !(isAdmin && view === 'admin');
-  if (classStatTeacherCard) classStatTeacherCard.hidden = !(isAdmin && view === 'admin');
-  if (classStatStudentCard) classStatStudentCard.hidden = !(isAdmin && view === 'admin');
+  const isTeacherView = view === 'teacher';
+  const isAdminView = isAdmin && view === 'admin';
+  if (classStats) {
+    classStats.classList.toggle('is-admin', isAdminView);
+    classStats.classList.toggle('is-teacher', isTeacherView);
+  }
+  if (classStatClassCard) classStatClassCard.hidden = !isAdminView;
+  if (classStatTeacherCard) classStatTeacherCard.hidden = !isAdminView;
+  if (classStatStudentCard) classStatStudentCard.hidden = !(isAdminView || isTeacherView);
   if (classRoleBadge) {
     classRoleBadge.textContent = isAdmin
       ? (view === 'admin' ? '管理员后台' : `管理员预览 · ${view === 'teacher' ? '教师页' : '学生页'}`)
@@ -2020,9 +2728,88 @@ const renderClassWorkspace = () => {
   }
   if (classStatClasses) classStatClasses.textContent = (classDirectory.classes || []).length;
   if (classStatTeachers) classStatTeachers.textContent = (classDirectory.teachers || []).length;
-  if (classStatStudents) classStatStudents.textContent = classDirectory.studentCount || (classDirectory.classes || []).reduce((sum, item) => sum + Number((item.students || []).length || item.studentCount || 0), 0);
+
+  const studentCountVal = (isTeacherView || (isAdmin && currentClassScope !== 'all'))
+    ? (classOverview.stats?.studentCount || classOverview.stats?.rosterStudentCount || 50)
+    : (classDirectory.studentCount || (classDirectory.classes || []).reduce((sum, item) => sum + Number((item.students || []).length || item.studentCount || 0), 0) || 100);
+
+  if (classStatStudents) classStatStudents.textContent = studentCountVal;
+  const classStatStudentSubtext = document.getElementById('classStatStudentSubtext');
+  if (classStatStudentSubtext) {
+    if (isTeacherView) {
+      if (isAdmin) {
+        classStatStudentSubtext.textContent = currentClassScope === 'all' ? '100人大盘总库' : (currentClassScope === '1' ? '数经1班独立花名册 (50人)' : '数经2班独立花名册 (50人)');
+      } else {
+        classStatStudentSubtext.textContent = '本班独立花名册 (50人)';
+      }
+    } else {
+      classStatStudentSubtext.textContent = currentClassScope === '1' ? '数经1班花名册 (50人)' : (currentClassScope === '2' ? '数经2班花名册 (50人)' : '已导入学生 (100人总盘)');
+    }
+  }
   if (classStatAnnouncements) classStatAnnouncements.textContent = classOverview.stats?.announcementCount || 0;
   if (classStatAssignments) classStatAssignments.textContent = classOverview.stats?.openAssignmentCount || 0;
+
+  // Scheme A (Admin) & Scheme B (Teacher) Class Scoping & Status UI
+  if (classSwitcherBar) {
+    if (isAdmin) {
+      // Scheme A: Admin switcher
+      const showSwitcher = view === 'admin' || view === 'teacher';
+      classSwitcherBar.hidden = !showSwitcher;
+      if (showSwitcher) {
+        if (classSwitcherTabs) classSwitcherTabs.hidden = false;
+        if (classTeacherIsolatedBadge) classTeacherIsolatedBadge.hidden = true;
+        if (classSwitcherLabel) classSwitcherLabel.textContent = '当前数据范围：';
+        if (classSwitcherTabs) {
+          classSwitcherTabs.querySelectorAll('[data-class-scope]').forEach((btn) => {
+            const active = btn.dataset.classScope === currentClassScope;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', String(active));
+          });
+        }
+        if (classSwitcherTitle && classSwitcherScopeBadge) {
+          if (currentClassScope === '1') {
+            classSwitcherTitle.textContent = view === 'teacher' ? '数经1班 · 教师视角预览' : '数经1班 · 专属视角';
+            classSwitcherScopeBadge.textContent = '50 人 (任课教师: teacher1)';
+          } else if (currentClassScope === '2') {
+            classSwitcherTitle.textContent = view === 'teacher' ? '数经2班 · 教师视角预览' : '数经2班 · 专属视角';
+            classSwitcherScopeBadge.textContent = '50 人 (任课教师: teacher2)';
+          } else {
+            classSwitcherTitle.textContent = view === 'teacher' ? '全部班级 · 综合教师视角' : '年级大盘 (全部班级)';
+            classSwitcherScopeBadge.textContent = '100 人总库 (数经1 + 数经2)';
+          }
+        }
+        if (announcementClassSelectLabel) announcementClassSelectLabel.hidden = false;
+        if (assignmentClassSelectLabel) assignmentClassSelectLabel.hidden = false;
+        if (classAnnouncementClassSelect && currentClassScope !== 'all') {
+          classAnnouncementClassSelect.value = currentClassScope;
+        }
+        if (classAssignmentClassSelect && currentClassScope !== 'all') {
+          classAssignmentClassSelect.value = currentClassScope;
+        }
+      }
+    } else if (currentUser.role === 'teacher') {
+      // Scheme B: Teacher strict class isolation
+      classSwitcherBar.hidden = false;
+      if (classSwitcherTabs) classSwitcherTabs.hidden = true;
+      if (classTeacherIsolatedBadge) classTeacherIsolatedBadge.hidden = false;
+      const myClass = (classOverview.myClasses || [])[0] || (currentUser.classes || [])[0] || null;
+      let rawName = myClass?.name || (currentUser.email?.includes('1') ? '数经1' : (currentUser.email?.includes('2') ? '数经2' : '数经1'));
+      const className = rawName.endsWith('班') ? rawName : `${rawName}班`;
+      const teacherNum = className.includes('2') ? '2' : '1';
+      if (classTeacherIsolatedText) {
+        classTeacherIsolatedText.textContent = `班级专属工作台 · ${className} (50人 · 严格隔离) · 教师${teacherNum}已锁定`;
+      }
+      if (classSwitcherLabel) classSwitcherLabel.textContent = '已绑定班级：';
+      if (classSwitcherTitle) classSwitcherTitle.textContent = `${className} · 专属工作台`;
+      if (classSwitcherScopeBadge) classSwitcherScopeBadge.textContent = '50 人独立花名册 (无跨班权限)';
+      if (announcementClassSelectLabel) announcementClassSelectLabel.hidden = true;
+      if (assignmentClassSelectLabel) assignmentClassSelectLabel.hidden = true;
+    } else {
+      classSwitcherBar.hidden = true;
+      if (announcementClassSelectLabel) announcementClassSelectLabel.hidden = true;
+      if (assignmentClassSelectLabel) assignmentClassSelectLabel.hidden = true;
+    }
+  }
 
   if (view === 'admin') renderAdminClasses();
   if (classStudentClasses) {
@@ -2041,8 +2828,22 @@ const renderClassWorkspace = () => {
   }
   renderClassAnnouncements(classTeacherAnnouncements, classOverview.announcements || [], { canDelete: true });
   renderClassAnnouncements(classStudentAnnouncements, classOverview.announcements || []);
+  if (view === 'teacher') {
+    const showAllCards = isAdmin && currentClassScope === 'all';
+    const overviewCard = document.getElementById('teacherAllClassesOverviewCard');
+    if (overviewCard) {
+      overviewCard.hidden = !showAllCards;
+      if (showAllCards) {
+        renderTeacherClassJumpGrid();
+      }
+    }
+  } else {
+    const overviewCard = document.getElementById('teacherAllClassesOverviewCard');
+    if (overviewCard) overviewCard.hidden = true;
+  }
   renderTeacherAssignments(classOverview.assignments || []);
   renderTeacherSubmissions(classOverview.submissions || []);
+  renderStudentRemindersBanner(classOverview.myReminders || []);
   renderStudentAssignments(classOverview.assignments || []);
   renderStudentSubmissions((classOverview.assignments || []).map((item) => item.mySubmission).filter(Boolean));
 };
@@ -2056,9 +2857,17 @@ const loadClassOverview = async ({ silent = false } = {}) => {
   if (classLoading) return;
   classLoading = true;
   try {
-    const { overview } = await apiRequest('/api/class/overview');
+    const params = new URLSearchParams();
+    if (currentUser.role === 'admin' && currentClassScope && currentClassScope !== 'all') {
+      params.set('classId', currentClassScope);
+    }
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const { overview } = await apiRequest(`/api/class/overview${queryString}`);
     classOverview = overview || { stats: {}, announcements: [], assignments: [], submissions: [], myClasses: [] };
     renderClassWorkspace();
+    if (['admin', 'teacher'].includes(currentUser.role)) {
+      loadClassDiagnostics({ silent: true });
+    }
   } catch (error) {
     if (!silent) showToast(error.message || '班级数据加载失败');
     renderClassWorkspace();
@@ -2140,16 +2949,89 @@ if (classBackHomeBtn) {
   });
 }
 if (classPreviewSwitch) {
-  classPreviewSwitch.addEventListener('click', (event) => {
+  classPreviewSwitch.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-class-preview]');
     if (!button || currentUser?.role !== 'admin') return;
     const nextView = button.dataset.classPreview;
     classPreviewRole = ['admin', 'teacher', 'student'].includes(nextView) ? nextView : 'admin';
     renderClassWorkspace();
-    if (classPreviewRole === 'admin') loadClassDirectory({ silent: true });
-    else loadClassOverview({ silent: true });
+    if (classPreviewRole === 'admin') {
+      await Promise.all([loadClassDirectory({ silent: true }), loadClassOverview({ silent: true })]);
+    } else {
+      await loadClassOverview({ silent: true });
+    }
   });
 }
+if (classSwitcherTabs) {
+  classSwitcherTabs.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-class-scope]');
+    if (!button || currentUser?.role !== 'admin') return;
+    const nextScope = button.dataset.classScope;
+    if (!nextScope || nextScope === currentClassScope) return;
+    currentClassScope = nextScope;
+    renderClassWorkspace();
+    await loadClassOverview();
+    if (currentUser?.role === 'admin' && classPreviewRole === 'admin') {
+      await loadClassDirectory({ silent: true });
+    }
+  });
+}
+// Direct Class Jump Handlers (Scheme A: Admin jumping directly into specific class workspace)
+document.addEventListener('click', async (event) => {
+  const jumpBtn = event.target.closest('[data-jump-to-class]');
+  if (jumpBtn) {
+    event.preventDefault();
+    const targetClass = jumpBtn.dataset.jumpToClass;
+    const jumpTarget = jumpBtn.dataset.jumpTarget;
+    if (!targetClass) return;
+
+    currentClassScope = String(targetClass);
+
+    // If currently in admin view, seamlessly transition to teacher view to view class situation
+    if (classPreviewRole === 'admin') {
+      classPreviewRole = 'teacher';
+    }
+
+    renderClassWorkspace();
+    await loadClassOverview();
+
+    // Smooth scroll to diagnostics, submissions or workspace header
+    let targetEl = null;
+    if (jumpTarget === 'submissions') {
+      targetEl = document.getElementById('classTeacherSubmissions');
+    } else {
+      targetEl = document.getElementById('classTeacherDiagnosticsCard') || document.getElementById('classStats');
+    }
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    const className = currentClassScope === '1' ? '数经1班' : '数经2班';
+    showToast(`已直接进入【${className}】班级情况页面`);
+    return;
+  }
+
+  const toggleBtn = event.target.closest('[data-toggle-roster]');
+  if (toggleBtn) {
+    event.preventDefault();
+    const cid = toggleBtn.dataset.toggleRoster;
+    const rosterEl = document.getElementById(`rosterList_${cid}`);
+    if (rosterEl) {
+      rosterEl.hidden = !rosterEl.hidden;
+      toggleBtn.textContent = rosterEl.hidden ? '展开/查看 50 人名单明细' : '收起 50 人名单明细';
+    }
+    return;
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    const jumpCard = event.target.closest('[data-jump-to-class][role="button"]');
+    if (jumpCard && document.activeElement === jumpCard) {
+      event.preventDefault();
+      jumpCard.click();
+    }
+  }
+});
 if (classCreateForm) {
   classCreateForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -2195,6 +3077,9 @@ if (classAnnouncementForm) {
         body: JSON.stringify({
           title: classAnnouncementTitle.value.trim(),
           content: classAnnouncementContent.value.trim(),
+          classId: (currentUser?.role === 'admin' && classAnnouncementClassSelect)
+            ? (classAnnouncementClassSelect.value || (currentClassScope !== 'all' ? currentClassScope : null))
+            : null,
         }),
       });
       classAnnouncementForm.reset();
@@ -2215,6 +3100,9 @@ if (classAssignmentForm) {
           title: classAssignmentTitle.value.trim(),
           description: classAssignmentDesc.value.trim(),
           dueAt: classAssignmentDue.value ? new Date(classAssignmentDue.value).toISOString() : '',
+          classId: (currentUser?.role === 'admin' && classAssignmentClassSelect)
+            ? (classAssignmentClassSelect.value || (currentClassScope !== 'all' ? currentClassScope : null))
+            : null,
         }),
       });
       classAssignmentForm.reset();
@@ -2338,7 +3226,399 @@ if (classWorkspace) {
       showToast(error.message || '提交失败');
     }
   });
+  const teacherSubFilter = document.getElementById('teacherSubmissionFilter');
+  if (teacherSubFilter) {
+    teacherSubFilter.addEventListener('change', () => {
+      renderTeacherSubmissions(currentTeacherSubmissionsList);
+    });
+  }
+
+  const refreshDiagBtn = document.getElementById('refreshDiagnosticsBtn');
+  if (refreshDiagBtn) {
+    refreshDiagBtn.addEventListener('click', async () => {
+      refreshDiagBtn.disabled = true;
+      try {
+        await loadClassDiagnostics();
+        showToast('诊断数据已刷新');
+      } finally {
+        refreshDiagBtn.disabled = false;
+      }
+    });
+  }
+
+  const batchAiBtn = document.getElementById('batchAiGradeBtn');
+  if (batchAiBtn) {
+    batchAiBtn.addEventListener('click', async () => {
+      if (!window.confirm('确定对全班未批阅的作业启动 AI 批量多维量规预评分吗？这会分析学生的高考数学基线并自动生成双轨建议评语。')) return;
+      batchAiBtn.disabled = true;
+      batchAiBtn.textContent = 'AI 批量预评中...';
+      try {
+        const payload = { forceHeuristic: false };
+        if (currentUser?.role === 'admin' && currentClassScope && currentClassScope !== 'all') {
+          payload.classId = Number(currentClassScope);
+        }
+        const res = await apiRequest('/api/class/submissions/batch-ai-grade', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        showToast(`AI 批量预评完成：成功 ${res.evaluatedCount || 0} 份`);
+        await loadClassOverview();
+        await loadClassDiagnostics();
+      } catch (err) {
+        showToast(err.message || 'AI 批量预评失败');
+      } finally {
+        batchAiBtn.disabled = false;
+        batchAiBtn.textContent = '一键 AI 批量预批改';
+      }
+    });
+  }
 }
+
+// Grading Modal & Student Detail Modal Controls
+const gradingModal = document.getElementById('gradingModal');
+const gradingModalClose = document.getElementById('gradingModalClose');
+const gradingCancelBtn = document.getElementById('gradingCancelBtn');
+const gradingForm = document.getElementById('gradingForm');
+const rubricInputTheory = document.getElementById('rubricInputTheory');
+const rubricInputEmpirical = document.getElementById('rubricInputEmpirical');
+const rubricInputInnovation = document.getElementById('rubricInputInnovation');
+const rubricInputExpression = document.getElementById('rubricInputExpression');
+const scoreDisplayTheory = document.getElementById('scoreDisplayTheory');
+const scoreDisplayEmpirical = document.getElementById('scoreDisplayEmpirical');
+const scoreDisplayInnovation = document.getElementById('scoreDisplayInnovation');
+const scoreDisplayExpression = document.getElementById('scoreDisplayExpression');
+const rubricTotalDisplay = document.getElementById('rubricTotalDisplay');
+const rubricTierDisplay = document.getElementById('rubricTierDisplay');
+const rubricLeapNotice = document.getElementById('rubricLeapNotice');
+const gradingModalCurrentTier = document.getElementById('gradingModalCurrentTier');
+const gradingStudentMeta = document.getElementById('gradingStudentMeta');
+const gradingAiCallout = document.getElementById('gradingAiCallout');
+const gradingAiBody = document.getElementById('gradingAiBody');
+const gradingAiConfidence = document.getElementById('gradingAiConfidence');
+const applyAiGradingBtn = document.getElementById('applyAiGradingBtn');
+const runSingleAiGradeBtn = document.getElementById('runSingleAiGradeBtn');
+const gradingStudentFeedback = document.getElementById('gradingStudentFeedback');
+const gradingTeacherDiagnosticNote = document.getElementById('gradingTeacherDiagnosticNote');
+
+const submissionDetailModal = document.getElementById('submissionDetailModal');
+const submissionDetailClose = document.getElementById('submissionDetailClose');
+const submissionDetailContent = document.getElementById('submissionDetailContent');
+const submissionDetailTierWrap = document.getElementById('submissionDetailTierWrap');
+
+const closeGradingModal = () => {
+  if (gradingModal) gradingModal.hidden = true;
+  currentGradingSubmission = null;
+};
+
+const closeSubmissionDetailModal = () => {
+  if (submissionDetailModal) submissionDetailModal.hidden = true;
+};
+
+const calcCurrentRubricScore = () => {
+  const t = Number(rubricInputTheory ? rubricInputTheory.value : 0) || 0;
+  const e = Number(rubricInputEmpirical ? rubricInputEmpirical.value : 0) || 0;
+  const i = Number(rubricInputInnovation ? rubricInputInnovation.value : 0) || 0;
+  const ex = Number(rubricInputExpression ? rubricInputExpression.value : 0) || 0;
+  return Math.round((t + e + i + ex) * 10) / 10;
+};
+
+const updateGradingModalCalculations = () => {
+  if (!currentGradingSubmission) return;
+  const t = Number(rubricInputTheory ? rubricInputTheory.value : 0) || 0;
+  const e = Number(rubricInputEmpirical ? rubricInputEmpirical.value : 0) || 0;
+  const i = Number(rubricInputInnovation ? rubricInputInnovation.value : 0) || 0;
+  const ex = Number(rubricInputExpression ? rubricInputExpression.value : 0) || 0;
+
+  if (scoreDisplayTheory) scoreDisplayTheory.textContent = t;
+  if (scoreDisplayEmpirical) scoreDisplayEmpirical.textContent = e;
+  if (scoreDisplayInnovation) scoreDisplayInnovation.textContent = i;
+  if (scoreDisplayExpression) scoreDisplayExpression.textContent = ex;
+
+  const total = Math.round((t + e + i + ex) * 10) / 10;
+  if (rubricTotalDisplay) rubricTotalDisplay.textContent = total;
+
+  let baseTier = 'D';
+  if (total >= 90) baseTier = 'A';
+  else if (total >= 80) baseTier = 'B+';
+  else if (total >= 70) baseTier = 'B';
+  else if (total >= 60) baseTier = 'C';
+
+  const initialRank = Number(currentGradingSubmission.initialRank) || 25;
+  const currentRank = Number(currentGradingSubmission.rankInClass) || 25;
+  const rankGain = initialRank - currentRank;
+  const isLeap = rankGain >= 15 || (initialRank > 25 && currentRank <= 12);
+
+  let finalTier = baseTier;
+  if (isLeap) {
+    if (baseTier === 'B' && total >= 65) finalTier = 'B+';
+    else if (baseTier === 'B+' && total >= 80) finalTier = 'A';
+    else if (baseTier === 'C' && total >= 58) finalTier = 'B';
+  }
+
+  if (rubricTierDisplay) {
+    rubricTierDisplay.textContent = `${finalTier} (${finalTier === 'A' ? '卓越' : (finalTier === 'B+' ? '优秀' : (finalTier === 'B' ? '良好' : (finalTier === 'C' ? '合格' : '需努力')))})`;
+  }
+  if (gradingModalCurrentTier) {
+    gradingModalCurrentTier.textContent = finalTier;
+    gradingModalCurrentTier.className = `tier-badge ${getTierClass(finalTier)}`;
+  }
+  if (rubricLeapNotice) {
+    rubricLeapNotice.hidden = !isLeap;
+  }
+};
+
+const openGradingModal = (submission) => {
+  currentGradingSubmission = submission;
+  if (!gradingModal) return;
+
+  if (gradingStudentMeta) {
+    gradingStudentMeta.innerHTML = `
+      <span class="grading-meta-item">学生: <strong>${escapeHtml(submission.studentName || '学生')}</strong> (${escapeHtml(submission.studentNo || '-')})</span>
+      <span class="grading-meta-item">班级: <strong>${escapeHtml(submission.className || '数经')}</strong></span>
+      <span class="grading-meta-item highlight-gaokao">📍 生源省份: <strong>${escapeHtml(submission.originProvince || '未录入')}</strong></span>
+      <span class="grading-meta-item highlight-gaokao">高考基线: <strong>${submission.gaokaoScore || '无'} 分</strong> (数学 <strong>${submission.gaokaoMath || '-'} 分</strong>)</span>
+      <span class="grading-meta-item">高考初始位次: <strong>#${submission.initialRank || '-'}</strong></span>
+      ${submission.rankInClass ? `<span class="grading-meta-item">当前课程排位: <strong>#${submission.rankInClass}</strong></span>` : ''}
+    `;
+  }
+
+  const aiRubric = submission.aiEvaluation?.rubric || submission.aiEvaluation || null;
+  const scores = submission.rubricScores || (aiRubric ? {
+    theory: aiRubric.theory !== undefined ? aiRubric.theory : 24,
+    empirical: aiRubric.empirical !== undefined ? aiRubric.empirical : 23,
+    innovation: aiRubric.innovation !== undefined ? aiRubric.innovation : 15,
+    expression: aiRubric.expression !== undefined ? aiRubric.expression : 16,
+  } : {
+    theory: 24,
+    empirical: 23,
+    innovation: 15,
+    expression: 16,
+  });
+
+  if (rubricInputTheory) rubricInputTheory.value = scores.theory !== undefined ? scores.theory : 24;
+  if (rubricInputEmpirical) rubricInputEmpirical.value = scores.empirical !== undefined ? scores.empirical : 23;
+  if (rubricInputInnovation) rubricInputInnovation.value = scores.innovation !== undefined ? scores.innovation : 15;
+  if (rubricInputExpression) rubricInputExpression.value = scores.expression !== undefined ? scores.expression : 16;
+
+  if (gradingStudentFeedback) {
+    gradingStudentFeedback.value = submission.feedback || (submission.aiEvaluation?.studentFeedback || '');
+  }
+  if (gradingTeacherDiagnosticNote) {
+    gradingTeacherDiagnosticNote.value = submission.teacherDiagnosticNote || (submission.aiEvaluation?.teacherDiagnosticNote || '');
+  }
+
+  const aiEval = submission.aiEvaluation;
+  if (aiEval && gradingAiCallout) {
+    gradingAiCallout.hidden = false;
+    if (gradingAiConfidence) gradingAiConfidence.textContent = aiEval.confidence || '0.92';
+    if (gradingAiBody) {
+      gradingAiBody.innerHTML = `
+        <div><b>建议总分：</b><strong style="color:var(--blue);font-size:14px;">${aiEval.suggestedScore || '-'} 分</strong> · 预评等级：${renderTierBadge(aiEval.suggestedTier)}</div>
+        <div class="grading-ai-scores-bar">
+          <span>理论基础: ${aiEval.rubric?.theory ?? aiEval.theory ?? 0}/30</span>
+          <span>实证分析: ${aiEval.rubric?.empirical ?? aiEval.empirical ?? 0}/30</span>
+          <span>创新洞察: ${aiEval.rubric?.innovation ?? aiEval.innovation ?? 0}/20</span>
+          <span>规范表达: ${aiEval.rubric?.expression ?? aiEval.expression ?? 0}/20</span>
+        </div>
+        <div style="margin-top:6px;color:var(--text);"><b>AI建议公开评语：</b>${escapeHtml(aiEval.studentFeedback || '')}</div>
+        <div style="margin-top:4px;color:#92400e;"><b>AI内部学情建议：</b>${escapeHtml(aiEval.teacherDiagnosticNote || '')}</div>
+      `;
+    }
+  } else if (gradingAiCallout) {
+    gradingAiCallout.hidden = true;
+  }
+
+  updateGradingModalCalculations();
+  gradingModal.hidden = false;
+};
+
+const openSubmissionDetailModal = (submission) => {
+  if (!submissionDetailModal) return;
+  const isGraded = Boolean(submission.isGraded || submission.status === 'graded');
+
+  if (submissionDetailTierWrap) {
+    submissionDetailTierWrap.innerHTML = isGraded ? '<span class=\"status-pill graded\">审阅完成</span>' : '<span class=\"status-pill pending\">待审阅</span>';
+  }
+
+  if (submissionDetailContent) {
+    submissionDetailContent.innerHTML = `
+      <div class=\"student-rubric-summary\" style=\"align-items:center;\">
+        <div>
+          <span style=\"font-size:13px;color:var(--muted);display:block;\">作业审阅状态</span>
+          <strong style=\"font-size:18px;color:var(--blue);\">${isGraded ? '导师已审阅并提供学术指导' : '任课教师正在审阅中'}</strong>
+        </div>
+        <div style=\"text-align:right;\">
+          <span style=\"font-size:12px;color:var(--muted);\">以过程成长与学术建构为导向，不展示量化排位</span>
+        </div>
+      </div>
+
+      <div class=\"section-subhead\" style=\"margin-top:14px;\">
+        <strong>课程论文考察导向与学术发展维度</strong>
+        <small>从经济学思维、实证规范、创新应用及论述逻辑进行针对性学术点拨</small>
+      </div>
+
+      <div class=\"student-rubric-grid\">
+        <div class=\"student-rubric-col\">
+          <strong>1. 理论基础与经济学思维</strong>
+          <p style=\"font-size:12px;color:var(--text);margin-top:6px;line-height:1.5;\">聚焦数字经济学平台双边机制、网络外部性与微观机理的理解深度。</p>
+        </div>
+        <div class=\"student-rubric-col\">
+          <strong>2. 数据与实证分析能力</strong>
+          <p style=\"font-size:12px;color:var(--text);margin-top:6px;line-height:1.5;\">注重实证样本选取、数据清洗、计量建模及因果逻辑的学术严密性。</p>
+        </div>
+        <div class=\"student-rubric-col\">
+          <strong>3. 创新洞察与现实应用</strong>
+          <p style=\"font-size:12px;color:var(--text);margin-top:6px;line-height:1.5;\">鼓励结合数字平台前沿实践与政策热点，提出独立深刻的现实见解。</p>
+        </div>
+        <div class=\"student-rubric-col\">
+          <strong>4. 结构严谨度与学术规范</strong>
+          <p style=\"font-size:12px;color:var(--text);margin-top:6px;line-height:1.5;\">规范学术图表制作、参考文献规范引用（GB/T 7714）与逻辑自洽性。</p>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <div class="student-feedback-box">
+          <strong>导师指导寄语与提升建议：</strong>
+          ${escapeHtml(submission.feedback || '任课教师正在阅卷中，评语将在打分完成后公布。')}
+        </div>
+      </div>
+    `;
+  }
+
+  submissionDetailModal.hidden = false;
+};
+
+// Wire Rubric Sliders
+[rubricInputTheory, rubricInputEmpirical, rubricInputInnovation, rubricInputExpression].forEach((slider) => {
+  if (slider) {
+    slider.addEventListener('input', updateGradingModalCalculations);
+  }
+});
+
+if (gradingModalClose) gradingModalClose.addEventListener('click', closeGradingModal);
+if (gradingCancelBtn) gradingCancelBtn.addEventListener('click', closeGradingModal);
+if (gradingModal) {
+  gradingModal.addEventListener('click', (e) => {
+    if (e.target === gradingModal) closeGradingModal();
+  });
+}
+
+if (submissionDetailClose) submissionDetailClose.addEventListener('click', closeSubmissionDetailModal);
+if (submissionDetailModal) {
+  submissionDetailModal.addEventListener('click', (e) => {
+    if (e.target === submissionDetailModal) closeSubmissionDetailModal();
+  });
+}
+
+if (applyAiGradingBtn) {
+  applyAiGradingBtn.addEventListener('click', () => {
+    if (!currentGradingSubmission || !currentGradingSubmission.aiEvaluation) return;
+    const ai = currentGradingSubmission.aiEvaluation;
+    const aiScores = ai.rubric || ai;
+    if (aiScores.theory !== undefined && rubricInputTheory) rubricInputTheory.value = aiScores.theory;
+    if (aiScores.empirical !== undefined && rubricInputEmpirical) rubricInputEmpirical.value = aiScores.empirical;
+    if (aiScores.innovation !== undefined && rubricInputInnovation) rubricInputInnovation.value = aiScores.innovation;
+    if (aiScores.expression !== undefined && rubricInputExpression) rubricInputExpression.value = aiScores.expression;
+    if (ai.studentFeedback && gradingStudentFeedback) gradingStudentFeedback.value = ai.studentFeedback;
+    if (ai.teacherDiagnosticNote && gradingTeacherDiagnosticNote) gradingTeacherDiagnosticNote.value = ai.teacherDiagnosticNote;
+    updateGradingModalCalculations();
+    showToast('已采纳 AI 评分细目与双轨评语');
+  });
+}
+
+if (runSingleAiGradeBtn) {
+  runSingleAiGradeBtn.addEventListener('click', async () => {
+    if (!currentGradingSubmission) return;
+    runSingleAiGradeBtn.disabled = true;
+    runSingleAiGradeBtn.textContent = 'AI 运算中...';
+    try {
+      const { evaluation } = await apiRequest(`/api/class/submissions/${currentGradingSubmission.id}/ai-grade`, {
+        method: 'POST',
+        body: JSON.stringify({ forceHeuristic: false }),
+      });
+      currentGradingSubmission.aiEvaluation = evaluation;
+      if (gradingAiCallout) {
+        gradingAiCallout.hidden = false;
+        if (gradingAiConfidence) gradingAiConfidence.textContent = evaluation.confidence || '0.92';
+        if (gradingAiBody) {
+          gradingAiBody.innerHTML = `
+            <div><b>建议总分：</b><strong style="color:var(--blue);font-size:14px;">${evaluation.suggestedScore || '-'} 分</strong> · 预评等级：${renderTierBadge(evaluation.suggestedTier)}</div>
+            <div class="grading-ai-scores-bar">
+              <span>理论基础: ${evaluation.rubric?.theory ?? evaluation.theory ?? 0}/30</span>
+              <span>实证分析: ${evaluation.rubric?.empirical ?? evaluation.empirical ?? 0}/30</span>
+              <span>创新洞察: ${evaluation.rubric?.innovation ?? evaluation.innovation ?? 0}/20</span>
+              <span>规范表达: ${evaluation.rubric?.expression ?? evaluation.expression ?? 0}/20</span>
+            </div>
+            <div style="margin-top:6px;color:var(--text);"><b>AI建议公开评语：</b>${escapeHtml(evaluation.studentFeedback || '')}</div>
+            <div style="margin-top:4px;color:#92400e;"><b>AI内部学情建议：</b>${escapeHtml(evaluation.teacherDiagnosticNote || '')}</div>
+          `;
+        }
+      }
+      showToast('AI 学情重新诊断完成');
+    } catch (err) {
+      showToast(err.message || 'AI 诊断失败');
+    } finally {
+      runSingleAiGradeBtn.disabled = false;
+      runSingleAiGradeBtn.textContent = '重新运行 AI 预评';
+    }
+  });
+}
+
+if (gradingForm) {
+  gradingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentGradingSubmission) return;
+    const submitBtn = document.getElementById('gradingSubmitBtn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    const theory = Number(rubricInputTheory.value) || 0;
+    const empirical = Number(rubricInputEmpirical.value) || 0;
+    const innovation = Number(rubricInputInnovation.value) || 0;
+    const expression = Number(rubricInputExpression.value) || 0;
+    const score = Math.round((theory + empirical + innovation + expression) * 10) / 10;
+    const feedback = (gradingStudentFeedback.value || '').trim();
+    const teacherDiagnosticNote = (gradingTeacherDiagnosticNote.value || '').trim();
+
+    try {
+      await apiRequest(`/api/class/submissions/${currentGradingSubmission.id}/grade`, {
+        method: 'POST',
+        body: JSON.stringify({
+          score,
+          rubricScores: { theory, empirical, innovation, expression, total: score },
+          feedback,
+          teacherDiagnosticNote,
+        }),
+      });
+      showToast('量规评阅已保存并完成双轨同步');
+      closeGradingModal();
+      await loadClassOverview();
+      await loadClassDiagnostics();
+    } catch (err) {
+      showToast(err.message || '评分保存失败');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+}
+
+// Global click handler for grade button & student view button
+document.addEventListener('click', (event) => {
+  const gradeBtn = event.target.closest('[data-class-grade-submission]');
+  if (gradeBtn) {
+    const subId = gradeBtn.dataset.classGradeSubmission;
+    const item = (currentTeacherSubmissionsList || []).find((s) => String(s.id) === String(subId));
+    if (item) openGradingModal(item);
+    return;
+  }
+
+  const viewBtn = event.target.closest('[data-class-view-submission]');
+  if (viewBtn) {
+    const subId = viewBtn.dataset.classViewSubmission;
+    const mySubs = (classOverview.assignments || []).map((a) => a.mySubmission).filter(Boolean);
+    const item = mySubs.find((s) => String(s.id) === String(subId));
+    if (item) openSubmissionDetailModal(item);
+  }
+});
 
 document.getElementById('sidebarToggle').addEventListener('click', () => {
   const sidebar = document.getElementById('sidebar');
@@ -4136,4 +5416,208 @@ document.addEventListener('keydown', (event) => {
   if (!securityModal.hidden) closeSecurity();
   if (!announcementModal.hidden) closeAnnouncements();
   if (!announcementEditorModal.hidden) closeAnnouncementEditor();
+});
+
+// ==========================================
+// Follow-Up Reminder (跟随催交) Frontend Logic
+// ==========================================
+let currentReminderAssignment = null;
+let currentReminderPendingList = [];
+
+const reminderModal = document.getElementById('reminderModal');
+const reminderModalClose = document.getElementById('reminderModalClose');
+const reminderCancelBtn = document.getElementById('reminderCancelBtn');
+const reminderSendBtn = document.getElementById('reminderSendBtn');
+const reminderSelectAllBtn = document.getElementById('reminderSelectAllBtn');
+const reminderDeselectAllBtn = document.getElementById('reminderDeselectAllBtn');
+const reminderStudentChecklist = document.getElementById('reminderStudentChecklist');
+const reminderMessageInput = document.getElementById('reminderMessageInput');
+const reminderAssignmentTitle = document.getElementById('reminderAssignmentTitle');
+const reminderAssignmentScopeBadge = document.getElementById('reminderAssignmentScopeBadge');
+const reminderAssignmentDueAt = document.getElementById('reminderAssignmentDueAt');
+const reminderPendingCountDisplay = document.getElementById('reminderPendingCountDisplay');
+const reminderSelectedCount = document.getElementById('reminderSelectedCount');
+const reminderTotalPendingCount = document.getElementById('reminderTotalPendingCount');
+
+const closeReminderModal = () => {
+  if (reminderModal) reminderModal.hidden = true;
+  currentReminderAssignment = null;
+  currentReminderPendingList = [];
+};
+
+const updateReminderSelectedCount = () => {
+  if (!reminderStudentChecklist || !reminderSelectedCount) return;
+  const checked = reminderStudentChecklist.querySelectorAll('input[type="checkbox"]:checked');
+  reminderSelectedCount.textContent = checked.length;
+};
+
+const openReminderModalForAssignment = async (assignmentId, preselectedStudentNo = null) => {
+  if (!reminderModal) return;
+  try {
+    const { assignment, students } = await apiRequest(`/api/class/assignments/${assignmentId}/pending-students`);
+    currentReminderAssignment = assignment;
+    const pendingStudents = (students || []).filter((s) => !s.submitted);
+    currentReminderPendingList = pendingStudents;
+
+    if (reminderAssignmentTitle) reminderAssignmentTitle.textContent = assignment.title;
+    if (reminderAssignmentDueAt) reminderAssignmentDueAt.textContent = formatClassTime(assignment.dueAt);
+    if (reminderPendingCountDisplay) reminderPendingCountDisplay.textContent = pendingStudents.length;
+    if (reminderTotalPendingCount) reminderTotalPendingCount.textContent = pendingStudents.length;
+
+    if (reminderAssignmentScopeBadge) {
+      if (assignment.classId) {
+        reminderAssignmentScopeBadge.hidden = false;
+        reminderAssignmentScopeBadge.textContent = assignment.className || (Number(assignment.classId) === 1 ? '数经1班' : '数经2班');
+        reminderAssignmentScopeBadge.className = `class-scope-badge badge-class${assignment.classId}`;
+      } else {
+        reminderAssignmentScopeBadge.hidden = true;
+      }
+    }
+
+    if (reminderMessageInput) {
+      reminderMessageInput.value = `【${assignment.title}】截稿在即，任课教师提醒您及时在系统提交作业。`;
+    }
+
+    if (reminderStudentChecklist) {
+      if (!pendingStudents.length) {
+        reminderStudentChecklist.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">🎉 太棒了，本班所有学生均已完成作业提交！</div>';
+      } else {
+        reminderStudentChecklist.innerHTML = pendingStudents.map((s) => {
+          const isChecked = preselectedStudentNo ? s.studentNo === preselectedStudentNo : true;
+          const hasReminded = Boolean(s.reminder);
+          return `
+            <div class="reminder-student-item">
+              <label>
+                <input type="checkbox" value="${escapeHtml(s.rosterId)}" data-student-no="${escapeHtml(s.studentNo)}" ${isChecked ? 'checked' : ''}>
+                <strong>${escapeHtml(s.name)}</strong>
+                <span class="reminder-student-meta-info">
+                  <span>${escapeHtml(s.studentNo)}</span>
+                  <span>·</span>
+                  <span>${escapeHtml(s.className || '数经班')}</span>
+                  ${s.originProvince ? `<span>· ${escapeHtml(s.originProvince)}</span>` : ''}
+                </span>
+              </label>
+              <div>
+                ${hasReminded
+                  ? `<span class="reminder-status-pill reminded" title="最近一次催交：${escapeHtml(s.reminder.remindedAt)}">已于 ${escapeHtml(formatClassTime(s.reminder.remindedAt))} 催交</span>`
+                  : '<span class="reminder-status-pill fresh">尚未催交</span>'}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    updateReminderSelectedCount();
+    reminderModal.hidden = false;
+  } catch (error) {
+    showToast(error.message || '获取未交名单失败');
+  }
+};
+
+if (reminderModalClose) reminderModalClose.addEventListener('click', closeReminderModal);
+if (reminderCancelBtn) reminderCancelBtn.addEventListener('click', closeReminderModal);
+if (reminderModal) {
+  reminderModal.addEventListener('click', (e) => {
+    if (e.target === reminderModal) closeReminderModal();
+  });
+}
+
+if (reminderSelectAllBtn && reminderStudentChecklist) {
+  reminderSelectAllBtn.addEventListener('click', () => {
+    reminderStudentChecklist.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = true;
+    });
+    updateReminderSelectedCount();
+  });
+}
+
+if (reminderDeselectAllBtn && reminderStudentChecklist) {
+  reminderDeselectAllBtn.addEventListener('click', () => {
+    reminderStudentChecklist.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = false;
+    });
+    updateReminderSelectedCount();
+  });
+}
+
+if (reminderStudentChecklist) {
+  reminderStudentChecklist.addEventListener('change', (e) => {
+    if (e.target.matches('input[type="checkbox"]')) {
+      updateReminderSelectedCount();
+    }
+  });
+}
+
+if (reminderSendBtn) {
+  reminderSendBtn.addEventListener('click', async () => {
+    if (!currentReminderAssignment) return;
+    const checkedBoxes = reminderStudentChecklist ? Array.from(reminderStudentChecklist.querySelectorAll('input[type="checkbox"]:checked')) : [];
+    if (!checkedBoxes.length) {
+      showToast('请至少勾选一位未交作业的学生');
+      return;
+    }
+    const rosterIds = checkedBoxes.map((cb) => cb.value);
+    const message = reminderMessageInput ? reminderMessageInput.value.trim() : '';
+
+    reminderSendBtn.disabled = true;
+    reminderSendBtn.textContent = '正在发送催交通知...';
+    try {
+      const result = await apiRequest(`/api/class/assignments/${currentReminderAssignment.id}/remind`, {
+        method: 'POST',
+        body: JSON.stringify({
+          rosterIds,
+          message,
+        }),
+      });
+      showToast(`成功向 ${result.count} 位未交学生发送跟随催交通知！`);
+      closeReminderModal();
+      await loadClassOverview({ silent: true });
+    } catch (error) {
+      showToast(error.message || '发送催交失败');
+    } finally {
+      reminderSendBtn.disabled = false;
+      reminderSendBtn.textContent = '🚀 确认发送催交通知';
+    }
+  });
+}
+
+// Event Delegation for Teacher Assignment Remind Button & Risk List Remind Button
+document.addEventListener('click', async (e) => {
+  const remindAssignmentBtn = e.target.closest('[data-class-remind-assignment]');
+  if (remindAssignmentBtn) {
+    const assignmentId = remindAssignmentBtn.dataset.classRemindAssignment;
+    await openReminderModalForAssignment(assignmentId);
+    return;
+  }
+
+  const riskRemindBtn = e.target.closest('[data-risk-remind-student]');
+  if (riskRemindBtn) {
+    const studentNo = riskRemindBtn.dataset.riskRemindStudent;
+    const assignments = (classOverview.assignments || []).filter((a) => a.status === 'open');
+    if (!assignments.length) {
+      showToast('当前没有正在开放收取的作业');
+      return;
+    }
+    const targetAssignment = assignments[0];
+    await openReminderModalForAssignment(targetAssignment.id, studentNo);
+    return;
+  }
+
+  const jumpToAssignmentBtn = e.target.closest('[data-jump-to-assignment]');
+  if (jumpToAssignmentBtn) {
+    const assignmentId = jumpToAssignmentBtn.dataset.jumpToAssignment;
+    const card = document.getElementById(`student-assignment-item-${assignmentId}`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+      card.style.boxShadow = '0 0 0 3px rgba(47, 111, 237, 0.4)';
+      card.style.borderColor = 'var(--blue)';
+      setTimeout(() => {
+        card.style.boxShadow = '';
+        card.style.borderColor = '';
+      }, 2500);
+    }
+    return;
+  }
 });

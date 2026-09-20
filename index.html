@@ -368,11 +368,33 @@
             </div>
           </div>
         </header>
+        <nav class="class-switcher-bar" id="classSwitcherBar" aria-label="班级范围与视角导航">
+          <div class="class-switcher-info">
+            <span class="class-switcher-label" id="classSwitcherLabel">当前数据范围：</span>
+            <strong class="class-switcher-title" id="classSwitcherTitle">年级大盘 (全部班级)</strong>
+            <span class="class-switcher-badge" id="classSwitcherScopeBadge">100 人总库</span>
+          </div>
+          <div class="class-switcher-tabs" id="classSwitcherTabs" role="tablist">
+            <button type="button" class="class-tab-btn is-active" data-class-scope="all" role="tab" aria-selected="true">
+              <span class="tab-icon">🌐</span> 全部班级 <small>(100人大盘)</small>
+            </button>
+            <button type="button" class="class-tab-btn" data-class-scope="1" role="tab" aria-selected="false">
+              <span class="tab-icon">🏛️</span> 数经1班 <small>(50人 · 教师1)</small>
+            </button>
+            <button type="button" class="class-tab-btn" data-class-scope="2" role="tab" aria-selected="false">
+              <span class="tab-icon">🏛️</span> 数经2班 <small>(50人 · 教师2)</small>
+            </button>
+          </div>
+          <div class="class-teacher-isolated-badge" id="classTeacherIsolatedBadge" hidden>
+            <span class="isolated-icon">🔒</span>
+            <span id="classTeacherIsolatedText">班级专属工作台 · 数经1班 (50人)</span>
+          </div>
+        </nav>
 
         <section class="class-stats" id="classStats">
           <article class="admin-card" id="classStatClassCard" hidden><strong>班级数量</strong><span id="classStatClasses">0</span><small>已创建班级</small></article>
           <article class="admin-card" id="classStatTeacherCard" hidden><strong>教师账号</strong><span id="classStatTeachers">0</span><small>可任命的老师</small></article>
-          <article class="admin-card" id="classStatStudentCard" hidden><strong>花名册</strong><span id="classStatStudents">0</span><small>已导入学生</small></article>
+          <article class="admin-card" id="classStatStudentCard" hidden><strong>花名册</strong><span id="classStatStudents">0</span><small id="classStatStudentSubtext">已导入学生</small></article>
           <article class="admin-card"><strong>班级公告</strong><span id="classStatAnnouncements">0</span><small>已发布公告</small></article>
           <article class="admin-card"><strong>进行中收取</strong><span id="classStatAssignments">0</span><small>正在收取的文件任务</small></article>
         </section>
@@ -426,10 +448,30 @@
         </div>
 
         <div class="class-grid" id="classTeacherView" hidden>
+          <article class="class-card class-card-wide teacher-all-classes-card" id="teacherAllClassesOverviewCard" hidden>
+            <div class="class-card-head">
+              <div>
+                <h2>教学班级导览与专属学情直达</h2>
+                <p>当前处于年级大盘综合视角（双班 100 人总库）。无需浏览百人混合名单，点击下方班级直接跳转至对应班级页面，直接看班级情况。</p>
+              </div>
+              <div class="class-card-actions">
+                <span class="class-scope-badge scope-all">双班大盘 (100人)</span>
+              </div>
+            </div>
+            <div class="teacher-class-jump-grid" id="teacherClassJumpGrid"></div>
+          </article>
           <article class="class-card">
             <h2>发布班级公告</h2>
             <p>公告会立即出现在学生工作台，适合布置说明、调课通知和截止提醒。</p>
             <form class="create-form" id="classAnnouncementForm">
+              <label id="announcementClassSelectLabel" hidden>
+                <span>发布范围</span>
+                <select id="classAnnouncementClassSelect">
+                  <option value="">全部班级 (年级通用公告)</option>
+                  <option value="1">数经1班</option>
+                  <option value="2">数经2班</option>
+                </select>
+              </label>
               <label>
                 <span>公告标题</span>
                 <input type="text" id="classAnnouncementTitle" maxlength="80" placeholder="例如：周五实验课改到机房 B203" required>
@@ -448,9 +490,17 @@
             <h2>发布文件收取</h2>
             <p>发布后学生可提交图片、Word、PDF、PPT、Excel 或压缩包；同一任务再次提交会覆盖旧文件。</p>
             <form class="create-form" id="classAssignmentForm">
+              <label id="assignmentClassSelectLabel" hidden>
+                <span>收取班级范围</span>
+                <select id="classAssignmentClassSelect">
+                  <option value="">全部班级 (全员任务)</option>
+                  <option value="1">数经1班</option>
+                  <option value="2">数经2班</option>
+                </select>
+              </label>
               <label>
                 <span>收取标题</span>
-                <input type="text" id="classAssignmentTitle" maxlength="80" placeholder="例如：实验报告扫描件 / 课程小结" required>
+                <input type="text" id="classAssignmentTitle" maxlength="80" placeholder="例如：期中大作业·数经实验报告" required>
               </label>
               <label>
                 <span>收取说明</span>
@@ -486,11 +536,65 @@
             <div class="class-list" id="classTeacherAssignments"></div>
           </article>
 
+          <article class="class-card class-card-wide" id="classTeacherDiagnosticsCard">
+            <div class="class-card-head">
+              <div>
+                <h2>班级学情诊断与四象限发展大屏</h2>
+                <p>结合高考初始基线与大学作业实证表现，动态洞察领跑、跃迁、滑坡与帮扶学生梯队。</p>
+              </div>
+              <div class="class-card-actions">
+                <button type="button" class="ghost-btn" id="refreshDiagnosticsBtn">刷新诊断数据</button>
+                <button type="button" class="primary-btn" id="batchAiGradeBtn">一键 AI 批量预批改</button>
+              </div>
+            </div>
+            <div class="diagnostics-dashboard" id="diagnosticsDashboard">
+              <div class="diagnostics-metrics-grid" id="diagnosticsMetricsGrid"></div>
+              <div class="tier-distribution-strip" id="diagnosticsTierStrip"></div>
+              <div class="diagnostics-row">
+                <div class="diagnostics-col">
+                  <div class="section-subhead">
+                    <strong>四象限学情矩阵 (高考基线 vs 课程实证)</strong>
+                    <small>领跑·拔尖 / 跃迁·突破 / 高基线滑坡 / 协同帮扶</small>
+                  </div>
+                  <div class="quadrant-matrix-grid" id="diagnosticsQuadrantGrid"></div>
+                </div>
+                <div class="diagnostics-col">
+                  <div class="section-subhead">
+                    <strong>位次跃迁先锋榜 (Top 10)</strong>
+                    <small>激励自主奋进，触发破格晋升</small>
+                  </div>
+                  <div class="leap-students-list" id="diagnosticsLeapList"></div>
+                  <div class="section-subhead" style="margin-top: 18px;">
+                    <strong>学业风险预警榜 (Top 10)</strong>
+                    <small>滑坡与未交预警，精准教学干预</small>
+                  </div>
+                  <div class="at-risk-students-list" id="diagnosticsRiskList"></div>
+                </div>
+              </div>
+              <div class="diagnostics-province-section">
+                <div class="section-subhead">
+                  <strong>生源地学情与学科背景分析</strong>
+                  <small>分析各省份生源高考数学基础与数字经济学课程作业完成度相关性</small>
+                </div>
+                <div class="province-table-wrap" id="diagnosticsProvinceWrap"></div>
+              </div>
+            </div>
+          </article>
+
           <article class="class-card class-card-wide">
             <div class="class-card-head">
               <div>
-                <h2>学生提交收件箱</h2>
-                <p>查看最近提交的文件。图片和 PDF 可直接预览，Word 等文档可下载后打开。</p>
+                <h2>学生提交收件箱与双轨量规批阅</h2>
+                <p>纯课程评语与导师内部诊断解耦；支持量规打分、AI一键预评与位次跃迁破格复核。</p>
+              </div>
+              <div class="class-card-actions">
+                <select id="teacherSubmissionFilter" class="select-chip" aria-label="筛选提交状态">
+                  <option value="all">全部提交 (全部状态)</option>
+                  <option value="pending">待批阅 / 未评分</option>
+                  <option value="ai_pregraded">AI已预评 (待教师复核)</option>
+                  <option value="graded">已完成批阅</option>
+                  <option value="leap">位次跃迁学生</option>
+                </select>
               </div>
             </div>
             <div class="class-list" id="classTeacherSubmissions"></div>
@@ -498,6 +602,7 @@
         </div>
 
         <div class="class-grid" id="classStudentView" hidden>
+          <div id="classStudentRemindersWrap" style="grid-column:1 / -1;" hidden></div>
           <article class="class-card">
             <h2>我的班级</h2>
             <p>用专属邀请码注册成功后，会自动进入花名册里分配好的班级。</p>
@@ -860,6 +965,167 @@
         </div>
         <p class="login-tip">密码修改成功后，当前登录状态会继续保留。</p>
       </form>
+    </div>
+  </div>
+  <div class="modal-overlay" id="gradingModal" hidden>
+    <div class="create-modal class-grading-modal" role="dialog" aria-modal="true" aria-labelledby="gradingModalTitle">
+      <button class="modal-close" id="gradingModalClose" aria-label="关闭打分窗口">×</button>
+      <div class="grading-modal-head">
+        <div>
+          <h2 id="gradingModalTitle">量规评分与双轨学情诊断</h2>
+          <p id="gradingModalSubtitle">针对课程作业进行四维量规批阅，教师诊断备忘与学生评语严格前后台解耦。</p>
+        </div>
+        <div class="grading-header-badges">
+          <span class="tier-badge" id="gradingModalCurrentTier">未评分</span>
+        </div>
+      </div>
+
+      <div class="grading-student-meta" id="gradingStudentMeta"></div>
+
+      <form id="gradingForm" class="grading-form">
+        <div class="grading-ai-callout" id="gradingAiCallout" hidden>
+          <div class="grading-ai-header">
+            <strong>🤖 AI 辅助多维诊断建议 (置信度: <span id="gradingAiConfidence">0.92</span>)</strong>
+            <button type="button" class="ghost-btn" id="applyAiGradingBtn">采纳 AI 建议分数与评语</button>
+          </div>
+          <div class="grading-ai-body" id="gradingAiBody"></div>
+        </div>
+
+        <div class="rubric-grid">
+          <div class="rubric-card">
+            <div class="rubric-header">
+              <strong>1. 理论基础与经济学思维 (权重 30%)</strong>
+              <span class="rubric-score-display"><b id="scoreDisplayTheory">24</b> / 30 分</span>
+            </div>
+            <p class="rubric-desc">对数字经济学核心概念、平台双边机制、网络外部性及分析框架的理解准确度与阐释深度。</p>
+            <input type="range" id="rubricInputTheory" min="0" max="30" step="1" value="24" class="rubric-slider">
+          </div>
+
+          <div class="rubric-card">
+            <div class="rubric-header">
+              <strong>2. 数据与实证分析能力 (权重 30%)</strong>
+              <span class="rubric-score-display"><b id="scoreDisplayEmpirical">23</b> / 30 分</span>
+            </div>
+            <p class="rubric-desc">数据清洗完备度、计量模型/统计方法选取的合理性、图表展现及因果推断逻辑的严谨规范性。</p>
+            <input type="range" id="rubricInputEmpirical" min="0" max="30" step="1" value="23" class="rubric-slider">
+          </div>
+
+          <div class="rubric-card">
+            <div class="rubric-header">
+              <strong>3. 创新洞察与现实应用 (权重 20%)</strong>
+              <span class="rubric-score-display"><b id="scoreDisplayInnovation">15</b> / 20 分</span>
+            </div>
+            <p class="rubric-desc">结合数字平台前沿、企业微观实践或政策热点的独立洞察力、前瞻性及对策针对性。</p>
+            <input type="range" id="rubricInputInnovation" min="0" max="20" step="1" value="15" class="rubric-slider">
+          </div>
+
+          <div class="rubric-card">
+            <div class="rubric-header">
+              <strong>4. 结构严谨度与学术规范 (权重 20%)</strong>
+              <span class="rubric-score-display"><b id="scoreDisplayExpression">16</b> / 20 分</span>
+            </div>
+            <p class="rubric-desc">论述层次自洽性、行文流畅度、参考文献引用格式及学术图表制作规范。</p>
+            <input type="range" id="rubricInputExpression" min="0" max="20" step="1" value="16" class="rubric-slider">
+          </div>
+        </div>
+
+        <div class="rubric-summary-banner">
+          <div>
+            <span>量规汇总总分：<strong id="rubricTotalDisplay">78</strong> 分</span>
+            <span class="rubric-calc-tier">对应梯队：<strong id="rubricTierDisplay">优秀 (B+)</strong></span>
+          </div>
+          <div id="rubricLeapNotice" class="rubric-leap-notice" hidden>
+            <span>⚡ 满足位次跃迁破格晋级条件</span>
+          </div>
+        </div>
+
+        <div class="grading-feedback-group">
+          <label>
+            <span class="label-with-tip">
+              <strong>学生评语 (学生端完全公开)</strong>
+              <small>针对本次作业进行学术与方法指导，严禁提及高考分数与排位</small>
+            </span>
+            <textarea id="gradingStudentFeedback" rows="4" maxlength="1000" placeholder="请输入针对本篇课程作业的鼓励与建设性改进建议..." required></textarea>
+          </label>
+
+          <label class="teacher-private-label">
+            <span class="label-with-tip">
+              <strong>教师内部学情诊断备忘 (仅教师/管理员可见)</strong>
+              <small>结合生源省份背景、高考数学基线与当前大学实证学习趋势的内部教学记录</small>
+            </span>
+            <textarea id="gradingTeacherDiagnosticNote" rows="3" maxlength="1500" placeholder="记录该生的学情适应度、潜能发现或需关注的薄弱项，供教研及后续辅导参考..."></textarea>
+          </label>
+        </div>
+
+        <div class="grading-actions">
+          <button type="button" class="ghost-btn" id="runSingleAiGradeBtn">重新运行 AI 预评</button>
+          <div class="grading-actions-right">
+            <button type="button" class="ghost-btn" id="gradingCancelBtn">取消</button>
+            <button type="submit" class="primary-btn" id="gradingSubmitBtn">确认并提交评阅</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="submissionDetailModal" hidden>
+    <div class="create-modal submission-detail-modal" role="dialog" aria-modal="true" aria-labelledby="submissionDetailTitle">
+      <button class="modal-close" id="submissionDetailClose" aria-label="关闭提交详情">×</button>
+      <div class="submission-detail-head">
+        <div>
+          <h2 id="submissionDetailTitle">课程作业评阅详情</h2>
+          <p id="submissionDetailSubtitle">查看本次作业的量规维度拆解、教师指导评语及修读建议。</p>
+        </div>
+        <div id="submissionDetailTierWrap"></div>
+      </div>
+      <div class="submission-detail-content" id="submissionDetailContent"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="reminderModal" hidden>
+    <div class="create-modal reminder-modal" role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle">
+      <button class="modal-close" id="reminderModalClose" aria-label="关闭催交窗口">×</button>
+      <div class="reminder-modal-head">
+        <div>
+          <h2 id="reminderModalTitle">🔔 跟随催交未交学生</h2>
+          <p id="reminderModalSubtitle">针对尚未提交作业的学生进行督促，支持勾选名单并自定义催交通知留言。</p>
+        </div>
+        <div id="reminderMetaBadgeWrap"></div>
+      </div>
+
+      <div class="reminder-assignment-meta-bar" id="reminderAssignmentMetaBar">
+        <div>
+          <strong id="reminderAssignmentTitle">作业名称</strong>
+          <span id="reminderAssignmentScopeBadge" class="class-scope-badge badge-class1" style="margin-left:8px;">数经1班</span>
+        </div>
+        <div>
+          <span style="color:var(--muted);font-size:12px;">截止时间：<span id="reminderAssignmentDueAt">未设置</span></span>
+          <span style="margin-left:12px;font-weight:700;color:#ef4444;">未交人数：<span id="reminderPendingCountDisplay">0</span> 人</span>
+        </div>
+      </div>
+
+      <div class="reminder-target-section">
+        <div class="reminder-section-title-row">
+          <strong>未交名单选择（已选 <span id="reminderSelectedCount" style="color:var(--blue);font-weight:700;">0</span> / 共 <span id="reminderTotalPendingCount">0</span> 人）</strong>
+          <div class="reminder-select-shortcuts">
+            <button type="button" class="ghost-btn" id="reminderSelectAllBtn" style="padding:3px 10px;font-size:12px;">全选未交</button>
+            <button type="button" class="ghost-btn" id="reminderDeselectAllBtn" style="padding:3px 10px;font-size:12px;">清空选择</button>
+          </div>
+        </div>
+        <div class="reminder-student-checklist" id="reminderStudentChecklist">
+          <!-- 动态渲染未交学生列表及复选框 -->
+        </div>
+      </div>
+
+      <div class="reminder-message-section">
+        <label for="reminderMessageInput"><strong>催交通知留言（学生将在其班级工作台顶部与作业卡片看到）：</strong></label>
+        <textarea id="reminderMessageInput" rows="3" maxlength="300" placeholder="例如：期中大作业提交截稿在即，请抓紧在系统完成提交！如遇疑问请及时与老师联系。"></textarea>
+      </div>
+
+      <div class="reminder-modal-actions">
+        <button type="button" class="ghost-btn" id="reminderCancelBtn">取消</button>
+        <button type="button" class="primary-btn" id="reminderSendBtn">🚀 确认发送催交通知</button>
+      </div>
     </div>
   </div>
   <script src="./script.js"></script>

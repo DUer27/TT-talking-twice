@@ -42,6 +42,80 @@ const ensureUserStudentNoColumn = async (pool) => {
   }
 };
 
+const ensureRosterColumns = async (pool) => {
+  if (!(await hasColumn(pool, 'class_roster', 'origin_province'))) {
+    await pool.query("ALTER TABLE class_roster ADD COLUMN origin_province VARCHAR(64) NULL AFTER name");
+  }
+  if (!(await hasColumn(pool, 'class_roster', 'gaokao_score'))) {
+    await pool.query("ALTER TABLE class_roster ADD COLUMN gaokao_score DECIMAL(6,2) NULL AFTER origin_province");
+  }
+  if (!(await hasColumn(pool, 'class_roster', 'gaokao_math'))) {
+    await pool.query("ALTER TABLE class_roster ADD COLUMN gaokao_math DECIMAL(6,2) NULL AFTER gaokao_score");
+  }
+  if (!(await hasColumn(pool, 'class_roster', 'gaokao_chinese'))) {
+    await pool.query("ALTER TABLE class_roster ADD COLUMN gaokao_chinese DECIMAL(6,2) NULL AFTER gaokao_math");
+  }
+  if (!(await hasColumn(pool, 'class_roster', 'gaokao_english'))) {
+    await pool.query("ALTER TABLE class_roster ADD COLUMN gaokao_english DECIMAL(6,2) NULL AFTER gaokao_chinese");
+  }
+  if (!(await hasColumn(pool, 'class_roster', 'initial_rank'))) {
+    await pool.query("ALTER TABLE class_roster ADD COLUMN initial_rank INT UNSIGNED NULL AFTER gaokao_english");
+  }
+};
+
+const ensureSubmissionColumns = async (pool) => {
+  if (!(await hasColumn(pool, 'class_submissions', 'tier'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN tier VARCHAR(16) NULL AFTER file_size");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'score'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN score DECIMAL(5,2) NULL AFTER tier");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'rank_in_class'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN rank_in_class INT UNSIGNED NULL AFTER score");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'rank_gain'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN rank_gain INT NULL AFTER rank_in_class");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'is_leap'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN is_leap TINYINT(1) NOT NULL DEFAULT 0 AFTER rank_gain");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'feedback'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN feedback TEXT NULL AFTER rank_gain");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'rubric_scores'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN rubric_scores JSON NULL AFTER feedback");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'ai_suggested_tier'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN ai_suggested_tier VARCHAR(16) NULL AFTER rubric_scores");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'ai_suggested_score'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN ai_suggested_score DECIMAL(5,2) NULL AFTER ai_suggested_tier");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'ai_evaluation'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN ai_evaluation JSON NULL AFTER ai_suggested_score");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'teacher_diagnostic_note'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN teacher_diagnostic_note TEXT NULL AFTER ai_evaluation");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'status'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'submitted' AFTER teacher_diagnostic_note");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'graded_at'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN graded_at DATETIME NULL AFTER status");
+  }
+  if (!(await hasColumn(pool, 'class_submissions', 'graded_by'))) {
+    await pool.query("ALTER TABLE class_submissions ADD COLUMN graded_by BIGINT UNSIGNED NULL AFTER graded_at");
+  }
+};
+const ensureAssignmentAndAnnouncementClassId = async (pool) => {
+  if (!(await hasColumn(pool, 'class_assignments', 'class_id'))) {
+    await pool.query("ALTER TABLE class_assignments ADD COLUMN class_id BIGINT UNSIGNED NULL AFTER author_id, ADD KEY idx_class_assignments_class_id (class_id)");
+  }
+  if (!(await hasColumn(pool, 'class_announcements', 'class_id'))) {
+    await pool.query("ALTER TABLE class_announcements ADD COLUMN class_id BIGINT UNSIGNED NULL AFTER author_id, ADD KEY idx_class_announcements_class_id (class_id)");
+  }
+};
+
 const seedDefaultAdmin = async (pool) => {
   const [adminRows] = await pool.execute("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
   if (adminRows.length) return;
@@ -145,7 +219,7 @@ const insertInviteCode = async (pool, { className, nickname, studentNo }) => {
 
 const cleanupImportedStudentAccounts = async (pool) => {
   const [result] = await pool.execute(
-    "DELETE FROM users WHERE role = 'student' AND email LIKE '%@student.local'"
+    "DELETE FROM users WHERE role = 'student' AND (email LIKE '%@student.local' OR email LIKE '%@class.local' OR email = 'seed@local.test')"
   );
   if (result.affectedRows) {
     console.warn(`Removed ${result.affectedRows} previously imported student accounts.`);
@@ -173,6 +247,13 @@ const seedClassRoster = async (pool) => {
     const nickname = String(item.name || '').trim();
     if (!className || !studentNo || !nickname) continue;
 
+    const originProvince = item.originProvince ? String(item.originProvince).trim() : null;
+    const gaokaoScore = Number.isFinite(Number(item.gaokaoScore)) ? Number(item.gaokaoScore) : null;
+    const gaokaoMath = Number.isFinite(Number(item.gaokaoMath)) ? Number(item.gaokaoMath) : null;
+    const gaokaoChinese = Number.isFinite(Number(item.gaokaoChinese)) ? Number(item.gaokaoChinese) : null;
+    const gaokaoEnglish = Number.isFinite(Number(item.gaokaoEnglish)) ? Number(item.gaokaoEnglish) : null;
+    const initialRank = Number.isFinite(Number(item.initialRank)) ? Number(item.initialRank) : null;
+
     const [classRows] = await pool.execute('SELECT id FROM class_groups WHERE name = ? LIMIT 1', [className]);
     const classId = classRows[0]?.id;
     if (!classId) continue;
@@ -180,8 +261,10 @@ const seedClassRoster = async (pool) => {
     const [existingRows] = await pool.execute('SELECT * FROM class_roster WHERE student_no = ? LIMIT 1', [studentNo]);
     if (existingRows[0]) {
       await pool.execute(
-        'UPDATE class_roster SET class_id = ?, name = ? WHERE id = ?',
-        [classId, nickname, existingRows[0].id]
+        `UPDATE class_roster
+         SET class_id = ?, name = ?, origin_province = ?, gaokao_score = ?, gaokao_math = ?, gaokao_chinese = ?, gaokao_english = ?, initial_rank = ?
+         WHERE id = ?`,
+        [classId, nickname, originProvince, gaokaoScore, gaokaoMath, gaokaoChinese, gaokaoEnglish, initialRank, existingRows[0].id]
       );
       let inviteCode = String(existingRows[0].invite_code || '').trim().toUpperCase();
       if (!existingRows[0].user_id && !SIMPLE_INVITE_CODE.test(inviteCode)) {
@@ -206,9 +289,9 @@ const seedClassRoster = async (pool) => {
 
     const created = await insertInviteCode(pool, { className, nickname, studentNo });
     await pool.execute(
-      `INSERT INTO class_roster (class_id, student_no, name, invite_code, invite_code_id)
-       VALUES (?, ?, ?, ?, ?)`,
-      [classId, studentNo, nickname, created.inviteCode, created.inviteId]
+      `INSERT INTO class_roster (class_id, student_no, name, origin_province, gaokao_score, gaokao_math, gaokao_chinese, gaokao_english, initial_rank, invite_code, invite_code_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [classId, studentNo, nickname, originProvince, gaokaoScore, gaokaoMath, gaokaoChinese, gaokaoEnglish, initialRank, created.inviteCode, created.inviteId]
     );
     createdRoster += 1;
     createdInvites += 1;
@@ -582,13 +665,28 @@ const migrate = async () => {
       stored_path VARCHAR(255) NOT NULL,
       mime_type VARCHAR(120) NOT NULL DEFAULT 'application/octet-stream',
       file_size INT UNSIGNED NOT NULL DEFAULT 0,
+      tier VARCHAR(16) NULL,
+      score DECIMAL(5,2) NULL,
+      rank_in_class INT UNSIGNED NULL,
+      rank_gain INT NULL,
+      feedback TEXT NULL,
+      rubric_scores JSON NULL,
+      ai_suggested_tier VARCHAR(16) NULL,
+      ai_suggested_score DECIMAL(5,2) NULL,
+      ai_evaluation JSON NULL,
+      teacher_diagnostic_note TEXT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'submitted',
+      graded_at DATETIME NULL,
+      graded_by BIGINT UNSIGNED NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
       UNIQUE KEY uk_class_submissions_assignment_user (assignment_id, user_id),
       KEY idx_class_submissions_user_id (user_id),
+      KEY idx_class_submissions_status (status),
       CONSTRAINT fk_class_submissions_assignment_id FOREIGN KEY (assignment_id) REFERENCES class_assignments(id) ON DELETE CASCADE,
-      CONSTRAINT fk_class_submissions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      CONSTRAINT fk_class_submissions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_submissions_graded_by FOREIGN KEY (graded_by) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
@@ -632,6 +730,12 @@ const migrate = async () => {
       class_id BIGINT UNSIGNED NOT NULL,
       student_no VARCHAR(32) NOT NULL,
       name VARCHAR(80) NOT NULL,
+      origin_province VARCHAR(64) NULL,
+      gaokao_score DECIMAL(6,2) NULL,
+      gaokao_math DECIMAL(6,2) NULL,
+      gaokao_chinese DECIMAL(6,2) NULL,
+      gaokao_english DECIMAL(6,2) NULL,
+      initial_rank INT UNSIGNED NULL,
       invite_code VARCHAR(64) NOT NULL,
       invite_code_id BIGINT UNSIGNED NOT NULL,
       user_id BIGINT UNSIGNED NULL,
@@ -649,6 +753,34 @@ const migrate = async () => {
       CONSTRAINT fk_class_roster_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS class_reminders (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      assignment_id BIGINT UNSIGNED NOT NULL,
+      teacher_id BIGINT UNSIGNED NOT NULL,
+      roster_id BIGINT UNSIGNED NOT NULL,
+      user_id BIGINT UNSIGNED NULL,
+      class_id BIGINT UNSIGNED NOT NULL,
+      student_name VARCHAR(80) NOT NULL,
+      student_no VARCHAR(32) NOT NULL,
+      message VARCHAR(500) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_class_reminders_assignment (assignment_id),
+      KEY idx_class_reminders_user (user_id),
+      KEY idx_class_reminders_roster (roster_id),
+      KEY idx_class_reminders_class (class_id),
+      CONSTRAINT fk_class_reminders_assignment FOREIGN KEY (assignment_id) REFERENCES class_assignments(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_reminders_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_class_reminders_roster FOREIGN KEY (roster_id) REFERENCES class_roster(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await ensureRosterColumns(pool);
+  await ensureSubmissionColumns(pool);
+  await ensureAssignmentAndAnnouncementClassId(pool);
 
   await seedDefaultClassTeachers(pool);
   await cleanupImportedStudentAccounts(pool);
