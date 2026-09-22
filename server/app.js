@@ -89,10 +89,9 @@ const start = async () => {
   cleanupDeletedPosts();
   const cleanupTimer = setInterval(cleanupDeletedPosts, 60 * 1000);
   cleanupTimer.unref?.();
-  const host = process.env.HOST || '0.0.0.0';
-  const server = app.listen(port, host, () => {
+  const server = app.listen(port, () => {
     fs.writeFileSync(pidFile, String(process.pid));
-    console.log(`TT-talking-twice is running at http://${host}:${port}`);
+    console.log(`TT-talking-twice is running at http://127.0.0.1:${port}`);
   });
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
