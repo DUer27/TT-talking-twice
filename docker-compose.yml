@@ -57,9 +57,9 @@ services:
       - TZ=Asia/Shanghai
     volumes:
       - mysql-data:/var/lib/mysql
-    ports:
-      # 如不需要宿主机直接连入 MySQL，可注释以下端口映射
-      - "${HOST_DB_PORT:-3306}:3306"
+    # 如需在宿主机外部通过 Navicat / DBeaver 等工具直连 MySQL，可取消以下注释：
+    # ports:
+    #   - "${HOST_DB_PORT:-3307}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_strong_password_2026}"]
       interval: 10s
