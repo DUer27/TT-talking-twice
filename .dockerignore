@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules
+package-lock.json
+
+# Local environment & secret files
+.env
+.env.local
+.env.*.local
+
+# Runtime logs & PIDs
+*.log
+*.pid
+.server*
+server-start.err
+
+# Local data & uploads (mounted via docker volumes)
+server/data
+uploads
+
+# Windows and temp files
+.DS_Store
+Thumbs.db

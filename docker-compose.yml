@@ -1,0 +1,81 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tt-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-6999}:6999"
+    environment:
+      - NODE_ENV=production
+      - PORT=6999
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=${DB_NAME:-tt_talking_twice}
+      - DB_USER=${DB_USER:-tt_app}
+      - DB_PASSWORD=${DB_PASSWORD:-tt_talking_twice_pass_2026}
+      - DB_CONNECTION_LIMIT=${DB_CONNECTION_LIMIT:-10}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4.1-mini}
+      - OPENAI_USER_AGENT=${OPENAI_USER_AGENT:-TT-talking-twice/1.0}
+      - AI_TIMEOUT_MS=${AI_TIMEOUT_MS:-180000}
+      - AI_MAX_TOKENS=${AI_MAX_TOKENS:-10240}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_SECURE=${SMTP_SECURE:-true}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - VERIFICATION_CODE_SECRET=${VERIFICATION_CODE_SECRET:-tt_voice_verification_secret_2026}
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@example.com}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-AdminStrong#2026}
+      - DEFAULT_ADMIN_NICKNAME=${DEFAULT_ADMIN_NICKNAME:-管理员}
+    volumes:
+      - app-data:/app/server/data
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - tt-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: tt-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --max_connections=200
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-root_strong_password_2026}
+      - MYSQL_DATABASE=${DB_NAME:-tt_talking_twice}
+      - MYSQL_USER=${DB_USER:-tt_app}
+      - MYSQL_PASSWORD=${DB_PASSWORD:-tt_talking_twice_pass_2026}
+      - TZ=Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      # 如不需要宿主机直接连入 MySQL，可注释以下端口映射
+      - "${HOST_DB_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_strong_password_2026}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - tt-network
+
+volumes:
+  mysql-data:
+    name: tt-mysql-data
+  app-data:
+    name: tt-app-data
+
+networks:
+  tt-network:
+    name: tt-network
+    driver: bridge

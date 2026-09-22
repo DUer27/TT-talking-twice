@@ -9,7 +9,10 @@
     "migrate": "node server/database/migrate.js",
     "create-invite": "node scripts/create-invite.js",
     "stop": "node scripts/stop.js",
-    "check-env": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/check-env.ps1"
+    "check-env": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/check-env.ps1",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

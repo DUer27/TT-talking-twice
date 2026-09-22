@@ -40,8 +40,68 @@ bash scripts/stop-service-debian.sh
 ```sh
 bash scripts/cleanup-service-debian.sh
 ```
+## Windows 一键启动与环境诊断
 
-## 本地运行
+在 Windows 环境下，直接双击项目根目录或 `windows/` 目录下的批处理脚本：
+
+- **`start.bat`**：一键启动（自动环境检测、数据库自动迁移、后台平滑启动并自动打开浏览器）。
+- **`check-env.bat`**：独立环境检测诊断（涵盖 Node 18+、MySQL 连通与认证、端口冲突等 8 大维度）。
+- **`stop.bat`**：一键安全停止服务。
+
+## Docker 容器化部署 (推荐)
+
+本项目提供完整的 Dockerfile 与 Docker Compose 编排，集成了 Node.js 20 运行时与 MySQL 8.0 数据库，具备自动化迁移与健康检查。
+
+### 1. 快速启动
+
+**Linux / macOS 用户：**
+```sh
+bash scripts/docker-start.sh
+```
+
+**Windows 用户：**
+直接双击运行根目录或 `windows/` 下的 `docker-start.bat`。
+**手动使用 Docker Compose：**
+```sh
+# 1. 复制环境变量模板
+cp docker-compose.env.example .env
+
+# 2. 一键构建并后台启动
+docker compose up -d --build
+
+# 3. 查看容器状态与日志
+docker compose ps
+docker compose logs -f
+```
+
+### 2. 访问服务
+
+启动完成后，打开浏览器访问：
+```text
+http://127.0.0.1:6999/
+```
+
+### 3. 停止容器
+
+```sh
+docker compose down
+# Windows 用户可直接双击运行 docker-stop.bat 或 windows/docker-stop.bat
+```
+
+也可以通过 npm 脚本管理：
+```sh
+npm run docker:up     # 启动容器集群
+npm run docker:down   # 停止容器集群
+npm run docker:logs   # 实时查看日志
+```
+
+### 4. 数据持久化
+
+Docker Compose 自动配置了命名数据卷以保证数据持久安全：
+- `tt-mysql-data`：持久化 MySQL 8.0 数据库文件；
+- `tt-app-data`：持久化学生提交的附件及生成的花名册邀请码（`/app/server/data`）。
+
+## 本地传统方式运行
 
 安装依赖：
 
